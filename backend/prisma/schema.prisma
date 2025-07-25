@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model auditoria {
+  id            Int      @id @default(autoincrement())
+  tabla         String
+  registro_id   Int
+  usuario_id    Int?
+  operacion     String
+  datos_previos Json?
+  datos_nuevos  Json?
+  fecha         DateTime @default(now()) @db.Timestamptz(6)
+  usuario       usuario? @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model bitacorabusquedavh {
+  id            Int      @id @default(autoincrement())
+  usuario_id    Int
+  placa         String   @db.VarChar(10)
+  tipo_busqueda String?
+  precio        Decimal? @db.Decimal
+  respuesta_api Json?
+  buscada_el    DateTime @default(now()) @db.Timestamptz(6)
+  usuario       usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model cita {
+  id                               Int      @id @default(autoincrement())
+  cliente_id                       Int
+  abogado_id                       Int
+  consulta_id                      Int
+  pago_id                          Int?
+  inicia_el                        DateTime @db.Timestamptz(6)
+  termina_el                       DateTime @db.Timestamptz(6)
+  estado                           est_cita @default(pendiente)
+  usuario_cita_abogado_idTousuario usuario  @relation("cita_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_cita_cliente_idTousuario usuario  @relation("cita_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  consulta                         consulta @relation(fields: [consulta_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pago                             pago?    @relation(fields: [pago_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model clienteabogado {
+  id                                         Int      @id @default(autoincrement())
+  abogado_id                                 Int
+  cliente_id                                 Int
+  creado_el                                  DateTime @default(now()) @db.Timestamptz(6)
+  notas_privadas                             String?
+  usuario_clienteabogado_abogado_idTousuario usuario  @relation("clienteabogado_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_clienteabogado_cliente_idTousuario usuario  @relation("clienteabogado_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model consulta {
+  id                                   Int          @id @default(autoincrement())
+  cliente_id                           Int
+  abogado_id                           Int
+  pregunta                             String
+  area_detectada                       String?
+  estado                               est_consulta @default(pendiente)
+  creada_el                            DateTime     @default(now()) @db.Timestamptz(6)
+  cita                                 cita[]
+  usuario_consulta_abogado_idTousuario usuario      @relation("consulta_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_consulta_cliente_idTousuario usuario      @relation("consulta_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model disponibilidadabogado {
+  id            Int           @id @default(autoincrement())
+  abogado_id    Int
+  dia_semana    Int           @db.SmallInt
+  hora_inicio   DateTime      @db.Time(6)
+  hora_fin      DateTime      @db.Time(6)
+  perfilabogado perfilabogado @relation(fields: [abogado_id], references: [usuario_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([abogado_id, dia_semana, hora_inicio, hora_fin])
+}
+
+model documento {
+  id                                        Int      @id @default(autoincrement())
+  propietario_id                            Int
+  tipo_documento                            String?
+  ruta_archivo                              String
+  generado_ai                               Boolean  @default(false)
+  firmado                                   Boolean  @default(false)
+  abogado_firma                             Int?
+  creado_el                                 DateTime @default(now()) @db.Timestamptz(6)
+  usuario_documento_abogado_firmaTousuario  usuario? @relation("documento_abogado_firmaTousuario", fields: [abogado_firma], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_documento_propietario_idTousuario usuario  @relation("documento_propietario_idTousuario", fields: [propietario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model estadopago {
+  id     Int    @id @default(autoincrement()) @db.SmallInt
+  codigo String @unique
+  nombre String
+  pago   pago[]
+}
+
+model pago {
+  id            Int        @id @default(autoincrement())
+  usuario_id    Int
+  monto         Decimal    @db.Decimal
+  moneda        String     @db.Char(3)
+  concepto      String?
+  proveedor_txn String?
+  estado_id     Int        @db.SmallInt
+  creado_el     DateTime   @default(now()) @db.Timestamptz(6)
+  cita          cita[]
+  estadopago    estadopago @relation(fields: [estado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario       usuario    @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model perfilabogado {
+  usuario_id            Int                     @id
+  especialidad          String?
+  tarifa_base           Decimal?                @db.Decimal
+  direccion_atencion    String?
+  place_id_api          String?
+  bio                   String?
+  duracion_minutos      Int                     @default(60)
+  disponibilidadabogado disponibilidadabogado[]
+  usuario               usuario                 @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model persona {
+  id               Int       @id @default(autoincrement())
+  dni              String    @unique @db.Char(8)
+  telefono         String?   @db.VarChar(15)
+  primer_nombre    String    @db.VarChar(100)
+  segundo_nombre   String?   @db.VarChar(100)
+  apellido_paterno String    @db.VarChar(100)
+  apellido_materno String?   @db.VarChar(100)
+  correo           String    @unique
+  direccion        String?
+  usuario          usuario[]
+}
+
+model role {
+  id      Int       @id @default(autoincrement()) @db.SmallInt
+  codigo  String    @unique
+  nombre  String
+  usuario usuario[]
+}
+
+model usuario {
+  id                                                Int                  @id @default(autoincrement())
+  persona_id                                        Int
+  rol_id                                            Int                  @db.SmallInt
+  clave                                             String
+  telefono_verificado                               Boolean              @default(false)
+  creado_el                                         DateTime             @default(now()) @db.Timestamptz(6)
+  auditoria                                         auditoria[]
+  bitacorabusquedavh                                bitacorabusquedavh[]
+  cita_cita_abogado_idTousuario                     cita[]               @relation("cita_abogado_idTousuario")
+  cita_cita_cliente_idTousuario                     cita[]               @relation("cita_cliente_idTousuario")
+  clienteabogado_clienteabogado_abogado_idTousuario clienteabogado[]     @relation("clienteabogado_abogado_idTousuario")
+  clienteabogado_clienteabogado_cliente_idTousuario clienteabogado[]     @relation("clienteabogado_cliente_idTousuario")
+  consulta_consulta_abogado_idTousuario             consulta[]           @relation("consulta_abogado_idTousuario")
+  consulta_consulta_cliente_idTousuario             consulta[]           @relation("consulta_cliente_idTousuario")
+  documento_documento_abogado_firmaTousuario        documento[]          @relation("documento_abogado_firmaTousuario")
+  documento_documento_propietario_idTousuario       documento[]          @relation("documento_propietario_idTousuario")
+  pago                                              pago[]
+  perfilabogado                                     perfilabogado?
+  persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                              role                 @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+enum est_cita {
+  pendiente
+  confirmada
+  cancelada
+  completada
+  no_show
+}
+
+enum est_consulta {
+  pendiente
+  respondida
+  cerrrada
+}
