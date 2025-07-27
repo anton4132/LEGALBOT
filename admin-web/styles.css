@@ -1,0 +1,173 @@
+/* Estilos minimalistas y elegantes para LegalBot Admin Panel */
+
+:root {
+    --azul-noche: #101a2b;
+    --azul-hover: #1a253a;
+    --azul-header: #162036;
+    --gris-fondo: #f7f8fa;
+    --gris-claro: #e9ecef;
+    --azul-suave: #3b4a67;
+    --acento: #2563eb;
+  }
+  
+  body {
+    background: var(--gris-fondo);
+  }
+  
+  #sidebar {
+    background: var(--azul-noche) !important;
+    color: #fff;
+    min-height: 100vh;
+    border-right: 1px solid var(--gris-claro);
+  }
+  
+  #sidebar h4 {
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+  
+  #sidebar .nav-link {
+    color: #b0b4bb;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+    font-size: 1rem;
+    padding: 8px 16px;
+  }
+  
+  #sidebar .nav-link.active,
+  #sidebar .nav-link:hover {
+    background: var(--azul-hover);
+    color: #fff;
+  }
+  
+  #sidebar .nav-link.text-danger {
+    color: #ef4444 !important;
+  }
+  
+  header {
+    background: var(--azul-header) !important;
+    color: #fff;
+    border-bottom: 1px solid var(--gris-claro);
+  }
+  
+  header h5, header .dropdown-toggle {
+    color: #000000 !important;
+    font-weight: 500;
+  }
+  
+  header .btn-outline-secondary {
+    border-color: #b0b4bb;
+    color: #b0b4bb;
+    background: transparent;
+  }
+  
+  header .btn-outline-secondary:hover {
+    background: var(--azul-hover);
+    color: #fff;
+    border-color: #fff;
+  }
+  
+  .card {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 2px 16px 0 rgba(0,0,0,0.08), 0 1.5px 4px 0 rgba(0,0,0,0.04);
+    background: #fff;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+  }
+  
+  .card-title {
+    font-weight: 700;
+  }
+  
+  .card-text {
+    font-weight: 500;
+  }
+  
+  .card-header {
+    background: transparent;
+    font-weight: 600;
+    border-bottom: 1px solid var(--gris-claro);
+    border-radius: 10px 10px 0 0;
+  }
+  
+  .table-striped>tbody>tr:nth-of-type(odd) {
+    background-color: #f3f4f6;
+  }
+  
+  .btn-primary {
+    background: var(--azul-noche);
+    border: none;
+    font-weight: 500;
+    color: #fff;
+    transition: background 0.15s, color 0.15s;
+  }
+  
+  .btn-primary:hover, .btn-primary:focus {
+    background: var(--azul-hover);
+    color: #fff;
+  }
+  
+  .btn-legalbot {
+    background: var(--azul-noche);
+    border: none;
+    color: #fff;
+    font-weight: 500;
+    border-radius: 6px;
+    padding: 8px 20px;
+    transition: background 0.15s, color 0.15s;
+    box-shadow: 0 2px 8px rgba(16,26,43,0.08);
+  }
+  .btn-legalbot:hover, .btn-legalbot:focus {
+    background: var(--azul-hover);
+    color: #fff;
+  }
+  
+  #profile {
+    background: var(--azul-header);
+    color: #fff !important;
+    font-weight: bold;
+    border-radius: 20px;
+    padding: 6px 18px;
+    box-shadow: 0 2px 8px rgba(16,26,43,0.12);
+    border: 2px solid var(--acento);
+    margin-left: 18px;
+    font-size: 1.1rem;
+    letter-spacing: 0.5px;
+    display: inline-block;
+  }
+  
+  /* Dropdown overrides: no hover/active background on profile button */
+  .dropdown-toggle {
+    background: transparent;
+    color: #000000 !important;
+    
+  }
+  .dropdown-toggle:hover,
+  .dropdown-toggle:focus {
+    background: transparent !important;
+    color: #000000 !important;
+
+  }
+  
+  /* Dropdown menu items: neutral background on hover/active */
+  .dropdown-menu .dropdown-item:hover,
+  .dropdown-menu .dropdown-item:focus,
+  .dropdown-menu .dropdown-item.active {
+    background-color: transparent !important;
+    color: inherit !important;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 8px;
+    background: #f3f4f6;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--azul-hover);
+    border-radius: 4px;
+  }

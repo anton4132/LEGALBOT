@@ -1,0 +1,6 @@
+# node_modules en cualquier subcarpeta
+**/node_modules/
+# .env en cualquier subcarpeta
+**/.env
+# builds
+**/dist/
