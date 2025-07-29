@@ -5,7 +5,7 @@
   <title>Admin Dashboard</title>
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
   <div class="d-flex">
@@ -46,7 +46,7 @@
             <div class="card h-100">
               <div class="card-body">
                 <h6 class="card-title text-warning">Transacciones procesadas</h6>
-                <p class="card-text fs-2 text-warning" id="kpi-transacciones">S/ 5,000</p>
+                <p class="card-text fs-2 text-warning" id="kpi-transacciones">7</p>
               </div>
             </div>
           </div>
@@ -79,101 +79,6 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="scripts.js"></script>
-  <script>
-    // Fechas de las últimas 6 semanas
-    const semanas = [
-      '2024-04-01',
-      '2024-04-08',
-      '2024-04-15',
-      '2024-04-22',
-      '2024-04-29',
-      '2024-05-06'
-    ];
-    // Datos de ejemplo
-    const clientesData = [5, 8, 6, 10, 7, 12];
-    const abogadosData = [2, 3, 4, 2, 5, 6];
-
-    // Gráfico de Clientes
-    new Chart(document.getElementById('clientesChart').getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: semanas,
-        datasets: [{
-          label: 'Clientes nuevos',
-          data: clientesData,
-          borderColor: '#0d6efd',
-          backgroundColor: 'rgba(13,110,253,0.1)',
-          tension: 0.3,
-          fill: true,
-          pointRadius: 5,
-          pointBackgroundColor: '#0d6efd',
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: true },
-          tooltip: { enabled: true }
-        },
-        scales: {
-          x: {
-            title: { display: true, text: 'Semana (fecha de inicio)' },
-            ticks: {
-              callback: function(value, index) {
-                // Mostrar fecha en formato corto
-                const fecha = semanas[index];
-                return fecha.slice(5); // MM-DD
-              }
-            }
-          },
-          y: {
-            title: { display: true, text: 'Nuevos clientes' },
-            beginAtZero: true
-          }
-        }
-      }
-    });
-
-    // Gráfico de Abogados
-    new Chart(document.getElementById('abogadosChart').getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: semanas,
-        datasets: [{
-          label: 'Abogados nuevos',
-          data: abogadosData,
-          borderColor: '#0dcaf0',
-          backgroundColor: 'rgba(13,202,240,0.1)',
-          tension: 0.3,
-          fill: true,
-          pointRadius: 5,
-          pointBackgroundColor: '#0dcaf0',
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: true },
-          tooltip: { enabled: true }
-        },
-        scales: {
-          x: {
-            title: { display: true, text: 'Semana (fecha de inicio)' },
-            ticks: {
-              callback: function(value, index) {
-                const fecha = semanas[index];
-                return fecha.slice(5); // MM-DD
-              }
-            }
-          },
-          y: {
-            title: { display: true, text: 'Nuevos abogados' },
-            beginAtZero: true
-          }
-        }
-      }
-    });
-  </script>
+  <script src="assets/js/scripts.js"></script>
 </body>
 </html>
