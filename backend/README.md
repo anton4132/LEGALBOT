@@ -30,6 +30,7 @@ npm run dev
 ```
 
 ## 📁 Estructura
+```bash
 backend/
 ├── src/
 │ ├── config/
@@ -50,3 +51,4 @@ backend/
 ├── prisma/
 │ └── schema.prisma # Esquema BD
 └── package.json
+```

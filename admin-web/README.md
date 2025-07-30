@@ -17,6 +17,8 @@ No requiere instalación. Solo abrir en navegador.
 Abrir `login.html` en el navegador.
 
 ## 📁 Estructura
+```bash
+
 admin-web/
 ├── assets/
 │ ├── css/
@@ -32,6 +34,7 @@ admin-web/
 │ └── usuarios.html # Gestión usuarios
 ├── index.html # Dashboard
 └── login.html # Login
+```
 
 
 ## 🔐 Acceso
