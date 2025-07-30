@@ -18,10 +18,21 @@ PORT=3000
 ```
 
 2. Configurar base de datos:
+
 ```bash
+# Si recibes BD con datos
+npx prisma db pull
+npx prisma generate
+
+# Si creas BD desde cero
 npx prisma generate
 npx prisma db push
 ```
+
+**📌 Resumen rápido:**
+- Si partes de cero → `generate` y luego `db push`.
+- Si recibes la BD (ej. respaldo.sql) → importa, luego `db pull` y después `generate`.
+
 
 ## 🏃‍♂️ Ejecutar
 
