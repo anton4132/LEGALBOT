@@ -15,19 +15,21 @@ class OnboardingScreenState extends State<OnboardingScreen> {
   final List<Map<String, String>> onboardingData = [
     {
       'image': 'images/o1.png',
-      'title': 'Expert Legal Advice',
-      'description': 'Get the best legal guidance from top professionals in the field.'
+      'title': 'Ayuda Legal al Instante',
+      'description': 'Busca apoyo legal en cualquier momento.'
     },
+    {
+      "image": "images/o3.jpg",
+      "title": "Documentos Legales Inteligentes",
+      "description": "Accede a formatos adaptativos e información siempre disponible."
+    },
+
     {
       'image': 'images/o2.jpg',
-      'title': 'Quick and Easy Consultation',
-      'description': 'Book a consultation with just a few clicks and get instant support.'
+      'title': 'Ofrece tus Servicios',
+      'description': 'Si eres abogado, conecta con clientes y gestiona tus citas fácilmente.'
     },
-    {
-      'image': 'images/o3.jpg',
-      'title': 'Secure & Confidential',
-      'description': 'Your data and discussions are 100% secure and private with us.'
-    }
+
   ];
 
   @override
@@ -115,7 +117,7 @@ class OnboardingScreenState extends State<OnboardingScreen> {
                 ),
                 padding: EdgeInsets.symmetric(vertical: 15, horizontal: 30),
               ),
-              child: Text("Get Started", style: TextStyle(fontSize: 18,color: Colors.white)),
+              child: Text("Empezar", style: TextStyle(fontSize: 18,color: Colors.white)),
             )
                 : SizedBox.shrink(),
           ),

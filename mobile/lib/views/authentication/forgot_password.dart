@@ -1,9 +1,9 @@
 import 'package:legalserviceapp/views/Authentication/reset_password.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../Constants/colors.dart';
 import '../../Widgets/custombtn.dart';
-import '../../Widgets/customtextfield.dart';
 import '../../widgets/detailstext1.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -18,6 +18,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _dniController = TextEditingController();
 
   @override
   void initState() {
@@ -46,6 +49,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   @override
   void dispose() {
     _controller.dispose();
+    _phoneController.dispose();
+    _dniController.dispose();
     super.dispose();
   }
 
@@ -65,7 +70,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 children: [
                   SizedBox(height: 100),
                   Text1(
-                    text1: 'Legal Services App',
+                    text1: 'LegalBot',
                     color: Colors.white,
                     size: 32,
                   ),
@@ -97,29 +102,110 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                           FadeTransition(
                             opacity: _fadeAnimation,
                             child: const Text1(
-                              text1: 'Forgot Password',
+                              text1: 'Recuperar Clave',
                               size: 24,
+                              color: AppColors.buttonColor,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Ingresa tu número de teléfono y DNI para recuperar tu clave',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 30),
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: TextFormField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(10),
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'Número de Teléfono',
+                                prefixIcon: Icon(Icons.phone, color: AppColors.buttonColor),
+                                border: OutlineInputBorder(),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 20),
                           SlideTransition(
                             position: _slideAnimation,
-                            child: const CustomTextField(
-                              label: 'Email',
-                              icon: Icons.email,
+                            child: TextFormField(
+                              controller: _dniController,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(8),
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'DNI',
+                                prefixIcon: Icon(Icons.badge, color: AppColors.buttonColor),
+                                border: OutlineInputBorder(),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 30),
                           FadeTransition(
                             opacity: _fadeAnimation,
                             child: CustomButton(
-                              text: 'Reset Password',
+                              text: 'Enviar Código',
                               onTap: () {
+                                // Validar campos
+                                if (_phoneController.text.isEmpty || _dniController.text.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Por favor completa todos los campos'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                if (_phoneController.text.length < 9) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('El número de teléfono debe tener al menos 9 dígitos'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                if (_dniController.text.length != 8) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('El DNI debe tener 8 dígitos'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                // Mostrar mensaje de éxito
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Código enviado al número de teléfono'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+
+                                // Navegar a reset password
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) =>
-                                    const ResetPasswordScreen(),
+                                    builder: (context) => const ResetPasswordScreen(),
                                   ),
                                 );
                               },
@@ -131,13 +217,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text('Remembered your password? '),
+                                const Text('¿Recordaste tu clave? '),
                                 GestureDetector(
                                   onTap: () {
                                     Navigator.pop(context); // Go back to login
                                   },
                                   child: const Text(
-                                    'Login',
+                                    'Iniciar Sesión',
                                     style: TextStyle(
                                       color: AppColors.buttonColor,
                                       fontWeight: FontWeight.bold,
