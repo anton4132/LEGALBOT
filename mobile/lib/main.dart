@@ -1,26 +1,42 @@
-import 'package:legalserviceapp/views/splash/splashscreen.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import 'Constants/colors.dart';
+
+import 'constants/colors.dart';
+import 'views/splash/splashscreen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
+}
+
+/// Habilita drag/scroll con mouse, trackpad, stylus, etc. (desktop/web)
+class MyScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.unknown,
+  };
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: 'Legal Services App',
+      debugShowCheckedModeBanner: false,
+      scrollBehavior: MyScrollBehavior(), // 👈 importante para desktop/web
       theme: ThemeData(
-        scaffoldBackgroundColor: AppColors.bgColor,
         useMaterial3: true,
+        scaffoldBackgroundColor: AppColors.bgColor,
       ),
-      home: SplashScreen(),
+      home: const SplashScreen(), // si tu SplashScreen es const-safe
     );
   }
 }
+

@@ -1,6 +1,38 @@
-# node_modules en cualquier subcarpeta
+# ------------------------------
+# Node.js dependencies (en cualquier subcarpeta)
+# ------------------------------
 **/node_modules/
-# .env en cualquier subcarpeta
-**/.env
-# builds
+
+# ------------------------------
+# Build / compiled output (en cualquier subcarpeta)
+# ------------------------------
 **/dist/
+**/build/
+
+# ------------------------------
+# Prisma generated client
+# ------------------------------
+prisma/generated/
+generated/prisma/
+
+# ------------------------------
+# Environment variables (ignorar .env pero permitir ejemplos)
+# ------------------------------
+**/.env
+.env
+!.env.example
+!*.example
+
+# ------------------------------
+# Logs
+# ------------------------------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ------------------------------
+# Editor / system files
+# ------------------------------
+.vscode/
+.idea/
+.DS_Store

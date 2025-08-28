@@ -1,7 +1,7 @@
 const app = require('./app');
 const { testConnection, closeConnection } = require('./config/database');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Función para iniciar el servidor
 async function startServer() {

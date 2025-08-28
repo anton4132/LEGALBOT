@@ -27,12 +27,20 @@ app.get('/', (req, res) => {
 
 // Ruta para servir login.html
 app.get('/login', (req, res) => {
+  console.log('Accediendo a /login');
   res.sendFile(path.join(__dirname, '../../admin-web/login.html'));
 });
 
 // Ruta para servir index.html (dashboard)
 app.get('/dashboard', (req, res) => {
+  console.log('Accediendo a /dashboard');
   res.sendFile(path.join(__dirname, '../../admin-web/index.html'));
+});
+
+// Ruta para servir usuarios.html
+app.get('/usuarios', (req, res) => {
+  console.log('Accediendo a /usuarios');
+  res.sendFile(path.join(__dirname, '../../admin-web/pages/usuarios.html'));
 });
 
 // API Routes
@@ -48,11 +56,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Middleware para rutas no encontradas
+// Middleware para rutas no encontradas - DEBE estar al final
 app.use('*', (req, res) => {
+  console.log('Ruta no encontrada:', req.originalUrl);
   res.status(404).json({
     success: false,
-    message: 'Ruta no encontrada'
+    message: 'Ruta no encontrada',
+    path: req.originalUrl
   });
 });
 
