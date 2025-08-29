@@ -1,5 +1,6 @@
 // Variables globales
 let users = [];
+let roles = [];
 let currentUserId = null;
 let isEditing = false;
 
@@ -22,7 +23,7 @@ function logout() {
 // Inicializar la página
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Inicializando página de usuarios');
-    loadUsers();
+    loadRoles().then(loadUsers);
     setupEventListeners();
 });
 
@@ -70,6 +71,56 @@ async function loadUsers() {
     }
 }
 
+// Cargar roles desde la API
+async function loadRoles() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/roles`);
+        if (!response.ok) {
+            throw new Error(`Error al cargar roles: ${response.status}`);
+        }
+        roles = await response.json();
+        populateRoleSelects();
+    } catch (error) {
+        console.error('Error cargando roles:', error);
+        showAlert('Error al cargar roles: ' + error.message, 'danger');
+    }
+}
+
+function populateRoleSelects() {
+    const roleSelect = document.getElementById('rol');
+    const filterSelect = document.getElementById('filterType');
+
+    if (roleSelect) {
+        roleSelect.innerHTML = '<option value="">Seleccionar tipo</option>';
+        roles.forEach(role => {
+            const option = document.createElement('option');
+            option.value = role.id;
+            option.textContent = role.nombre;
+            roleSelect.appendChild(option);
+        });
+    }
+
+    if (filterSelect) {
+        filterSelect.innerHTML = '<option value="">Todos los tipos</option>';
+        roles.forEach(role => {
+            const option = document.createElement('option');
+            option.value = role.codigo;
+            option.textContent = role.nombre;
+            filterSelect.appendChild(option);
+        });
+    }
+}
+
+function getRoleBadge(code) {
+    const roleColors = {
+        cliente: 'bg-primary',
+        abogado: 'bg-success',
+        admin: 'bg-danger'
+    };
+    return roleColors[code] || 'bg-secondary';
+}
+
+
 // Renderizar tabla de usuarios
 function renderUsersTable(usersToRender) {
     const tbody = document.getElementById('usersTableBody');
@@ -99,7 +150,7 @@ function renderUsersTable(usersToRender) {
             <td>${user.persona.telefono || 'N/A'}</td>
             <td>${user.persona.correo}</td>
             <td>
-                <span class="badge ${user.role.codigo === 'cliente' ? 'bg-primary' : 'bg-success'}">
+                <span class="badge ${getRoleBadge(user.role.codigo)}">
                     ${user.role.nombre}
                 </span>
             </td>
