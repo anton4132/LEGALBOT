@@ -95,6 +95,16 @@
             <input type="hidden" id="userId">
             <div class="row">
               <div class="col-md-6 mb-3">
+                <label for="dni" class="form-label">DNI *</label>
+                <input type="text" class="form-control" id="dni" maxlength="8" pattern="\d{8}" inputmode="numeric" required>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="telefono" class="form-label">Teléfono *</label>
+                <input type="tel" class="form-control" id="telefono" required>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-6 mb-3">
                 <label for="primerNombre" class="form-label">Primer Nombre *</label>
                 <input type="text" class="form-control" id="primerNombre" required>
               </div>
@@ -113,16 +123,7 @@
                 <input type="text" class="form-control" id="apellidoMaterno">
               </div>
             </div>
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <label for="dni" class="form-label">DNI *</label>
-                <input type="text" class="form-control" id="dni" maxlength="8" required>
-              </div>
-              <div class="col-md-6 mb-3">
-                <label for="telefono" class="form-label">Teléfono *</label>
-                <input type="tel" class="form-control" id="telefono" required>
-              </div>
-            </div>
+            
             <div class="row">
               <div class="col-md-6 mb-3">
                 <label for="email" class="form-label">Email *</label>

@@ -1,5 +1,85 @@
 const { prisma } = require('../config/database');
 
+const INVALID_DNI_SEQUENCES = ['00000000', '11111111', '12345678', '87654321'];
+
+function validateDniFormat(dni) {
+  if (!/^\d{8}$/.test(dni)) {
+    return 'El DNI debe contener exactamente 8 dígitos';
+  }
+  if (INVALID_DNI_SEQUENCES.includes(dni)) {
+    return 'El DNI proporcionado no es válido';
+  }
+  return null;
+}
+
+async function fetchDniInfo(dni) {
+  const token = process.env.APIPERU_TOKEN;
+  if (!token) {
+    throw new Error('APIPERU_TOKEN no configurado');
+  }
+  const response = await fetch('https://apiperu.dev/api/dni', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ dni })
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo verificar el DNI');
+  }
+
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error('DNI no encontrado en padrón público');
+  }
+  return data.data;
+}
+
+async function validateDni(dni) {
+  const formatError = validateDniFormat(dni);
+  if (formatError) {
+    return formatError;
+  }
+  if (process.env.APIPERU_TOKEN) {
+    try {
+      await fetchDniInfo(dni);
+    } catch (error) {
+      console.error('Error verificando DNI:', error);
+      return error.message || 'Error verificando DNI';
+
+    }
+  }
+  return null;
+}
+const lookupDni = async (req, res) => {
+  try {
+    const dni = req.params.dni.trim();
+    const formatError = validateDniFormat(dni);
+    if (formatError) {
+      return res.status(400).json({ success: false, message: formatError });
+    }
+    const data = await fetchDniInfo(dni);
+    const nombres = (data.nombres || '').trim().split(/\s+/);
+    const structured = {
+      numero: data.numero,
+      primer_nombre: nombres[0] || '',
+      segundo_nombre: nombres.slice(1).join(' ') || '',
+      apellido_paterno: data.apellido_paterno || '',
+      apellido_materno: data.apellido_materno || '',
+    };
+    res.json({ success: true, data: structured });
+  } catch (error) {
+    console.error('Error consultando DNI:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error consultando DNI'
+    });
+  }
+};
+
 // Obtener todos los usuarios
 const getAllUsers = async (req, res) => {
   try {
@@ -78,10 +158,14 @@ const createUser = async (req, res) => {
         message: 'Faltan campos requeridos'
       });
     }
-
+    const normalizedDni = dni.trim();
+    const dniError = await validateDni(normalizedDni);
+    if (dniError) {
+      return res.status(400).json({ success: false, message: dniError });
+    }
     // Verificar si el DNI ya existe
     const existingPersona = await prisma.persona.findUnique({
-      where: { dni }
+      where: { dni: normalizedDni }
     });
 
     if (existingPersona) {
@@ -106,7 +190,7 @@ const createUser = async (req, res) => {
     // Crear persona primero
     const persona = await prisma.persona.create({
       data: {
-        dni,
+        dni: normalizedDni,
         telefono,
         correo,
         primer_nombre,
@@ -174,10 +258,20 @@ const updateUser = async (req, res) => {
       });
     }
 
+    let normalizedDni = usuarioActual.persona.dni;
+    if (dni) {
+      normalizedDni = dni.trim();
+    }
+
     // Verificar si el DNI ya existe en otra persona
-    if (dni && dni !== usuarioActual.persona.dni) {
+    if (normalizedDni !== usuarioActual.persona.dni) {
+      const dniError = await validateDni(normalizedDni);
+      if (dniError) {
+        return res.status(400).json({ success: false, message: dniError });
+      }
+
       const existingPersona = await prisma.persona.findUnique({
-        where: { dni }
+        where: { dni: normalizedDni }
       });
 
       if (existingPersona) {
@@ -206,7 +300,7 @@ const updateUser = async (req, res) => {
     await prisma.persona.update({
       where: { id: usuarioActual.persona_id },
       data: {
-        dni,
+        dni: normalizedDni,
         telefono,
         correo,
         primer_nombre,
@@ -287,5 +381,7 @@ module.exports = {
   getUserById,
   createUser,
   updateUser,
-  deleteUser
+  deleteUser,
+  lookupDni,
+  fetchDniInfo
 };

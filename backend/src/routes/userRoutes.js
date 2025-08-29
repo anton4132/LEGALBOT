@@ -4,6 +4,7 @@ const userController = require('../controllers/userController');
 
 // Rutas de usuarios
 router.get('/', userController.getAllUsers);
+router.get('/dni/:dni', userController.lookupDni);
 router.get('/:id', userController.getUserById);
 router.post('/', userController.createUser);
 router.put('/:id', userController.updateUser);

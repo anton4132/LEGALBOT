@@ -43,6 +43,11 @@ function setupEventListeners() {
             filterUsers();
         });
     }
+
+    const dniInput = document.getElementById('dni');
+    if (dniInput) {
+        dniInput.addEventListener('blur', handleDniLookup);
+    }
 }
 
 // Cargar usuarios desde la API
@@ -134,6 +139,32 @@ function filterUsers() {
 
     renderUsersTable(filteredUsers);
 }
+
+
+//obtencion de los datos por api get peru dni
+async function handleDniLookup() {
+    const dni = this.value.trim();
+    if (!/^\d{8}$/.test(dni)) {
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/users/dni/${dni}`);
+        const result = await response.json();
+        if (response.ok && result.success) {
+            const data = result.data;
+            document.getElementById('primerNombre').value = data.primer_nombre || '';
+            document.getElementById('segundoNombre').value = data.segundo_nombre || '';
+            document.getElementById('apellidoPaterno').value = data.apellido_paterno || '';
+            document.getElementById('apellidoMaterno').value = data.apellido_materno || '';
+        } else {
+            showAlert(result.message || 'DNI no encontrado', 'warning');
+        }
+    } catch (error) {
+        console.error('Error consultando DNI:', error);
+        showAlert('Error consultando DNI', 'danger');
+    }
+}
+
 
 // Abrir modal para nuevo usuario
 function openUserModal() {
@@ -240,8 +271,15 @@ async function saveUser() {
         }
     }
 
+    //reglas para el campo dni 
+    const dniValue = document.getElementById('dni').value.trim();
+    if (!/^\d{8}$/.test(dniValue) || ['00000000', '11111111', '12345678', '87654321'].includes(dniValue)) {
+        showAlert('El DNI debe tener 8 dígitos válidos', 'danger');
+        return;
+    }
+
     const userData = {
-        dni: document.getElementById('dni').value,
+        dni: dniValue,
         telefono: document.getElementById('telefono').value,
         correo: document.getElementById('email').value,
         primer_nombre: document.getElementById('primerNombre').value,

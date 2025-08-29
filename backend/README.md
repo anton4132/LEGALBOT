@@ -63,3 +63,14 @@ backend/
 │ └── schema.prisma # Esquema BD
 └── package.json
 ```
+
+
+## 🔎 Consulta de DNI
+
+Con `APIPERU_TOKEN` configurado puedes obtener datos públicos de un DNI:
+
+```bash
+curl http://localhost:3000/api/users/dni/12345678
+```
+
+La respuesta incluye nombres y apellidos según el padrón público de SUNAT.
