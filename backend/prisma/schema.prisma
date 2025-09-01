@@ -203,13 +203,112 @@ enum tipo_detalle_pago {
   neto_abogado
 }
 
+enum tipo_calculo_tc {
+  fijo
+  paquete
+  consumo_ia
+  minimo_mas_variable
+  estacional
+}
+
+/// A qué rol aplica la regla
+enum rol_aplica_tc {
+  cliente
+  abogado
+  ambos
+}
+
+/// Quién absorbe el fee de pasarela
+enum quien_absorbe_psp {
+  cliente
+  plataforma
+  abogado
+  mixto
+}
+
+/// Reglas de redondeo para presentación/precio final
+enum regla_redondeo {
+  dos_decimales
+  a_0_05
+  entero_superior
+}
+
 model tarifacomision {
-  id          Int     @id @default(autoincrement())
-  codigo      String  @unique
+  id          Int      @id @default(autoincrement())
+  codigo      String   @unique
   descripcion String?
-  valor       Decimal @db.Decimal
+  valor       Decimal? @db.Decimal
   tipo        String
-  activo      Boolean @default(true)
+  activo      Boolean  @default(true)
+
+  // NUEVOS CAMPOS (versionado, ámbitos y cálculo)
+  servicio_id      Int?
+  plan_id          Int?
+  rol_aplica       rol_aplica_tc?   @default(ambos)
+  moneda           String?          @db.Char(3)
+  tipo_calculo     tipo_calculo_tc?
+  parametros       Json?
+  incluye_impuesto Boolean?         @default(false)
+  vigencia_desde   DateTime?        @db.Timestamptz(6)
+  vigencia_hasta   DateTime?        @db.Timestamptz(6)
+  prioridad        Int?             @db.SmallInt
+  ambito_region    String?
+  metodo_pago      String?
+
+  plan     plan?     @relation("PlanTarifa", fields: [plan_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  servicio servicio? @relation("ServicioTarifa", fields: [servicio_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([servicio_id, plan_id, rol_aplica, ambito_region, metodo_pago, vigencia_desde, vigencia_hasta, activo])
+  @@index([servicio_id])
+  @@index([plan_id])
+}
+
+model impuesto {
+  id                 Int       @id @default(autoincrement())
+  codigo             String    @unique
+  nombre             String
+  porcentaje         Decimal   @db.Decimal
+  incluido_en_precio Boolean   @default(false)
+  activo             Boolean   @default(true)
+  vigencia_desde     DateTime? @db.Timestamptz(6)
+  vigencia_hasta     DateTime? @db.Timestamptz(6)
+  creado_el          DateTime  @default(now()) @db.Timestamptz(6)
+}
+
+/// Configuración económica global (1 fila activa)
+model econconfig {
+  id             Int            @id @default(autoincrement())
+  moneda_defecto String         @db.Char(3)
+  regla_redondeo regla_redondeo @default(dos_decimales)
+  decimales      Int            @default(2)
+  activo         Boolean        @default(true)
+  actualizado_el DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@unique([activo]) // asegura una sola fila activa
+}
+
+model pasarela {
+  id            Int               @id @default(autoincrement())
+  nombre        String            @unique
+  porcentaje    Decimal?          @db.Decimal // % base PSP
+  fijo          Decimal?          @db.Decimal // fijo por transacción
+  quien_absorbe quien_absorbe_psp @default(plataforma)
+  activo        Boolean           @default(true)
+  creado_el     DateTime          @default(now()) @db.Timestamptz(6)
+  reglas_metodo pasarelametodo[]
+}
+
+model pasarelametodo {
+  id            Int                @id @default(autoincrement())
+  pasarela_id   Int
+  metodo_pago   String
+  porcentaje    Decimal?           @db.Decimal
+  fijo          Decimal?           @db.Decimal
+  quien_absorbe quien_absorbe_psp?
+  activo        Boolean            @default(true)
+  pasarela      pasarela           @relation(fields: [pasarela_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([pasarela_id, metodo_pago])
 }
 
 model perfilabogado {
@@ -248,18 +347,20 @@ model role {
 }
 
 model plan {
-  id                    Int            @id @default(autoincrement())
+  id                    Int              @id @default(autoincrement())
   nombre                String
   almacenamiento_maximo Int?
   usuarios              usuario[]
   planservicios         planservicio[]
+  tarifas               tarifacomision[] @relation("PlanTarifa")
 }
 
 model servicio {
-  id            Int            @id @default(autoincrement())
-  codigo        String         @unique
+  id            Int              @id @default(autoincrement())
+  codigo        String           @unique
   nombre        String
   planservicios planservicio[]
+  tarifas       tarifacomision[] @relation("ServicioTarifa")
 }
 
 model planservicio {
