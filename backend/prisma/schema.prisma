@@ -1,3 +1,7 @@
+generator erd {
+  provider = "prisma-erd-generator"
+}
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -31,6 +35,20 @@ model bitacorabusquedavh {
   usuario       usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
+model codigoverificacion {
+  id         Int       @id @default(autoincrement())
+  usuario_id Int
+  codigo     String
+  motivo     String?
+  enviado_el DateTime  @default(now()) @db.Timestamptz(6)
+  expira_el  DateTime  @db.Timestamptz(6)
+  usado      Boolean   @default(false)
+  usado_el   DateTime? @db.Timestamptz(6)
+  usuario    usuario   @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([usuario_id])
+}
+
 model cita {
   id                               Int      @id @default(autoincrement())
   cliente_id                       Int
@@ -57,16 +75,29 @@ model clienteabogado {
 }
 
 model consulta {
-  id                                   Int          @id @default(autoincrement())
+  id                                   Int            @id @default(autoincrement())
   cliente_id                           Int
   abogado_id                           Int
   pregunta                             String
-  area_detectada                       String?
-  estado                               est_consulta @default(pendiente)
-  creada_el                            DateTime     @default(now()) @db.Timestamptz(6)
+  especialidad_id                      Int?
+  tipo                                 tipo_consulta  @default(texto)
+  audio_url                            String?
+  opcion_respuesta                     resp_consulta?
+  documento_id                         Int?
+  pago_id                              Int?
+  estado                               est_consulta   @default(pendiente)
+  creada_el                            DateTime       @default(now()) @db.Timestamptz(6)
   cita                                 cita[]
-  usuario_consulta_abogado_idTousuario usuario      @relation("consulta_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuario_consulta_cliente_idTousuario usuario      @relation("consulta_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  documento                            documento?     @relation(fields: [documento_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  pago                                 pago?          @relation(fields: [pago_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  especialidad                         especialidad?  @relation(fields: [especialidad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_consulta_abogado_idTousuario usuario        @relation("consulta_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_consulta_cliente_idTousuario usuario        @relation("consulta_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+enum tipo_consulta {
+  texto
+  audio
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -82,16 +113,41 @@ model disponibilidadabogado {
 }
 
 model documento {
-  id                                        Int      @id @default(autoincrement())
+  id                                        Int             @id @default(autoincrement())
   propietario_id                            Int
   tipo_documento                            String?
   ruta_archivo                              String
-  generado_ai                               Boolean  @default(false)
-  firmado                                   Boolean  @default(false)
+  generado_ai                               Boolean         @default(false)
+  firmado                                   Boolean         @default(false)
+  firma_url                                 String?
   abogado_firma                             Int?
-  creado_el                                 DateTime @default(now()) @db.Timestamptz(6)
-  usuario_documento_abogado_firmaTousuario  usuario? @relation("documento_abogado_firmaTousuario", fields: [abogado_firma], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuario_documento_propietario_idTousuario usuario  @relation("documento_propietario_idTousuario", fields: [propietario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  formato_id                                Int?
+  institucion                               String?
+  enviado                                   Boolean         @default(false)
+  estado_tramite                            est_doc_tramite @default(pendiente)
+  enviado_el                                DateTime?       @db.Timestamptz(6)
+  pago_id                                   Int?
+  tamano                                    Int?
+  creado_el                                 DateTime        @default(now()) @db.Timestamptz(6)
+  formato                                   formato?        @relation(fields: [formato_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pago                                      pago?           @relation(fields: [pago_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  usuario_documento_abogado_firmaTousuario  usuario?        @relation("documento_abogado_firmaTousuario", fields: [abogado_firma], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_documento_propietario_idTousuario usuario         @relation("documento_propietario_idTousuario", fields: [propietario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  consulta                                  consulta[]
+
+  @@index([propietario_id])
+}
+
+model archivo {
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  ruta       String
+  tamano     Int
+  tipo       String?
+  creado_el  DateTime @default(now()) @db.Timestamptz(6)
+  usuario    usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([usuario_id])
 }
 
 model estadopago {
@@ -101,30 +157,74 @@ model estadopago {
   pago   pago[]
 }
 
+model especialidad {
+  id            Int             @id @default(autoincrement())
+  nombre        String          @unique
+  perfilabogado perfilabogado[]
+  consulta      consulta[]
+  formatos      formato[]
+}
+
 model pago {
-  id            Int        @id @default(autoincrement())
+  id            Int           @id @default(autoincrement())
   usuario_id    Int
-  monto         Decimal    @db.Decimal
-  moneda        String     @db.Char(3)
+  monto         Decimal       @db.Decimal
+  moneda        String        @db.Char(3)
   concepto      String?
   proveedor_txn String?
-  estado_id     Int        @db.SmallInt
-  creado_el     DateTime   @default(now()) @db.Timestamptz(6)
+  estado_id     Int           @db.SmallInt
+  metodo_pago   String?
+  tipo_servicio String?
+  creado_el     DateTime      @default(now()) @db.Timestamptz(6)
   cita          cita[]
-  estadopago    estadopago @relation(fields: [estado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuario       usuario    @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  documentos    documento[]
+  consultas     consulta[]
+  pagodetalle   pagodetalle[]
+  estadopago    estadopago    @relation(fields: [estado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario       usuario       @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([estado_id])
+}
+
+model pagodetalle {
+  id      Int               @id @default(autoincrement())
+  pago_id Int
+  tipo    tipo_detalle_pago
+  monto   Decimal           @db.Decimal
+  pago    pago              @relation(fields: [pago_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+enum tipo_detalle_pago {
+  subtotal
+  comision_plataforma
+  tarifa_ia
+  fee_psp
+  total_cliente
+  neto_abogado
+}
+
+model tarifacomision {
+  id          Int     @id @default(autoincrement())
+  codigo      String  @unique
+  descripcion String?
+  valor       Decimal @db.Decimal
+  tipo        String
+  activo      Boolean @default(true)
 }
 
 model perfilabogado {
   usuario_id            Int                     @id
-  especialidad          String?
+  especialidad_id       Int?
   tarifa_base           Decimal?                @db.Decimal
   direccion_atencion    String?
   place_id_api          String?
   bio                   String?
   duracion_minutos      Int                     @default(60)
+  latitud               Float?
+  longitud              Float?
   disponibilidadabogado disponibilidadabogado[]
   usuario               usuario                 @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  especialidad          especialidad?           @relation(fields: [especialidad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model persona {
@@ -147,12 +247,40 @@ model role {
   usuario usuario[]
 }
 
+model plan {
+  id                    Int            @id @default(autoincrement())
+  nombre                String
+  almacenamiento_maximo Int?
+  usuarios              usuario[]
+  planservicios         planservicio[]
+}
+
+model servicio {
+  id            Int            @id @default(autoincrement())
+  codigo        String         @unique
+  nombre        String
+  planservicios planservicio[]
+}
+
+model planservicio {
+  id          Int      @id @default(autoincrement())
+  plan_id     Int
+  servicio_id Int
+  habilitado  Boolean  @default(true)
+  plan        plan     @relation(fields: [plan_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  servicio    servicio @relation(fields: [servicio_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([plan_id, servicio_id])
+}
+
 model usuario {
   id                                                Int                  @id @default(autoincrement())
   persona_id                                        Int
   rol_id                                            Int                  @db.SmallInt
   clave                                             String
   telefono_verificado                               Boolean              @default(false)
+  plan_id                                           Int?
+  almacenamiento_usado                              Int                  @default(0)
   creado_el                                         DateTime             @default(now()) @db.Timestamptz(6)
   auditoria                                         auditoria[]
   bitacorabusquedavh                                bitacorabusquedavh[]
@@ -165,7 +293,10 @@ model usuario {
   documento_documento_abogado_firmaTousuario        documento[]          @relation("documento_abogado_firmaTousuario")
   documento_documento_propietario_idTousuario       documento[]          @relation("documento_propietario_idTousuario")
   pago                                              pago[]
+  codigoverificacion                                codigoverificacion[]
+  archivos                                          archivo[]
   perfilabogado                                     perfilabogado?
+  plan                                              plan?                @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   role                                              role                 @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
@@ -181,5 +312,42 @@ enum est_cita {
 enum est_consulta {
   pendiente
   respondida
-  cerrrada
+  cerrada
+}
+
+enum resp_consulta {
+  abogado
+  documento
+}
+
+enum est_doc_tramite {
+  pendiente
+  enviado
+  recibido
+  observado
+}
+
+model formato {
+  id              Int           @id @default(autoincrement())
+  nombre          String
+  descripcion     String?
+  especialidad_id Int?
+  institucion     String?
+  tipo_documento  String?
+  ruta_archivo    String
+  es_premium      Boolean       @default(false)
+  costo           Decimal?      @db.Decimal
+  creado_el       DateTime      @default(now()) @db.Timestamptz(6)
+  documentos      documento[]
+  especialidad    especialidad? @relation(fields: [especialidad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model bibliotecaitem {
+  id           Int      @id @default(autoincrement())
+  titulo       String
+  descripcion  String?
+  tipo         String
+  ruta_archivo String
+  costo        Decimal? @db.Decimal
+  creado_el    DateTime @default(now()) @db.Timestamptz(6)
 }

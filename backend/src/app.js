@@ -43,6 +43,7 @@ app.get('/usuarios', (req, res) => {
   res.sendFile(path.join(__dirname, '../../admin-web/pages/usuarios.html'));
 });
 
+
 // API Routes
 app.use('/api', apiRoutes);
 

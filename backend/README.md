@@ -74,3 +74,10 @@ curl http://localhost:3000/api/users/dni/12345678
 ```
 
 La respuesta incluye nombres y apellidos según el padrón público de SUNAT.
+
+## 🔎 crear credenciales del administrador docker 
+type seed_admin.sql | docker exec -i legalbot-postgres psql -U postgres -d legalbot
+
+## 🔎 crear una migracion a partir del squema actual 
+
+npx prisma migrate dev -n "add_pago_metodo_y_tipo_servicio"
