@@ -252,10 +252,15 @@ window.addEventListener('DOMContentLoaded', function() {
         sidebarContainer.innerHTML = html;
         // Resalta el menú activo según la página
         const path = window.location.pathname;
-        if (path.endsWith('index.html') || path === '/' || path === '/admin-web/' ) {
+        if (path.endsWith('index.html') || path === '/' || path === '/admin-web/' || path === '/dashboard') {
           document.getElementById('menu-home')?.classList.add('active');
-        } else if (path.endsWith('usuarios.html')) {
+        } else if (path.endsWith('usuarios.html') || path.startsWith('/usuarios')) {
           document.getElementById('menu-usuarios')?.classList.add('active');
+        } else if (path.endsWith('tarifas.html') || path.startsWith('/tarifas')) {
+          document.getElementById('menu-tarifas')?.classList.add('active');
+        }
+        else if (path.endsWith('servicios.html') || path.startsWith('/servicios')) {
+          document.getElementById('menu-servicios')?.classList.add('active');
         }
         // Mostrar el contenido principal
         document.getElementById('main-content')?.classList.remove('invisible');

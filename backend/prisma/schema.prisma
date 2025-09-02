@@ -358,7 +358,8 @@ model plan {
 
 model servicio {
   id            Int              @id @default(autoincrement())
-  codigo        String           @unique
+  fecha_creada  DateTime         @default(now()) @db.Timestamptz(6)
+  fecha_modificada DateTime         @default(now()) @db.Timestamptz(6)
   nombre        String
   planservicios planservicio[]
   tarifas       tarifacomision[] @relation("ServicioTarifa")

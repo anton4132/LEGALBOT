@@ -43,6 +43,19 @@ app.get('/usuarios', (req, res) => {
   res.sendFile(path.join(__dirname, '../../admin-web/pages/usuarios.html'));
 });
 
+// Ruta para servir Tarifas.html
+app.get('/Tarifas', (req, res) => {
+  console.log('Accediendo a /Tarifas');
+  res.sendFile(path.join(__dirname, '../../admin-web/pages/Tarifas.html'));
+});
+
+// Ruta para servir servicios.html
+app.get('/servicios', (req, res) => {
+  console.log('Accediendo a /servicios');
+  res.sendFile(path.join(__dirname, '../../admin-web/pages/servicios.html'));
+});
+
+
 
 // API Routes
 app.use('/api', apiRoutes);
