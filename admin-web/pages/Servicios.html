@@ -38,9 +38,22 @@
           <h3 class="fw-bold">Catálogo de Servicios</h3>
           <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#serviceModal" onclick="openServiceModal()">+ Nuevo Servicio</button>
         </div>
-        <form class="row g-2 mb-3">
+        <form class="row g-2 mb-3" id="filtersForm">
           <div class="col-md-4">
             <input type="text" class="form-control" id="searchService" placeholder="Buscar por código o nombre">
+          </div>
+          <div class="col-md-3">
+            <select id="filterEstado" class="form-select">
+              <option value="">Todos</option>
+              <option value="true">Activo</option>
+              <option value="false">Inactivo</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <select id="orderBy" class="form-select">
+              <option value="nombre">Ordenar: Nombre</option>
+              <option value="fecha_creada">Ordenar: Fecha creación</option>
+            </select>
           </div>
         </form>
         <div class="table-responsive">

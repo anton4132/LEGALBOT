@@ -244,7 +244,7 @@ model tarifacomision {
   // NUEVOS CAMPOS (versionado, ámbitos y cálculo)
   servicio_id      Int?
   plan_id          Int?
-  rol_aplica rol_aplica_tc  @default(ambos)
+  rol_aplica       rol_aplica_tc    @default(ambos)
   moneda           String?          @db.Char(3)
   tipo_calculo     tipo_calculo_tc?
   parametros       Json?
@@ -285,7 +285,6 @@ model econconfig {
   decimales      Int            @default(2)
   activo         Boolean        @default(true)
   actualizado_el DateTime       @default(now()) @db.Timestamptz(6)
-
 }
 
 model pasarela {
@@ -357,23 +356,27 @@ model plan {
 }
 
 model servicio {
-  id            Int              @id @default(autoincrement())
-  fecha_creada  DateTime         @default(now()) @db.Timestamptz(6)
-  fecha_modificada DateTime         @default(now()) @db.Timestamptz(6)
-  nombre        String
-  planservicios planservicio[]
-  tarifas       tarifacomision[] @relation("ServicioTarifa")
+  id               Int              @id @default(autoincrement())
+  codigo           String           @unique
+  nombre           String
+  descripcion      String?
+  activo           Boolean          @default(true)
+  fecha_creada     DateTime         @default(now()) @db.Timestamptz(6)
+  fecha_modificada DateTime         @updatedAt @db.Timestamptz(6)
+  planservicios    planservicio[]
+  tarifas          tarifacomision[] @relation("ServicioTarifa")
 }
 
 model planservicio {
-  id          Int      @id @default(autoincrement())
-  plan_id     Int
-  servicio_id Int
-  habilitado  Boolean  @default(true)
-  plan        plan     @relation(fields: [plan_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  servicio    servicio @relation(fields: [servicio_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([plan_id, servicio_id])
+  id             Int       @id @default(autoincrement())
+  servicio_id    Int
+  plan_id        Int
+  activo         Boolean   @default(true)
+  vigencia_desde DateTime?
+  vigencia_hasta DateTime?
+  servicio       servicio  @relation(fields: [servicio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  plan           plan?     @relation(fields: [planId], references: [id])
+  planId         Int?
 }
 
 model usuario {

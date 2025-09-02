@@ -18,10 +18,12 @@ function logout() {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadServices();
-  const search = document.getElementById('searchService');
-  if (search) {
-    search.addEventListener('input', filterServices);
-  }
+  ['searchService', 'filterEstado', 'orderBy'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', applyFilters);
+  });
+  document.getElementById('filterEstado')?.addEventListener('change', applyFilters);
+  document.getElementById('orderBy')?.addEventListener('change', applyFilters);
 });
 
 async function loadServices() {
@@ -29,11 +31,30 @@ async function loadServices() {
     const res = await fetch(`${API_BASE_URL}/services`);
     if (!res.ok) throw new Error('Error cargando servicios');
     services = await res.json();
-    renderServicesTable(services);
+    applyFilters();
   } catch (err) {
     console.error('Error cargando servicios:', err);
     showAlert(err.message, 'danger');
   }
+}
+
+function applyFilters() {
+  const term = document.getElementById('searchService')?.value.toLowerCase() || '';
+  const estado = document.getElementById('filterEstado')?.value;
+  const order = document.getElementById('orderBy')?.value || 'nombre';
+  let list = services.filter(s =>
+    s.codigo.toLowerCase().includes(term) ||
+    s.nombre.toLowerCase().includes(term)
+  );
+  if (estado === 'true' || estado === 'false') {
+    list = list.filter(s => String(s.activo) === estado);
+  }
+  if (order === 'fecha_creada') {
+    list.sort((a, b) => new Date(b.fecha_creada) - new Date(a.fecha_creada));
+  } else {
+    list.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }
+  renderServicesTable(list);
 }
 
 function renderServicesTable(list) {
@@ -41,14 +62,15 @@ function renderServicesTable(list) {
   if (!tbody) return;
   tbody.innerHTML = '';
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No se encontraron servicios</td></tr>`;
-    return;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No se encontraron servicios</td></tr>`;
   }
   list.forEach(s => {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${s.codigo}</td>
       <td>${s.nombre}</td>
+      <td>${s.tieneTarifaVigente ? '<span class="badge bg-info">Sí</span>' : 'No'}</td>
+      <td>${s.tienePlanVigente ? '<span class="badge bg-info">Sí</span>' : 'No'}</td>
       <td>${s.activo ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
       <td>
         <button class="btn btn-sm btn-warning me-1" onclick="openServiceModal(${s.id})"><i class="bi bi-pencil"></i> Editar</button>
@@ -60,14 +82,6 @@ function renderServicesTable(list) {
   });
 }
 
-function filterServices() {
-  const term = document.getElementById('searchService').value.toLowerCase();
-  const filtered = services.filter(s =>
-    s.codigo.toLowerCase().includes(term) ||
-    s.nombre.toLowerCase().includes(term)
-  );
-  renderServicesTable(filtered);
-}
 
 function openServiceModal(id = null) {
   const modalEl = document.getElementById('serviceModal');
@@ -130,7 +144,23 @@ async function toggleService(id, activo) {
     });
     if (!res.ok) {
       const errData = await res.json();
-      throw new Error(errData.message || 'Error actualizando servicio');
+      if (errData.tarifas || errData.planes) {
+        if (confirm(`${errData.message}. ¿Desactivar de todos modos?`)) {
+          const forceRes = await fetch(`${API_BASE_URL}/services/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ activo: false, force: true })
+          });
+          if (!forceRes.ok) {
+            const data = await forceRes.json();
+            throw new Error(data.message || 'Error actualizando servicio');
+          }
+        } else {
+          return;
+        }
+      } else {
+        throw new Error(errData.message || 'Error actualizando servicio');
+      }
     }
     await loadServices();
     showAlert('Servicio actualizado', 'success');
