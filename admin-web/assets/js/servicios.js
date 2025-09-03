@@ -30,7 +30,9 @@ async function loadServices() {
   try {
     const res = await fetch(`${API_BASE_URL}/services`);
     if (!res.ok) throw new Error('Error cargando servicios');
-    services = await res.json();
+    const data = await res.json();
+    // La API puede devolver un array directamente o un objeto con la propiedad services
+    services = Array.isArray(data) ? data : data.services || [];
     applyFilters();
   } catch (err) {
     console.error('Error cargando servicios:', err);
@@ -85,7 +87,7 @@ function renderServicesTable(list) {
 
 function openServiceModal(id = null) {
   const modalEl = document.getElementById('serviceModal');
-  const modal = new bootstrap.Modal(modalEl);
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   document.getElementById('serviceForm').reset();
   currentServiceId = id;
   isEditing = !!id;
@@ -126,9 +128,11 @@ async function saveService() {
       const errData = await res.json();
       throw new Error(errData.message || 'Error guardando servicio');
     }
+    // Cerrar el modal y mostrar el mensaje antes de recargar la tabla
+    const modal = bootstrap.Modal.getInstance(document.getElementById('serviceModal'));
+    modal?.hide();
+    showAlert(data.message || 'Servicio guardado correctamente', 'success');
     await loadServices();
-    bootstrap.Modal.getInstance(document.getElementById('serviceModal')).hide();
-    showAlert('Servicio guardado', 'success');
   } catch (err) {
     console.error('Error guardando servicio:', err);
     showAlert(err.message, 'danger');

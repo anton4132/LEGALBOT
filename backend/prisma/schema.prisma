@@ -376,7 +376,7 @@ model planservicio {
   vigencia_hasta DateTime?
   servicio       servicio  @relation(fields: [servicio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   plan           plan?     @relation(fields: [planId], references: [id])
-  planId         Int?
+  @@unique([plan_id, servicio_id]) // MUY recomendado para evitar duplicados
 }
 
 model usuario {

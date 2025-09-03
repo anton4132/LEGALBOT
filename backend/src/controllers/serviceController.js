@@ -58,16 +58,24 @@ const { search, estado, orderBy = 'nombre', order = 'asc' } = req.query;
 // Crear servicio
 const createService = async (req, res) => {
   try {
-    const { codigo, nombre, descripcion } = req.body;
+    const { codigo, nombre, descripcion, activo = true } = req.body;
     if (!codigo || !nombre) {
-      return res.status(400).json({ success: false, message: 'Código y nombre son obligatorios' });
-    }
+        return res
+        .status(400)
+        .json({ success: false, message: 'Código y nombre son obligatorios' });
+    }   
     const service = await prisma.servicio.create({
-      data: { codigo, nombre, descripcion, activo: true }
+       data: { codigo, nombre, descripcion, activo }
     });
+    await logAudit('servicio', service.id, 'create', null, service);
     res.json({ success: true, service });
   } catch (error) {
     console.error('Error creando servicio:', error);
+    if (error.code === 'P2002') {
+        return res
+          .status(400)
+          .json({ success: false, message: 'El código de servicio ya existe' });
+      }
     res.status(500).json({ success: false, message: 'Error creando servicio' });
   }
 };
@@ -78,6 +86,10 @@ const updateService = async (req, res) => {
     const { id } = req.params;
     const { codigo, nombre, descripcion, activo, force } = req.body;
     const serviceId = parseInt(id);
+    const previous = await prisma.servicio.findUnique({ where: { id: serviceId } });
+    if (!previous) {
+      return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
+    }
     if (activo === false) {
       const now = new Date();
       const activeTariffs = await prisma.tarifacomision.count({
@@ -113,9 +125,15 @@ const updateService = async (req, res) => {
         where: { id: serviceId },
       data: { codigo, nombre, descripcion, activo }
     });
+    await logAudit('servicio', serviceId, 'update', previous, service);
     res.json({ success: true, service });
   } catch (error) {
     console.error('Error actualizando servicio:', error);
+    if (error.code === 'P2002') {
+        return res
+          .status(400)
+          .json({ success: false, message: 'El código de servicio ya existe' });
+      }
     res.status(500).json({ success: false, message: 'Error actualizando servicio' });
   }
 };
