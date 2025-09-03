@@ -68,7 +68,7 @@ const createService = async (req, res) => {
        data: { codigo, nombre, descripcion, activo }
     });
     // Registrar auditoría sin bloquear la respuesta en caso de error
-    logAudit('servicio', service.id, 'create', null, service);
+    //logAudit('servicio', service.id, 'create', null, service);
 
     return res
       .status(201)
@@ -129,7 +129,7 @@ const updateService = async (req, res) => {
         where: { id: serviceId },
       data: { codigo, nombre, descripcion, activo }
     });
-    await logAudit('servicio', serviceId, 'update', previous, service);
+    //await logAudit('servicio', serviceId, 'update', previous, service);
     let message = 'Servicio modificado correctamente';
     if (previous.activo && activo === false) {
       message = 'Servicio desactivado correctamente';

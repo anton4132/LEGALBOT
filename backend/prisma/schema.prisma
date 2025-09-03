@@ -380,8 +380,8 @@ model servicio {
   nombre           String
   descripcion      String?
   activo           Boolean          @default(true)
-  fecha_creada     DateTime         @default(now()) @db.Timestamptz(6)
-  fecha_modificada DateTime         @updatedAt @db.Timestamptz(6)
+  fecha_creada     DateTime         @default(dbgenerated("now() AT TIME ZONE 'America/Lima'")) @db.Timestamp(6) 
+  fecha_modificada DateTime         @updatedAt @db.Timestamp(6)
   planservicios    planservicio[]
   tarifas          tarifacomision[] @relation("ServicioTarifa")
 }
@@ -391,8 +391,8 @@ model planservicio {
   servicio_id    Int
   plan_id        Int
   activo         Boolean   @default(true)
-  vigencia_desde DateTime?
-  vigencia_hasta DateTime?
+  vigencia_desde DateTime? @db.Timestamptz(6)
+  vigencia_hasta DateTime? @db.Timestamptz(6)
   servicio       servicio  @relation(fields: [servicio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   plan           plan      @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
