@@ -67,8 +67,12 @@ const createService = async (req, res) => {
     const service = await prisma.servicio.create({
        data: { codigo, nombre, descripcion, activo }
     });
-    await logAudit('servicio', service.id, 'create', null, service);
-    res.json({ success: true, service });
+    // Registrar auditoría sin bloquear la respuesta en caso de error
+    logAudit('servicio', service.id, 'create', null, service);
+
+    return res
+      .status(201)
+      .json({ success: true, message: 'Servicio creado correctamente', service });
   } catch (error) {
     console.error('Error creando servicio:', error);
     if (error.code === 'P2002') {
@@ -126,6 +130,12 @@ const updateService = async (req, res) => {
       data: { codigo, nombre, descripcion, activo }
     });
     await logAudit('servicio', serviceId, 'update', previous, service);
+    let message = 'Servicio modificado correctamente';
+    if (previous.activo && activo === false) {
+      message = 'Servicio desactivado correctamente';
+    } else if (!previous.activo && activo === true) {
+      message = 'Servicio activado correctamente';
+    }
     res.json({ success: true, service });
   } catch (error) {
     console.error('Error actualizando servicio:', error);
@@ -134,7 +144,7 @@ const updateService = async (req, res) => {
           .status(400)
           .json({ success: false, message: 'El código de servicio ya existe' });
       }
-    res.status(500).json({ success: false, message: 'Error actualizando servicio' });
+      res.status(500).json({ success: false, message: 'Error modificando servicio' });
   }
 };
 

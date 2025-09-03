@@ -118,20 +118,21 @@ async function saveService() {
   const payload = { codigo, nombre, descripcion, activo };
   const url = isEditing ? `${API_BASE_URL}/services/${currentServiceId}` : `${API_BASE_URL}/services`;
   const method = isEditing ? 'PUT' : 'POST';
+  const modalEl = document.getElementById('serviceModal');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   try {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    const data = await res.json();
     if (!res.ok) {
-      const errData = await res.json();
-      throw new Error(errData.message || 'Error guardando servicio');
+      throw new Error(data.message || `Error ${isEditing ? 'modificando' : 'creando'} servicio`);
     }
     // Cerrar el modal y mostrar el mensaje antes de recargar la tabla
-    const modal = bootstrap.Modal.getInstance(document.getElementById('serviceModal'));
-    modal?.hide();
-    showAlert(data.message || 'Servicio guardado correctamente', 'success');
+    showAlert(isEditing ? 'Servicio modificado correctamente' : 'Servicio creado correctamente', 'success');
+    modal.hide();
     await loadServices();
   } catch (err) {
     console.error('Error guardando servicio:', err);

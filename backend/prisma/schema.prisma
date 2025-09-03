@@ -311,8 +311,26 @@ model pasarelametodo {
   @@unique([pasarela_id, metodo_pago], name: "pasarela_id_metodo_pago")
 }
 
+model estudio {
+  id               Int             @id @default(autoincrement())
+  slug             String          @unique
+  ruc              String?         @unique
+  razon_social     String
+  nombre_comercial String?
+  correo_contacto  String?
+  telefono         String?
+  direccion        String?
+  ciudad           String?
+  pais             String?
+  logo_url         String?
+  activo           Boolean         @default(true)
+  creado_el        DateTime        @default(now()) @db.Timestamptz(6)
+  perfiles         perfilabogado[]
+}
+
 model perfilabogado {
   usuario_id            Int                     @id
+  estudio_id            Int
   especialidad_id       Int?
   tarifa_base           Decimal?                @db.Decimal
   direccion_atencion    String?
@@ -324,6 +342,7 @@ model perfilabogado {
   disponibilidadabogado disponibilidadabogado[]
   usuario               usuario                 @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   especialidad          especialidad?           @relation(fields: [especialidad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estudio               estudio                 @relation(fields: [estudio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model persona {
@@ -375,8 +394,9 @@ model planservicio {
   vigencia_desde DateTime?
   vigencia_hasta DateTime?
   servicio       servicio  @relation(fields: [servicio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  plan           plan?     @relation(fields: [planId], references: [id])
-  @@unique([plan_id, servicio_id]) // MUY recomendado para evitar duplicados
+  plan           plan      @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([plan_id, servicio_id])
 }
 
 model usuario {
