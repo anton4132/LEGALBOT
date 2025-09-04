@@ -296,30 +296,23 @@ const updateUser = async (req, res) => {
       }
     }
 
-    // Actualizar persona
-    await prisma.persona.update({
-      where: { id: usuarioActual.persona_id },
-      data: {
-        dni: normalizedDni,
-        telefono,
-        correo,
-        primer_nombre,
-        segundo_nombre,
-        apellido_paterno,
-        apellido_materno,
-        direccion
-      }
-    });
-
-    // Actualizar usuario si se proporciona rol_id
-    let usuarioUpdateData = {};
-    if (rol_id) {
-      usuarioUpdateData.rol_id = parseInt(rol_id);
-    }
-
     const usuario = await prisma.usuario.update({
       where: { id: parseInt(id) },
-      data: usuarioUpdateData,
+      data: {
+        rol_id: rol_id ? parseInt(rol_id) : undefined,
+        persona: {
+          update: {
+            dni,
+            telefono,
+            correo,
+            primer_nombre,
+            segundo_nombre,
+            apellido_paterno,
+            apellido_materno,
+            direccion
+          }
+        }
+      },
       include: {
         persona: true,
         role: true
@@ -363,6 +356,9 @@ const deleteUser = async (req, res) => {
       where: { id: parseInt(id) }
     });
 
+    await prisma.persona.delete({
+      where: { id: usuario.persona_id }
+    });
     res.json({
       success: true,
       message: 'Usuario eliminado exitosamente'

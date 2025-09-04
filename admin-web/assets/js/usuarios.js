@@ -45,6 +45,14 @@ function setupEventListeners() {
         });
     }
 
+    const form = document.getElementById('userForm');
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            saveUser();
+        });
+    }
+
     const dniInput = document.getElementById('dni');
     if (dniInput) {
         dniInput.addEventListener('blur', handleDniLookup);
@@ -374,6 +382,8 @@ async function saveUser() {
         modal.hide();
         
         loadUsers();
+        currentUserId = null;
+
 
     } catch (error) {
         console.error('Error guardando usuario:', error);
