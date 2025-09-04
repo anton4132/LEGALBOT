@@ -80,9 +80,9 @@
     </div>
   </div>
 
-  <!-- Modal para crear/editar usuario -->
-  <div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+   <!-- Modal para crear/editar usuario -->
+   <div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl"> <!-- Aumentado a modal-xl para más espacio -->
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="userModalLabel">Nuevo Usuario</h5>
@@ -138,7 +138,7 @@
               <label for="direccion" class="form-label">Dirección</label>
               <textarea class="form-control" id="direccion" rows="2"></textarea>
             </div>
-            <div class="row">
+            <div class="row" id="password-fields">
               <div class="col-md-6 mb-3">
                 <label for="clave" class="form-label">Contraseña *</label>
                 <input type="password" class="form-control" id="clave" required>
@@ -147,6 +147,69 @@
                 <label for="confirmarClave" class="form-label">Confirmar Contraseña *</label>
                 <input type="password" class="form-control" id="confirmarClave" required>
               </div>
+            </div>
+
+            <!-- CAMPOS ADICIONALES PARA ABOGADOS (OCULTOS POR DEFECTO) -->
+            <div id="abogado-fields" style="display: none;">
+                <hr>
+                <h5 class="mb-3 text-primary">Información Adicional de Abogado</h5>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="especialidad" class="form-label">Especialidad</label>
+                        <input type="text" class="form-control" id="especialidad">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="tarifabase" class="form-label">Tarifa Base (por consulta)</label>
+                        <input type="number" class="form-control" id="tarifabase" min="0" step="0.01">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="duracionMinutos" class="form-label">Duración Consulta (minutos)</label>
+                        <input type="number" class="form-control" id="duracionMinutos" min="1">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="direccionAtencion" class="form-label">Dirección de Atención</label>
+                    <textarea class="form-control" id="direccionAtencion" rows="2"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="biografia" class="form-label">Biografía</label>
+                    <textarea class="form-control" id="biografia" rows="3"></textarea>
+                </div>
+                
+                <!-- Pestañas para Estudio y Disponibilidad -->
+                <ul class="nav nav-tabs" id="abogadoTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="estudio-tab" data-bs-toggle="tab" data-bs-target="#estudio-tab-pane" type="button" role="tab">Estudio / Despacho</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="disponibilidad-tab" data-bs-toggle="tab" data-bs-target="#disponibilidad-tab-pane" type="button" role="tab">Disponibilidad</button>
+                    </li>
+                </ul>
+                <div class="tab-content border border-top-0 p-3 rounded-bottom" id="abogadoTabsContent">
+                    <!-- Pestaña Estudio -->
+                    <div class="tab-pane fade" id="estudio-tab-pane" role="tabpanel">
+                        <h6>Detalles del Estudio</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Ruc:</label><input type="text" class="form-control" id="estudioRuc"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Nombre del Estudio</label><input type="text" class="form-control" id="estudioNombre"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">País</label><input type="text" class="form-control" id="estudioPais"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Ciudad</label><input type="text" class="form-control" id="estudioCiudad"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Correo de Contacto</label><input type="email" class="form-control" id="estudioCorreo"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Teléfono</label><input type="tel" class="form-control" id="estudioTelefono"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Dirección</label><input type="text" class="form-control" id="estudioDireccion"></div>
+                        </div>
+                    </div>
+                    <!-- Pestaña Disponibilidad -->
+                    <div class="tab-pane fade" id="disponibilidad-tab-pane" role="tabpanel">
+                        <h6>Horarios Disponibles</h6>
+                        <div id="availability-list">
+                            <!-- Los horarios se añadirán aquí dinámicamente -->
+                        </div>
+                        <button type="button" class="btn btn-outline-success btn-sm mt-2" id="add-availability-btn">
+                            <i class="bi bi-plus"></i> Añadir Horario
+                        </button>
+                    </div>
+                </div>
             </div>
           </form>
         </div>
