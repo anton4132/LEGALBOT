@@ -455,6 +455,7 @@ const updateUser = async (req, res) => {
         });
 
         // Reemplazar disponibilidad
+        
         await tx.disponibilidadabogado.deleteMany({ where: { abogado_id: userId } });
         const disp = (abogado_info.disponibilidad || [])
           .map(s => {
@@ -466,17 +467,17 @@ const updateUser = async (req, res) => {
           })
           .filter(Boolean);
 
-        if (disp.length) {
-          await tx.disponibilidadabogado.createMany({
-            data: disp.map(s => ({
-              abogado_id: usuarioCreated.id,  // o userId en update
-              dia_semana: s.dia,
-              hora_inicio: s.ini,             // <-- Date
-              hora_fin: s.fin                 // <-- Date
-            })),
-            skipDuplicates: true
-          });
-        }
+          if (disp.length) {
+            await tx.disponibilidadabogado.createMany({
+              data: disp.map(s => ({
+                abogado_id: userId,
+                dia_semana: s.dia,
+                hora_inicio: s.ini,             // <-- Date
+                hora_fin: s.fin                 // <-- Date
+              })),
+              skipDuplicates: true
+            });
+          }
       } else {
         // Si dejó de ser abogado: limpia perfil y disponibilidad
         if (usuarioActual.perfilabogado) {

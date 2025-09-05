@@ -288,10 +288,10 @@ function populateLawyerFields(abogadoInfo) {
         </select>
       </div>
       <div class="col-md-3">
-        <input type="time" class="form-control form-control-sm" value="${slot.hora_inicio || ''}">
+        <input type="time" class="form-control form-control-sm" value="${timeToHHMM(slot.hora_inicio)}">
       </div>
       <div class="col-md-3">
-        <input type="time" class="form-control form-control-sm" value="${slot.hora_fin || ''}">
+        <input type="time" class="form-control form-control-sm" value="${timeToHHMM(slot.hora_fin)}">
       </div>
       <div class="col-md-2">
         <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeAvailabilitySlot('slot-${availabilityCounter}')">
@@ -353,6 +353,12 @@ function dayNumToName(n) {
 }
 function timeToHHMM(t) {
   if (!t) return '';
+  const date = new Date(t);
+  if (!isNaN(date.getTime())) {
+    const hh = String(date.getUTCHours()).padStart(2,'0');
+    const mm = String(date.getUTCMinutes()).padStart(2,'0');
+    return `${hh}:${mm}`;
+  }
   const [hh, mm] = String(t).split(':');
   return `${hh?.padStart(2,'0')}:${mm?.padStart(2,'0')}`;
 }
