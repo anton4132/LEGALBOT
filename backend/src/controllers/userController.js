@@ -15,12 +15,11 @@ function dayNameToNum(name) {
   return map[name] || null;
 }
 function hhmmToTimeDate(t) {
-  if (!t) return null;           // si viene vacío, lo descartamos más abajo
+  if (!t) return null;
   const [hh, mm] = String(t).split(':');
   if (hh == null || mm == null) return null;
-  // ISO con fecha fija (UTC); puedes usar sin 'Z' si prefieres local
-  const iso = `1970-01-01T${hh.padStart(2,'0')}:${mm.padStart(2,'0')}:00.000Z`;
-  return new Date(iso);
+  // Año/mes/día arbitrarios, pero en LOCAL TIME
+  return new Date(1970, 0, 1, parseInt(hh, 10), parseInt(mm, 10), 0, 0);
 }
 
 // ===== API Perú (opcional) =====

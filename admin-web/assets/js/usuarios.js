@@ -353,15 +353,17 @@ function dayNumToName(n) {
 }
 function timeToHHMM(t) {
   if (!t) return '';
-  const date = new Date(t);
-  if (!isNaN(date.getTime())) {
-    const hh = String(date.getUTCHours()).padStart(2,'0');
-    const mm = String(date.getUTCMinutes()).padStart(2,'0');
+  const d = new Date(t); 
+  if (!isNaN(d.getTime())) {
+    const hh = String(d.getHours()).padStart(2,'0');     
+    const mm = String(d.getMinutes()).padStart(2,'0');   
     return `${hh}:${mm}`;
   }
+  // Fallback si llega "10:30:00"
   const [hh, mm] = String(t).split(':');
-  return `${hh?.padStart(2,'0')}:${mm?.padStart(2,'0')}`;
+  return `${(hh??'').padStart(2,'0')}:${(mm??'').padStart(2,'0')}`;
 }
+
 function apiPerfilToUI(perfil) {
   if (!perfil) return null;
   return {
