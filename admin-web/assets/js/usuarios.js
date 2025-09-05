@@ -1,59 +1,110 @@
 let users = [];
-let roles = [];
-let currentUserId = null;
-let isEditing = false;
-let availabilityCounter = 0;
+    let roles = [];
+    let currentUserId = null; // ID del usuario que se está editando/gestionando
+    let isEditing = false;
+    let toastInstance = null;
 
-const API_BASE_URL = 'http://localhost:3000/api';
+    const API_BASE_URL = 'http://localhost:3000/api';
 
-// --- util API ---
-async function apiFetch(path, options = {}) {
-  const resp = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    credentials: 'include',
-    ...options
-  });
-  let data = null;
-  try { data = await resp.json(); } catch { /* puede no haber body */ }
-  if (!resp.ok) {
-    const msg = data?.message || `Error HTTP ${resp.status}`;
-    throw new Error(msg);
-  }
-  return data ?? {};
-}
+    // --- UTILIDADES ---
 
-console.log('✅ usuarios.js cargado correctamente');
+    /**
+     * Realiza una petición a la API de forma centralizada.
+     * @param {string} path - La ruta del endpoint (ej. '/users')
+     * @param {object} options - Opciones para fetch()
+     * @returns {Promise<any>} - La respuesta JSON de la API
+     */
+    async function apiFetch(path, options = {}) {
+        try {
+            const resp = await fetch(`${API_BASE_URL}${path}`, {
+                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+                credentials: 'include',
+                ...options
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.message || `Error HTTP ${resp.status}`);
+            }
+            return data;
+        } catch (error) {
+            console.error(`Error en API fetch [${options.method || 'GET'} ${path}]:`, error);
+            showAlert(`Error de comunicación: ${error.message}`, 'danger');
+            throw error;
+        }
+    }
 
-// --- logout (stub) ---
-function logout() {
-  console.log("Cerrando sesión...");
-  // window.location.href = '/login';
-}
+    /**
+     * Muestra una notificación tipo "toast".
+     * @param {string} message - El mensaje a mostrar.
+     * @param {string} type - 'success', 'danger', 'warning', 'info'.
+     */
+    function showAlert(message, type = 'info') {
+        const toastTitle = document.getElementById('toastTitle');
+        const toastBody = document.getElementById('toastBody');
+        const toastHeader = toastInstance._element.querySelector('.toast-header');
 
-// --- bootstrap ---
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 Inicializando página de usuarios'); 
-  loadRoles().then(loadUsers);
-  setupEventListeners();
-});
+        toastTitle.textContent = {
+            success: 'Éxito',
+            danger: 'Error',
+            warning: 'Atención',
+            info: 'Información'
+        }[type] || 'Notificación';
+        
+        toastHeader.className = `toast-header text-white bg-${type}`;
+        toastBody.textContent = message;
+        toastInstance.show();
+    }
 
-// --- listeners ---
-function setupEventListeners() {
-  document.getElementById('searchInput')?.addEventListener('input', filterUsers);
-  document.getElementById('filterType')?.addEventListener('change', filterUsers);
-  document.getElementById('userForm')?.addEventListener('submit', (e) => { e.preventDefault(); saveUser(); });
-  document.getElementById('dni')?.addEventListener('blur', handleDniLookup);
-  document.getElementById('toggle-btn')?.addEventListener('click', () => {
-    document.getElementById('sidebar').classList.toggle('active');
-  });
+    const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('es-ES') : 'N/A';
+    const dayNumToName = (n) => ({1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',7:'Domingo'}[n] || '');
+    const timeToHHMM = (t) => {
+        if (!t) return '';
+        const [hh, mm] = String(t).split(':');
+        return `${(hh||'').padStart(2,'0')}:${(mm||'').padStart(2,'0')}`;
+    };
 
-  document.getElementById('rol')?.addEventListener('change', toggleAbogadoFields);
-  document.getElementById('add-availability-btn')?.addEventListener('click', addAvailabilitySlot);
-}
+    // --- INICIALIZACIÓN ---
 
-// --- data loaders ---
-async function loadUsers() {
-  try {
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Inicializando página de usuarios mejorada');
+        toastInstance = new bootstrap.Toast(document.getElementById('notificationToast'));
+        loadInitialData();
+        setupEventListeners();
+    });
+
+    async function loadInitialData() {
+        await loadRoles();
+        await loadUsers();
+    }
+
+    function setupEventListeners() {
+        document.getElementById('searchInput')?.addEventListener('input', filterUsers);
+        document.getElementById('filterType')?.addEventListener('change', filterUsers);
+        document.getElementById('userForm')?.addEventListener('submit', (e) => { e.preventDefault(); saveUser(); });
+        document.getElementById('dni')?.addEventListener('blur', handleDniLookup);
+        document.getElementById('toggle-btn')?.addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('active');
+        });
+    }
+
+    // --- CARGA DE DATOS (ROLES Y USUARIOS) ---
+
+    async function loadUsers() {
+        try {
+            // Simulación de datos para demostración sin backend
+            const mockUsers = [
+                { id: 1, creado_el: '2023-10-26T10:00:00Z', rol_id: 2, role: { codigo: 'abogado', nombre: 'Abogado' }, persona: { primer_nombre: 'Ana', apellido_paterno: 'García', dni: '12345678', telefono: '987654321', correo: 'ana.garcia@example.com' }, perfilabogado: { estudio: { ruc: '20123456789', nombre_comercial: 'García & Asociados', pais: 'Perú', ciudad: 'Lima', correo_contacto: 'contacto@garcia.com', telefono: '014445566', direccion: 'Av. Principal 123' }, disponibilidadabogado: [ { id: 101, dia_semana: 1, hora_inicio: '09:00:00', hora_fin: '11:00:00'}, { id: 102, dia_semana: 3, hora_inicio: '14:00:00', hora_fin: '16:30:00'} ] } },
+                { id: 2, creado_el: '2023-11-15T14:30:00Z', rol_id: 1, role: { codigo: 'cliente', nombre: 'Cliente' }, persona: { primer_nombre: 'Carlos', apellido_paterno: 'Perez', dni: '87654321', telefono: '912345678', correo: 'carlos.perez@example.com' } },
+                { id: 3, creado_el: '2024-01-20T09:00:00Z', rol_id: 3, role: { codigo: 'admin', nombre: 'Admin' }, persona: { primer_nombre: 'Admin', apellido_paterno: 'Principal', dni: '11223344', telefono: '999888777', correo: 'admin@legalbot.com' } },
+            ];
+            // users = await apiFetch('/users'); // Descomentar para usar con API real
+            users = mockUsers;
+            renderUsersTable(users);
+        } catch (e) {
+            renderUsersTable([]);
+        }
+
+        try {
     const data = await apiFetch('/users'); // ← devuelve array de usuarios
     users = Array.isArray(data) ? data : (data.items ?? []);
     renderUsersTable(users);
@@ -61,507 +112,282 @@ async function loadUsers() {
     showAlert(`No se pudieron cargar usuarios: ${e.message}`, 'danger');
     renderUsersTable([]);
   }
-}
-
-async function loadRoles() {
-  try {
-    const data = await apiFetch('/roles'); // ← { id, nombre, codigo }
-    roles = Array.isArray(data) ? data : (data.items ?? []);
-    if (!roles.length) throw new Error('No se recibieron roles');
-    populateRoleSelects();
-  } catch (e) {
-    console.error('Error cargando roles:', e);
-    showAlert(`No se pudieron cargar roles: ${e.message}`, 'danger');
-  }
-}
-
-function populateRoleSelects() {
-  const roleSelect = document.getElementById('rol');
-  const filterSelect = document.getElementById('filterType');
-
-  if (roleSelect) {
-    roleSelect.innerHTML = '<option value="">Seleccionar tipo</option>';
-    roles.forEach(role => {
-      const option = document.createElement('option');
-      option.value = role.id;
-      option.textContent = role.nombre;
-      option.dataset.codigo = role.codigo;
-      roleSelect.appendChild(option);
-    });
-  }
-
-  if (filterSelect) {
-    filterSelect.innerHTML = '<option value="">Todos los tipos</option>';
-    roles.forEach(role => {
-      const option = document.createElement('option');
-      option.value = role.codigo;
-      option.textContent = role.nombre;
-      filterSelect.appendChild(option);
-    });
-  }
-}
-
-// --- UI helpers ---
-function getRoleBadge(code) {
-  const roleColors = { cliente: 'bg-primary', abogado: 'bg-success', admin: 'bg-danger' };
-  return roleColors[code] || 'bg-secondary';
-}
-
-function renderUsersTable(usersToRender) {
-  const tbody = document.getElementById('usersTableBody');
-  if (!tbody) return;
-
-  tbody.innerHTML = '';
-  if (!usersToRender.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No se encontraron usuarios</td></tr>`;
-    return;
-  }
-
-  usersToRender.forEach(user => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${user.persona.primer_nombre} ${user.persona.apellido_paterno}</td>
-      <td>${user.persona.dni}</td>
-      <td>${user.persona.telefono || 'N/A'}</td>
-      <td>${user.persona.correo}</td>
-      <td><span class="badge ${getRoleBadge(user.role.codigo)}">${user.role.nombre}</span></td>
-      <td>${formatDate(user.creado_el)}</td>
-      <td>
-        <button class="btn btn-sm btn-info me-1" onclick="viewUser(${user.id})"><i class="bi bi-eye"></i></button>
-        <button class="btn btn-sm btn-warning me-1" onclick="editUser(${user.id})"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})"><i class="bi bi-trash"></i></button>
-      </td>
-    `;
-    tbody.appendChild(row);
-  });
-}
-
-function filterUsers() {
-  const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
-  const filterType = document.getElementById('filterType')?.value || '';
-
-  const filteredUsers = users.filter(user => {
-    const p = user.persona;
-    const matchesSearch = 
-      p.primer_nombre.toLowerCase().includes(searchTerm) ||
-      p.apellido_paterno.toLowerCase().includes(searchTerm) ||
-      p.dni.includes(searchTerm) ||
-      (p.telefono && p.telefono.includes(searchTerm));
-    const matchesType = !filterType || user.role.codigo === filterType;
-    return matchesSearch && matchesType;
-  });
-
-  renderUsersTable(filteredUsers);
-}
-
-// --- DNI lookup ---
-async function handleDniLookup() {
-  const dni = this.value.trim();
-  if (!/^\d{8}$/.test(dni)) return;
-  try {
-    showAlert(`Buscando DNI ${dni}...`, 'info');
-    const data = await apiFetch(`/dni/${dni}`);
-    if (data?.success && data?.data) {
-      const d = data.data;
-      document.getElementById('primerNombre').value    = d.primer_nombre || '';
-      document.getElementById('segundoNombre').value   = d.segundo_nombre || '';
-      document.getElementById('apellidoPaterno').value = d.apellido_paterno || '';
-      document.getElementById('apellidoMaterno').value = d.apellido_materno || '';
-    } else {
-      showAlert('DNI no encontrado', 'warning');
-    }
-  } catch (e) {
-    showAlert(`Error consultando DNI: ${e.message}`, 'danger');
-  }
-}
-
-// --- modal open ---
-function openUserModal() {
-  isEditing = false;
-  currentUserId = null;
-  document.getElementById('userModalLabel').textContent = 'Nuevo Usuario';
-  document.getElementById('userForm').reset();
-  document.getElementById('userId').value = '';
-  document.getElementById('password-fields').style.display = 'flex';
-  document.getElementById('clave').required = true;
-  document.getElementById('confirmarClave').required = true;
-  toggleAbogadoFields(); 
-}
-
-// --- abogado fields toggle/clean ---
-function toggleAbogadoFields() {
-  const rolSelect = document.getElementById('rol');
-  const abogadoFields = document.getElementById('abogado-fields');
-  if (!rolSelect || !abogadoFields) return;
-
-  const selectedOption = rolSelect.options[rolSelect.selectedIndex];
-  const rolCodigo = selectedOption?.dataset?.codigo || '';
-
-  if (rolCodigo === 'abogado') {
-    abogadoFields.style.display = 'block';
-  } else {
-    abogadoFields.style.display = 'none';
-    const estudioTab = document.getElementById('estudio-tab-pane');
-    estudioTab?.querySelectorAll('input')?.forEach(i => i.value = '');
-    document.getElementById('especialidad') && (document.getElementById('especialidad').value = '');
-    document.getElementById('tarifabase') && (document.getElementById('tarifabase').value = '');
-    document.getElementById('duracionMinutos') && (document.getElementById('duracionMinutos').value = '');
-    document.getElementById('direccionAtencion') && (document.getElementById('direccionAtencion').value = '');
-    document.getElementById('biografia') && (document.getElementById('biografia').value = '');
-    document.getElementById('availability-list')?.replaceChildren();
-    availabilityCounter = 0;
-  }
-}
-
-// --- disponibilidad (add/remove) ---
-function addAvailabilitySlot() {
-  const list = document.getElementById('availability-list');
-  if (!list) return;
-  availabilityCounter++;
-  const slotDiv = document.createElement('div');
-  slotDiv.className = 'row g-2 align-items-center mb-2 availability-slot';
-  slotDiv.id = `slot-${availabilityCounter}`;
-  slotDiv.innerHTML = `
-    <div class="col-md-4">
-      <select class="form-select form-select-sm">
-        <option>Lunes</option><option>Martes</option><option>Miércoles</option>
-        <option>Jueves</option><option>Viernes</option><option>Sábado</option><option>Domingo</option>
-      </select>
-    </div>
-    <div class="col-md-3">
-      <input type="time" class="form-control form-control-sm">
-    </div>
-    <div class="col-md-3">
-      <input type="time" class="form-control form-control-sm">
-    </div>
-    <div class="col-md-2">
-      <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeAvailabilitySlot('slot-${availabilityCounter}')">
-        <i class="bi bi-trash"></i>
-      </button>
-    </div>
-  `;
-  list.appendChild(slotDiv);
-}
-
-function removeAvailabilitySlot(slotId) {
-  document.getElementById(slotId)?.remove();
-}
-
-// --- poblar abogado ---
-function populateLawyerFields(abogadoInfo) {
-  if (!abogadoInfo) return;
-
-  document.getElementById('especialidad') && (document.getElementById('especialidad').value = abogadoInfo.especialidad ?? '');
-  document.getElementById('tarifabase') && (document.getElementById('tarifabase').value = (abogadoInfo.tarifabase ?? ''));
-  document.getElementById('duracionMinutos') && (document.getElementById('duracionMinutos').value = (abogadoInfo.duracionMinutos ?? ''));
-  document.getElementById('direccionAtencion') && (document.getElementById('direccionAtencion').value = abogadoInfo.direccionAtencion ?? '');
-  document.getElementById('biografia') && (document.getElementById('biografia').value = abogadoInfo.biografia ?? '');
-
-  const est = abogadoInfo.estudio || {};
-  document.getElementById('estudioRuc') && (document.getElementById('estudioRuc').value = est.ruc ?? '');
-  document.getElementById('estudioNombre') && (document.getElementById('estudioNombre').value = est.nombre ?? '');
-  document.getElementById('estudioPais') && (document.getElementById('estudioPais').value = est.pais ?? '');
-  document.getElementById('estudioCiudad') && (document.getElementById('estudioCiudad').value = est.ciudad ?? '');
-  document.getElementById('estudioCorreo') && (document.getElementById('estudioCorreo').value = est.correo ?? '');
-  document.getElementById('estudioTelefono') && (document.getElementById('estudioTelefono').value = est.telefono ?? '');
-  document.getElementById('estudioDireccion') && (document.getElementById('estudioDireccion').value = est.direccion ?? '');
-
-  const list = document.getElementById('availability-list');
-  list?.replaceChildren();
-  availabilityCounter = 0;
-
-  (abogadoInfo.disponibilidad || []).forEach(slot => {
-    availabilityCounter++;
-    const slotDiv = document.createElement('div');
-    slotDiv.className = 'row g-2 align-items-center mb-2 availability-slot';
-    slotDiv.id = `slot-${availabilityCounter}`;
-    slotDiv.innerHTML = `
-      <div class="col-md-4">
-        <select class="form-select form-select-sm">
-          <option ${slot.dia==='Lunes'?'selected':''}>Lunes</option>
-          <option ${slot.dia==='Martes'?'selected':''}>Martes</option>
-          <option ${slot.dia==='Miércoles'?'selected':''}>Miércoles</option>
-          <option ${slot.dia==='Jueves'?'selected':''}>Jueves</option>
-          <option ${slot.dia==='Viernes'?'selected':''}>Viernes</option>
-          <option ${slot.dia==='Sábado'?'selected':''}>Sábado</option>
-          <option ${slot.dia==='Domingo'?'selected':''}>Domingo</option>
-        </select>
-      </div>
-      <div class="col-md-3">
-        <input type="time" class="form-control form-control-sm" value="${timeToHHMM(slot.hora_inicio)}">
-      </div>
-      <div class="col-md-3">
-        <input type="time" class="form-control form-control-sm" value="${timeToHHMM(slot.hora_fin)}">
-      </div>
-      <div class="col-md-2">
-        <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeAvailabilitySlot('slot-${availabilityCounter}')">
-          <i class="bi bi-trash"></i>
-        </button>
-      </div>
-    `;
-    list?.appendChild(slotDiv);
-  });
-}
-
-// --- edit ---
-async function editUser(userId) {
-  try {
-    const data = await apiFetch(`/users/${userId}`);
-    const user = data?.user || data;
-    if (!user) throw new Error('Usuario no encontrado');
-
-    const p = user.persona || {};
-    document.getElementById('userId').value = user.id;
-    document.getElementById('primerNombre').value = p.primer_nombre || '';
-    document.getElementById('segundoNombre').value = p.segundo_nombre || '';
-    document.getElementById('apellidoPaterno').value = p.apellido_paterno || '';
-    document.getElementById('apellidoMaterno').value = p.apellido_materno || '';
-    document.getElementById('dni').value = p.dni || '';
-    document.getElementById('telefono').value = p.telefono || '';
-    document.getElementById('email').value = p.correo || '';
-    document.getElementById('direccion').value = p.direccion || '';
-    document.getElementById('rol').value = user.rol_id;
-
-    // un solo change es suficiente
-    document.getElementById('rol').dispatchEvent(new Event('change'));
-
-    if ((user.role?.codigo === 'abogado') || (user.rol_id === roles.find(r => r.codigo === 'abogado')?.id)) {
-      const abogadoInfo =
-        user.abogado_info
-          ? user.abogado_info
-          : (user.perfilabogado ? apiPerfilToUI(user.perfilabogado) : null);
-      populateLawyerFields(abogadoInfo);
     }
 
-    document.getElementById('password-fields').style.display = 'none';
-    document.getElementById('clave').required = false;
-    document.getElementById('confirmarClave').required = false;
-
-    isEditing = true;
-    currentUserId = userId;
-    document.getElementById('userModalLabel').textContent = 'Editar Usuario';
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).show();
-  } catch (e) {
-    showAlert(`Error obteniendo usuario: ${e.message}`, 'danger');
-  }
-}
-
-// --- perfil mapper ---
-function dayNumToName(n) {
-  const map = {1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',7:'Domingo'};
-  return map[n] || '';
-}
-function timeToHHMM(t) {
-  if (!t) return '';
-  const d = new Date(t); 
-  if (!isNaN(d.getTime())) {
-    const hh = String(d.getHours()).padStart(2,'0');     
-    const mm = String(d.getMinutes()).padStart(2,'0');   
-    return `${hh}:${mm}`;
-  }
-  // Fallback si llega "10:30:00"
-  const [hh, mm] = String(t).split(':');
-  return `${(hh??'').padStart(2,'0')}:${(mm??'').padStart(2,'0')}`;
-}
-
-function apiPerfilToUI(perfil) {
-  if (!perfil) return null;
-  return {
-    especialidad: perfil.especialidad?.nombre ?? '',
-    tarifabase: perfil.tarifa_base ?? null,
-    duracionMinutos: perfil.duracion_minutos ?? null,
-    direccionAtencion: perfil.direccion_atencion ?? '',
-    biografia: perfil.bio ?? '',
-    estudio: {
-      ruc: perfil.estudio?.ruc ?? '',
-      nombre: perfil.estudio?.nombre_comercial ?? '',
-      pais: perfil.estudio?.pais ?? '',
-      ciudad: perfil.estudio?.ciudad ?? '',
-      correo: perfil.estudio?.correo_contacto ?? '',
-      telefono: perfil.estudio?.telefono ?? '',
-      direccion: perfil.estudio?.direccion ?? '',
-    },
-    disponibilidad: (perfil.disponibilidadabogado || []).map(s => ({
-      dia: dayNumToName(s.dia_semana),
-      hora_inicio: timeToHHMM(s.hora_inicio),
-      hora_fin: timeToHHMM(s.hora_fin)
-    }))
-  };
-}
-
-// --- view ---
-async function viewUser(userId) {
-  const user = users.find(u => u.id === userId);
-  if (!user) { showAlert('Usuario no encontrado', 'danger'); return; }
-  const p = user.persona;
-  const userInfo = `
-    <strong>Nombre:</strong> ${p.primer_nombre} ${p.apellido_paterno}<br>
-    <strong>DNI:</strong> ${p.dni}<br>
-    <strong>Email:</strong> ${p.correo}<br>
-    <strong>Tipo:</strong> ${user.role.nombre}
-  `;
-  showAlert(userInfo, 'info', true);
-}
-
-// --- collect ---
-function collectAvailability() {
-  const list = document.getElementById('availability-list');
-  if (!list) return [];
-  const slots = [];
-  list.querySelectorAll('.availability-slot').forEach(slot => {
-    const [daySel, startInp, endInp] = slot.querySelectorAll('select, input[type="time"]');
-    slots.push({
-      dia: daySel?.value || '',
-      hora_inicio: startInp?.value || '',
-      hora_fin: endInp?.value || '',
-    });
-  });
-  return slots;
-}
-
-function collectLawyerFields() {
-  const especialidad       = document.getElementById('especialidad')?.value?.trim() || '';
-  const tarifabaseRaw      = document.getElementById('tarifabase')?.value?.trim() || '';
-  const duracionMinutosRaw = document.getElementById('duracionMinutos')?.value?.trim() || '';
-  const direccionAtencion  = document.getElementById('direccionAtencion')?.value?.trim() || '';
-  const biografia          = document.getElementById('biografia')?.value?.trim() || '';
-
-  const estudioRuc        = document.getElementById('estudioRuc')?.value?.trim() || '';
-  const estudioNombre     = document.getElementById('estudioNombre')?.value?.trim() || '';
-  const estudioPais       = document.getElementById('estudioPais')?.value?.trim() || '';
-  const estudioCiudad     = document.getElementById('estudioCiudad')?.value?.trim() || '';
-  const estudioCorreo     = document.getElementById('estudioCorreo')?.value?.trim() || '';
-  const estudioTelefono   = document.getElementById('estudioTelefono')?.value?.trim() || '';
-  const estudioDireccion  = document.getElementById('estudioDireccion')?.value?.trim() || '';
-
-  const tarifabase = tarifabaseRaw === '' ? null : Number(tarifabaseRaw);
-  const duracionMinutos = duracionMinutosRaw === '' ? null : parseInt(duracionMinutosRaw, 10);
-
-  return {
-    especialidad,
-    tarifabase,
-    duracionMinutos,
-    direccionAtencion,
-    biografia,
-    estudio: {
-      ruc: estudioRuc,
-      nombre: estudioNombre,
-      pais: estudioPais,
-      ciudad: estudioCiudad,
-      correo: estudioCorreo,
-      telefono: estudioTelefono,
-      direccion: estudioDireccion,
-    },
-    disponibilidad: collectAvailability()
-  };
-}
-
-// --- save (POST/PUT) ---
-async function saveUser() {
-  const form = document.getElementById('userForm');
-  if (!form?.checkValidity()) { form?.reportValidity(); return; }
-
-  const pwContainer = document.getElementById('password-fields');
-  let claveToSend = undefined;
-  if (pwContainer && pwContainer.style.display !== 'none') {
-    const clave = document.getElementById('clave')?.value || '';
-    const confirmar = document.getElementById('confirmarClave')?.value || '';
-    if (clave !== confirmar) {
-      showAlert('Las contraseñas no coinciden.', 'danger');
-      return;
-    }
-    claveToSend = clave; // sólo en creación
-  }
-
-  const rolSelect = document.getElementById('rol');
-  const selectedOption = rolSelect?.options[rolSelect.selectedIndex];
-  const rolCodigo = selectedOption?.dataset?.codigo || '';
-  const rolId = parseInt(rolSelect?.value || '', 10);
-  if (!rolId || Number.isNaN(rolId)) { showAlert('Selecciona un rol válido.', 'danger'); return; }
-
-  const payload = {
-    persona: {
-      dni: document.getElementById('dni')?.value?.trim(),
-      telefono: document.getElementById('telefono')?.value?.trim(),
-      correo: document.getElementById('email')?.value?.trim(),
-      primer_nombre: document.getElementById('primerNombre')?.value?.trim(),
-      segundo_nombre: document.getElementById('segundoNombre')?.value?.trim() || undefined,
-      apellido_paterno: document.getElementById('apellidoPaterno')?.value?.trim(),
-      apellido_materno: document.getElementById('apellidoMaterno')?.value?.trim() || undefined,
-      direccion: document.getElementById('direccion')?.value?.trim() || undefined,
-    },
-    rol_id: rolId
-  };
-  if (claveToSend) payload.clave = claveToSend;
-  if (rolCodigo === 'abogado') payload.abogado_info = collectLawyerFields();
-
-  try {
-    if (isEditing && currentUserId != null) {
-      await apiFetch(`/users/${currentUserId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload)
-      });
-      showAlert('Usuario actualizado con éxito.', 'success');
-    } else {
-      await apiFetch('/users', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-      showAlert('Usuario creado con éxito.', 'success');
+    async function loadRoles() {
+        try {
+            // Simulación de datos
+             const mockRoles = [
+                { id: 1, codigo: 'cliente', nombre: 'Cliente' },
+                { id: 2, codigo: 'abogado', nombre: 'Abogado' },
+                { id: 3, codigo: 'admin', nombre: 'Admin' },
+            ];
+            // roles = await apiFetch('/roles'); // Descomentar para usar con API real
+            roles = mockRoles;
+            populateRoleSelects();
+        } catch (e) {
+            console.error('Error cargando roles:', e);
+        }
     }
 
-    await loadUsers();
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).hide();
-  } catch (e) {
-    showAlert(`Error guardando usuario: ${e.message}`, 'danger');
-  }
-}
+    function populateRoleSelects() {
+        const roleSelect = document.getElementById('rol');
+        const filterSelect = document.getElementById('filterType');
+        const commonHtml = roles.map(role => `<option value="${role.id}" data-codigo="${role.codigo}">${role.nombre}</option>`).join('');
+        
+        if (roleSelect) roleSelect.innerHTML += commonHtml;
+        if (filterSelect) filterSelect.innerHTML += roles.map(role => `<option value="${role.codigo}">${role.nombre}</option>`).join('');
+    }
 
-// --- delete ---
-function deleteUser(userId) {
-  currentUserId = userId;
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).show();
-}
 
-async function confirmDelete() {
-  try {
-    if (currentUserId == null) { showAlert('No se seleccionó usuario.', 'danger'); return; }
-    await apiFetch(`/users/${currentUserId}`, { method: 'DELETE' });
-    showAlert('Usuario eliminado con éxito.', 'success');
-    bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
-    await loadUsers();
-  } catch (e) {
-    showAlert(`Error eliminando usuario: ${e.message}`, 'danger');
-  }
-}
+    // --- RENDERIZADO Y FILTRADO DE LA TABLA ---
 
-// --- alerts (reutiliza contenedor) ---
-function showAlert(message, type = 'info', isHTML = false) {
-  let alertContainer = document.getElementById('alerts-container');
-  if (!alertContainer) {
-    alertContainer = document.createElement('div');
-    alertContainer.id = 'alerts-container';
-    alertContainer.style.position = 'fixed';
-    alertContainer.style.top = '20px';
-    alertContainer.style.right = '20px';
-    alertContainer.style.zIndex = '9999';
-    document.body.appendChild(alertContainer);
-  }
+    function renderUsersTable(usersToRender) {
+        const tbody = document.getElementById('usersTableBody');
+        if (!tbody) return;
 
-  const alertDiv = document.createElement('div');
-  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-  alertDiv.style.minWidth = '300px';
+        if (!usersToRender.length) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted p-4">No se encontraron usuarios</td></tr>`;
+            return;
+        }
 
-  const closeBtn = `<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-  alertDiv.innerHTML = isHTML
-    ? `${message} ${closeBtn}`
-    : `${String(message).replace(/[&<>"]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]))} ${closeBtn}`;
+        tbody.innerHTML = usersToRender.map(user => {
+            const p = user.persona;
+            const roleColors = { cliente: 'bg-primary', abogado: 'bg-success', admin: 'bg-danger' };
+            const badgeClass = roleColors[user.role.codigo] || 'bg-secondary';
+            
+            // Botones adicionales para abogados
+            const abogadoActions = user.role.codigo === 'abogado' ? `
+                <button class="btn btn-sm btn-outline-secondary me-1" title="Gestionar Estudio" onclick="openEstudioModal(${user.id})"><i class="bi bi-building"></i></button>
+                <button class="btn btn-sm btn-outline-info me-1" title="Gestionar Disponibilidad" onclick="openDisponibilidadModal(${user.id})"><i class="bi bi-calendar-week"></i></button>
+            ` : '';
 
-  alertContainer.appendChild(alertDiv);
-  setTimeout(() => new bootstrap.Alert(alertDiv).close(), 5000);
-}
+            return `
+                <tr>
+                    <td>${p.primer_nombre} ${p.apellido_paterno}</td>
+                    <td>${p.dni}</td>
+                    <td>${p.telefono || 'N/A'}</td>
+                    <td>${p.correo}</td>
+                    <td><span class="badge ${badgeClass}">${user.role.nombre}</span></td>
+                    <td>${formatDate(user.creado_el)}</td>
+                    <td class="text-center">
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-warning me-1" title="Editar" onclick="editUser(${user.id})"><i class="bi bi-pencil"></i></button>
+                            ${abogadoActions}
+                            <button class="btn btn-sm btn-danger" title="Eliminar" onclick="deleteUser(${user.id})"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
 
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
-}
+    function filterUsers() {
+        const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
+        const filterType = document.getElementById('filterType')?.value || '';
+
+        const filtered = users.filter(user => {
+            const p = user.persona;
+            const searchMatch = `${p.primer_nombre} ${p.apellido_paterno} ${p.dni} ${p.telefono || ''}`.toLowerCase().includes(searchTerm);
+            const typeMatch = !filterType || user.role.codigo === filterType;
+            return searchMatch && typeMatch;
+        });
+        renderUsersTable(filtered);
+    }
+
+
+    // --- MODAL PRINCIPAL: GESTIÓN DE USUARIOS ---
+
+    function openUserModal() {
+        isEditing = false;
+        currentUserId = null;
+        document.getElementById('userModalLabel').textContent = 'Nuevo Usuario';
+        document.getElementById('userForm').reset();
+        document.getElementById('password-fields').style.display = 'flex';
+        document.getElementById('clave').required = true;
+        document.getElementById('confirmarClave').required = true;
+    }
+
+    async function editUser(userId) {
+        // Simulación: encontrar el usuario en el array mock
+        const user = users.find(u => u.id === userId);
+        if (!user) {
+            showAlert('Usuario no encontrado', 'danger');
+            return;
+        }
+
+        isEditing = true;
+        currentUserId = userId;
+
+        const p = user.persona || {};
+        document.getElementById('userId').value = user.id;
+        document.getElementById('primerNombre').value = p.primer_nombre || '';
+        document.getElementById('segundoNombre').value = p.segundo_nombre || '';
+        document.getElementById('apellidoPaterno').value = p.apellido_paterno || '';
+        document.getElementById('apellidoMaterno').value = p.apellido_materno || '';
+        document.getElementById('dni').value = p.dni || '';
+        document.getElementById('telefono').value = p.telefono || '';
+        document.getElementById('email').value = p.correo || '';
+        document.getElementById('direccion').value = p.direccion || '';
+        document.getElementById('rol').value = user.rol_id;
+        
+        document.getElementById('password-fields').style.display = 'none';
+        document.getElementById('clave').required = false;
+        document.getElementById('confirmarClave').required = false;
+        
+        document.getElementById('userModalLabel').textContent = 'Editar Usuario';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).show();
+    }
+
+    async function saveUser() {
+        console.log("Guardando usuario...");
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).hide();
+        loadUsers();
+        showAlert('Usuario guardado con éxito (simulación)', 'success');
+    }
+
+    function deleteUser(userId) {
+        currentUserId = userId;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).show();
+    }
+
+    async function confirmDelete() {
+        console.log(`Eliminando usuario ${currentUserId}...`);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).hide();
+        loadUsers();
+        showAlert('Usuario eliminado (simulación)', 'success');
+    }
+
+    // --- MODAL DE ESTUDIO/DESPACHO ---
+
+    async function openEstudioModal(userId) {
+        currentUserId = userId;
+        document.getElementById('estudioForm').reset();
+        
+        const user = users.find(u => u.id === userId);
+        const estudio = user?.perfilabogado?.estudio;
+
+        if (estudio) {
+            document.getElementById('estudioRuc').value = estudio.ruc || '';
+            document.getElementById('estudioNombre').value = estudio.nombre_comercial || '';
+            document.getElementById('estudioPais').value = estudio.pais || '';
+            document.getElementById('estudioCiudad').value = estudio.ciudad || '';
+            document.getElementById('estudioCorreo').value = estudio.correo_contacto || '';
+            document.getElementById('estudioTelefono').value = estudio.telefono || '';
+            document.getElementById('estudioDireccion').value = estudio.direccion || '';
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('estudioModal')).show();
+    }
+
+    async function saveEstudio() {
+        console.log(`Guardando estudio para el usuario ${currentUserId}...`);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('estudioModal')).hide();
+        showAlert('Información del estudio actualizada (simulación).', 'success');
+    }
+
+    // --- MODAL DE DISPONIBILIDAD Y HORARIO INTERACTIVO ---
+
+    async function openDisponibilidadModal(userId) {
+        currentUserId = userId;
+        document.getElementById('disponibilidadForm').reset();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('disponibilidadModal')).show();
+        
+        const user = users.find(u => u.id === userId);
+        const disponibilidad = user?.perfilabogado?.disponibilidadabogado || [];
+        renderSchedule(disponibilidad);
+    }
+
+    function renderSchedule(availability = []) {
+        const container = document.getElementById('schedule-container');
+        const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+        const hours = Array.from({length: 13}, (_, i) => 8 + i); // 8 AM to 8 PM
+
+        let html = '<div class="schedule-header"></div>';
+        days.forEach(day => html += `<div class="schedule-header">${day}</div>`);
+
+        hours.forEach(hour => {
+            html += `<div class="schedule-time">${hour}:00</div>`;
+            days.forEach((day, dayIndex) => {
+                html += `<div class="schedule-slot" id="slot-${dayIndex + 1}-${hour}"></div>`;
+            });
+        });
+        container.innerHTML = html;
+
+        availability.forEach(slot => {
+            const startHour = parseInt(slot.hora_inicio.split(':')[0]);
+            const startMinutes = parseInt(slot.hora_inicio.split(':')[1]);
+            const endHour = parseInt(slot.hora_fin.split(':')[0]);
+            const endMinutes = parseInt(slot.hora_fin.split(':')[1]);
+            
+            const durationHours = (endHour + endMinutes/60) - (startHour + startMinutes/60);
+            
+            const slotElement = document.getElementById(`slot-${slot.dia_semana}-${startHour}`);
+            if(slotElement) {
+                const block = document.createElement('div');
+                block.className = 'availability-block';
+                block.style.top = `${(startMinutes / 60) * 100}%`;
+                block.style.height = `${durationHours * 100}%`;
+                block.innerHTML = `
+                    ${timeToHHMM(slot.hora_inicio)} - ${timeToHHMM(slot.hora_fin)}
+                    <button class="delete-slot-btn" onclick="deleteDisponibilidad(${slot.id})"><i class="bi bi-x-circle-fill"></i></button>
+                `;
+                slotElement.appendChild(block);
+            }
+        });
+    }
+
+    async function addDisponibilidad() {
+        const payload = {
+            id: new Date().getTime(), // ID de simulación
+            dia_semana: document.getElementById('dispDia').value,
+            hora_inicio: document.getElementById('dispInicio').value,
+            hora_fin: document.getElementById('dispFin').value,
+        };
+        console.log('Añadiendo disponibilidad:', payload);
+        showAlert('Horario añadido (simulación).', 'success');
+        
+        const user = users.find(u => u.id === currentUserId);
+        if(user && user.perfilabogado) {
+            user.perfilabogado.disponibilidadabogado.push(payload);
+        }
+        
+        openDisponibilidadModal(currentUserId);
+    }
+
+    async function deleteDisponibilidad(slotId) {
+        console.log(`Eliminando slot de disponibilidad ${slotId}...`);
+        
+        const user = users.find(u => u.id === currentUserId);
+        if(user && user.perfilabogado) {
+            const index = user.perfilabogado.disponibilidadabogado.findIndex(s => s.id === slotId);
+            if(index > -1) {
+                user.perfilabogado.disponibilidadabogado.splice(index, 1);
+            }
+        }
+        
+        showAlert('Horario eliminado (simulación).', 'success');
+        openDisponibilidadModal(currentUserId);
+    }
+
+
+    // --- OTRAS FUNCIONES (Ej. DNI) ---
+    async function handleDniLookup() {
+        const dni = this.value.trim();
+        if (!/^\d{8}$/.test(dni)) return;
+        
+        showAlert(`Buscando DNI ${dni}... (simulación)`, 'info');
+        // Simulación de respuesta de API de DNI
+        setTimeout(() => {
+            const mockData = {
+                primer_nombre: 'Juan',
+                segundo_nombre: 'Alberto',
+                apellido_paterno: 'Quispe',
+                apellido_materno: 'Mendoza'
+            };
+            document.getElementById('primerNombre').value = mockData.primer_nombre || '';
+            document.getElementById('segundoNombre').value = mockData.segundo_nombre || '';
+            document.getElementById('apellidoPaterno').value = mockData.apellido_paterno || '';
+            document.getElementById('apellidoMaterno').value = mockData.apellido_materno || '';
+            showAlert('Datos de DNI cargados (simulación).', 'success');
+        }, 1000);
+    }

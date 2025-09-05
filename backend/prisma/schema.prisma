@@ -396,14 +396,40 @@ model estudio {
   /////////////////////////
   creado_el      DateTime        @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime        @updatedAt @db.Timestamptz(6)
-  perfiles       perfilabogado[]
+  abogados         abogadoestudio[]
 
   @@index([activo])
 }
 
+model abogadoestudio {
+  id             Int       @id @default(autoincrement())
+  usuario_id     Int
+  estudio_id     Int
+
+  // Metadatos útiles
+  principal      Boolean   @default(false)     // marcar estudio principal
+  rol_en_estudio String?                       // "asociado", "of counsel", etc.
+  vigencia_desde DateTime? @db.Timestamptz(6)
+  vigencia_hasta DateTime? @db.Timestamptz(6)
+  activo         Boolean   @default(true)
+  creado_el      DateTime  @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime  @updatedAt       @db.Timestamptz(6)
+
+  // Relaciones
+  usuario  usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estudio  estudio  @relation(fields: [estudio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Claves e índices
+  @@unique([usuario_id, estudio_id])          // evita duplicados del mismo par
+  @@index([usuario_id])
+  @@index([estudio_id])
+  @@index([activo])
+  @@index([vigencia_desde, vigencia_hasta])
+}
+
+
 model perfilabogado {
   usuario_id      Int  @id
-  estudio_id      Int
   especialidad_id Int?
 
   /////////////////////////
@@ -414,14 +440,14 @@ model perfilabogado {
   place_id_api          String?
   creado_el             DateTime                @default(now()) @db.Timestamptz(6)
   actualizado_el        DateTime                @updatedAt @db.Timestamptz(6)
-  disponibilidadabogado disponibilidadabogado[]
+  
 
   /////////////////////////
   usuario      usuario       @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  especialidad especialidad? @relation(fields: [especialidad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  estudio      estudio       @relation(fields: [estudio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  disponibilidadabogado disponibilidadabogado[]
+  especialidades especialidad[] @relation("AbogadoEspecialidad")
 
-  @@index([estudio_id])
+  estudios           abogadoestudio[]
   @@index([especialidad_id])
 }
 
@@ -535,10 +561,20 @@ model usuario {
  * ================================
  */
 
+model perfilabogado_especialidad {
+  perfilabogado_id Int
+  especialidad_id   Int
+
+  perfilabogado     perfilabogado @relation(fields: [perfilabogado_id], references: [usuario_id])
+  especialidad      especialidad  @relation(fields: [especialidad_id], references: [id])
+
+  @@id([perfilabogado_id, especialidad_id]) // La combinación de estos campos será única
+}
+
 model especialidad {
   id            Int             @id @default(autoincrement())
   nombre        String          @unique
-  perfilabogado perfilabogado[]
+  perfilabogado perfilabogado[] @relation("AbogadoEspecialidad")
   consulta      consulta[]
   formatos      formato[]
 }
