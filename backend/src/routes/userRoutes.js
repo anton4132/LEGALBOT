@@ -2,9 +2,8 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 
-// Rutas de usuarios
+// SOLO rutas de usuarios
 router.get('/', userController.getAllUsers);
-router.get('/dni/:dni', userController.lookupDni);
 router.get('/:id', userController.getUserById);
 router.post('/', userController.createUser);
 router.put('/:id', userController.updateUser);
