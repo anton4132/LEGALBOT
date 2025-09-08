@@ -7,6 +7,7 @@ const dashboardRoutes = require('./dashboardRoutes');
 const userRoutes = require('./userRoutes');
 const roleRoutes = require('./roleRoutes');
 const serviceRoutes = require('./serviceRoutes');
+const especialidadRoutes = require('./especialidadRoute');
 
 // Importar controlador SOLO para endpoints sueltos como /dni
 const userController = require('../controllers/userController');
@@ -17,6 +18,7 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/users', userRoutes);     // /api/users/...
 router.use('/roles', roleRoutes);     // /api/roles/...
 router.use('/services', serviceRoutes);
+router.use('/especialidades', especialidadRoutes);
 
 // Endpoints sueltos
 router.get('/dni/:dni', userController.lookupDni); // /api/dni/:dni

@@ -130,22 +130,6 @@ enum tipo_consulta {
   audio
 }
 
-model disponibilidadabogado {
-  id            Int           @id @default(autoincrement())
-  abogado_id    Int
-
-  /////////////////////////
-  dia_semana    Int           @db.SmallInt
-  hora_inicio   DateTime      @db.Time(6)
-  hora_fin      DateTime      @db.Time(6)
-
-  /////////////////////////
-  perfilabogado perfilabogado @relation(fields: [abogado_id], references: [usuario_id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([abogado_id, dia_semana, hora_inicio, hora_fin])
-  @@index([abogado_id, dia_semana])
-}
-
 /**
  * ================================
  * DOCUMENTOS / ARCHIVOS
@@ -388,67 +372,55 @@ model estudio {
   nombre_comercial String?
   pais             String?
   ciudad           String?
-  activo           Boolean @default(true)
+  activo           Boolean @default(false)
   correo_contacto  String?
   telefono         String?
   direccion        String?
 
   /////////////////////////
-  creado_el      DateTime        @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime        @updatedAt @db.Timestamptz(6)
-  abogados         abogadoestudio[]
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
+
+  abogadoestudios abogadoestudio[] @relation("EstudioAbogadoEstudio")
 
   @@index([activo])
 }
 
 model abogadoestudio {
-  id             Int       @id @default(autoincrement())
-  usuario_id     Int
-  estudio_id     Int
+  id         Int @id @default(autoincrement())
+  usuario_id Int
+  estudio_id Int
 
-  // Metadatos útiles
-  principal      Boolean   @default(false)     // marcar estudio principal
-  rol_en_estudio String?                       // "asociado", "of counsel", etc.
-  vigencia_desde DateTime? @db.Timestamptz(6)
-  vigencia_hasta DateTime? @db.Timestamptz(6)
-  activo         Boolean   @default(true)
-  creado_el      DateTime  @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime  @updatedAt       @db.Timestamptz(6)
+  principal      Boolean  @default(false)
+  rol_en_estudio String?
+  activo         Boolean  @default(true)
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
-  // Relaciones
-  usuario  usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  estudio  estudio  @relation(fields: [estudio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario usuario @relation("UsuarioAbogadoEstudio", fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  estudio estudio @relation("EstudioAbogadoEstudio", fields: [estudio_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  // Claves e índices
-  @@unique([usuario_id, estudio_id])          // evita duplicados del mismo par
+  @@unique([usuario_id, estudio_id])
+  @@index([activo])
   @@index([usuario_id])
   @@index([estudio_id])
-  @@index([activo])
-  @@index([vigencia_desde, vigencia_hasta])
 }
 
-
 model perfilabogado {
-  usuario_id      Int  @id
-  especialidad_id Int?
+  usuario_id Int @id
 
-  /////////////////////////
-  tarifa_base           Decimal?                @db.Decimal
-  duracion_minutos      Int                     @default(60)
-  direccion_atencion    String?
-  bio                   String?
-  place_id_api          String?
-  creado_el             DateTime                @default(now()) @db.Timestamptz(6)
-  actualizado_el        DateTime                @updatedAt @db.Timestamptz(6)
-  
+  tarifa_base        Decimal? @db.Decimal
+  duracion_minutos   Int      @default(60)
+  direccion_atencion String?
+  bio                String?
+  place_id_api       String?
+  creado_el          DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el     DateTime @updatedAt @db.Timestamptz(6)
 
-  /////////////////////////
-  usuario      usuario       @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario               usuario                 @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   disponibilidadabogado disponibilidadabogado[]
-  especialidades especialidad[] @relation("AbogadoEspecialidad")
 
-  estudios           abogadoestudio[]
-  @@index([especialidad_id])
+  especialidades perfilabogado_especialidad[] @relation("PerfilEspecialidades")
 }
 
 model persona {
@@ -472,6 +444,75 @@ model role {
   codigo  String    @unique
   nombre  String
   usuario usuario[]
+}
+
+model disponibilidadabogado {
+  id          Int      @id @default(autoincrement())
+  abogado_id  Int
+  dia_semana  Int      @db.SmallInt
+  hora_inicio DateTime @db.Time(6)
+  hora_fin    DateTime @db.Time(6)
+
+  perfilabogado perfilabogado @relation(fields: [abogado_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([abogado_id, dia_semana, hora_inicio, hora_fin])
+  @@index([abogado_id, dia_semana])
+}
+
+model usuario {
+  id                                                Int                  @id @default(autoincrement())
+  persona_id                                        Int
+  rol_id                                            Int                  @db.SmallInt
+  clave                                             String // mantener nombre para no romper código actual (almacena hash a nivel app)
+  telefono_verificado                               Boolean              @default(false)
+  plan_id                                           Int?
+  almacenamiento_usado                              Int                  @default(0)
+  creado_el                                         DateTime             @default(now()) @db.Timestamptz(6)
+  activo                                            Boolean              @default(false)
+  auditoria                                         auditoria[]
+  bitacorabusquedavh                                bitacorabusquedavh[]
+  cita_cita_abogado_idTousuario                     cita[]               @relation("cita_abogado_idTousuario")
+  cita_cita_cliente_idTousuario                     cita[]               @relation("cita_cliente_idTousuario")
+  clienteabogado_clienteabogado_abogado_idTousuario clienteabogado[]     @relation("clienteabogado_abogado_idTousuario")
+  clienteabogado_clienteabogado_cliente_idTousuario clienteabogado[]     @relation("clienteabogado_cliente_idTousuario")
+  consulta_consulta_abogado_idTousuario             consulta[]           @relation("consulta_abogado_idTousuario")
+  consulta_consulta_cliente_idTousuario             consulta[]           @relation("consulta_cliente_idTousuario")
+  documento_documento_abogado_firmaTousuario        documento[]          @relation("documento_abogado_firmaTousuario")
+  documento_documento_propietario_idTousuario       documento[]          @relation("documento_propietario_idTousuario")
+  pago                                              pago[]
+  archivos                                          archivo[]
+  perfilabogado                                     perfilabogado?
+  plan                                              plan?                @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                              role                 @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
+
+  @@index([persona_id])
+  @@index([rol_id])
+  @@index([plan_id])
+  @@index([creado_el])
+  @@index([activo])
+}
+
+model perfilabogado_especialidad {
+  id               Int @id @default(autoincrement())
+  perfilabogado_id Int
+  especialidad_id  Int
+
+  perfilabogado perfilabogado @relation("PerfilEspecialidades", fields: [perfilabogado_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
+  especialidad  especialidad  @relation("EspecialidadPerfiles", fields: [especialidad_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([perfilabogado_id, especialidad_id])
+  @@index([perfilabogado_id])
+  @@index([especialidad_id])
+}
+
+model especialidad {
+  id                    Int                          @id @default(autoincrement())
+  nombre                String                       @unique
+  consulta              consulta[]
+  formatos              formato[]
+  perfiles_especialidad perfilabogado_especialidad[] @relation("EspecialidadPerfiles")
 }
 
 model plan {
@@ -519,64 +560,6 @@ model planservicio {
   @@index([servicio_id])
   @@index([plan_id])
   @@index([activo])
-}
-
-model usuario {
-  id                                                Int                  @id @default(autoincrement())
-  persona_id                                        Int
-  rol_id                                            Int                  @db.SmallInt
-  clave                                             String // mantener nombre para no romper código actual (almacena hash a nivel app)
-  telefono_verificado                               Boolean              @default(false)
-  plan_id                                           Int?
-  almacenamiento_usado                              Int                  @default(0)
-  creado_el                                         DateTime             @default(now()) @db.Timestamptz(6)
-  activo                                            Boolean              @default(true)
-  auditoria                                         auditoria[]
-  bitacorabusquedavh                                bitacorabusquedavh[]
-  cita_cita_abogado_idTousuario                     cita[]               @relation("cita_abogado_idTousuario")
-  cita_cita_cliente_idTousuario                     cita[]               @relation("cita_cliente_idTousuario")
-  clienteabogado_clienteabogado_abogado_idTousuario clienteabogado[]     @relation("clienteabogado_abogado_idTousuario")
-  clienteabogado_clienteabogado_cliente_idTousuario clienteabogado[]     @relation("clienteabogado_cliente_idTousuario")
-  consulta_consulta_abogado_idTousuario             consulta[]           @relation("consulta_abogado_idTousuario")
-  consulta_consulta_cliente_idTousuario             consulta[]           @relation("consulta_cliente_idTousuario")
-  documento_documento_abogado_firmaTousuario        documento[]          @relation("documento_abogado_firmaTousuario")
-  documento_documento_propietario_idTousuario       documento[]          @relation("documento_propietario_idTousuario")
-  pago                                              pago[]
-  archivos                                          archivo[]
-  perfilabogado                                     perfilabogado?
-  plan                                              plan?                @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  role                                              role                 @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([persona_id])
-  @@index([rol_id])
-  @@index([plan_id])
-  @@index([creado_el])
-  @@index([activo])
-}
-
-/**
- * ================================
- * ESPECIALIDAD / FORMATO / BIBLIOTECA
- * ================================
- */
-
-model perfilabogado_especialidad {
-  perfilabogado_id Int
-  especialidad_id   Int
-
-  perfilabogado     perfilabogado @relation(fields: [perfilabogado_id], references: [usuario_id])
-  especialidad      especialidad  @relation(fields: [especialidad_id], references: [id])
-
-  @@id([perfilabogado_id, especialidad_id]) // La combinación de estos campos será única
-}
-
-model especialidad {
-  id            Int             @id @default(autoincrement())
-  nombre        String          @unique
-  perfilabogado perfilabogado[] @relation("AbogadoEspecialidad")
-  consulta      consulta[]
-  formatos      formato[]
 }
 
 enum est_cita {

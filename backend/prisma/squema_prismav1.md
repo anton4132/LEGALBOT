@@ -328,6 +328,31 @@ model estudio {
   perfiles         perfilabogado[]
 }
 
+model abogadoestudio {
+  id             Int       @id @default(autoincrement())
+  usuario_id     Int
+  estudio_id     Int
+
+  // Metadatos útiles
+  principal      Boolean   @default(false)     // marcar estudio principal
+  rol_en_estudio String?                       // "asociado", "of counsel", etc.
+  activo         Boolean   @default(true)
+  creado_el      DateTime  @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime  @updatedAt       @db.Timestamptz(6)
+
+  // Relaciones
+  usuario  usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  estudio  estudio  @relation(fields: [estudio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Claves e índices
+  @@unique([usuario_id, estudio_id])          // evita duplicados del mismo par
+  @@index([usuario_id])
+  @@index([estudio_id])
+  @@index([activo])
+  
+}
+
+
 model perfilabogado {
   usuario_id            Int                     @id
   estudio_id            Int
