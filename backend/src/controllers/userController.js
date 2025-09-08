@@ -744,18 +744,15 @@ const updateUser = async (req, res) => {
         }
       } else {
         // Si dejó de ser abogado: limpia perfil, especialidades, disponibilidad y estudios
-         await tx.perfilabogado_especialidad.deleteMany({ where: { perfilabogado_id: userId } });
-         await tx.disponibilidadabogado.deleteMany({ where: { abogado_id: userId } });
-         await tx.abogadoestudio.deleteMany({ where: { usuario_id: userId } });
-        if (usuarioActual.perfilabogado) {
-          await tx.disponibilidadabogado.deleteMany({ where: { abogado_id: userId } });
-          await tx.perfilabogado_especialidad.deleteMany({ where: { perfilabogado_id: userId } });
-          await tx.perfilabogado.delete({ where: { usuario_id: userId } });
-        }
+        await tx.disponibilidadabogado.deleteMany({ where: { abogado_id: userId } });
+        await tx.perfilabogado_especialidad.deleteMany({ where: { perfilabogado_id: userId } });
         await tx.abogadoestudio.updateMany({
           where: { usuario_id: userId },
           data: { activo: false, principal: false }
         });
+        if (usuarioActual.perfilabogado) {
+          await tx.perfilabogado.delete({ where: { usuario_id: userId } });
+        }
       }
 
       return tx.usuario.findUnique({

@@ -10,4 +10,16 @@ const getAllRoles = async (req, res) => {
   }
 };
 
-module.exports = { getAllRoles };
+const getRoleById = async (req, res) => {
+  try {
+    const role = await prisma.role.findUnique({
+      where: { id: parseInt(req.params.id, 10) }
+    });
+    if (!role) return res.status(404).json({ success: false, message: 'Rol no encontrado' });
+    res.json(role);
+  } catch (error) {
+    console.error('Error obteniendo rol:', error);
+    res.status(500).json({ success: false, message: 'Error obteniendo rol' });
+  }
+};
+module.exports = { getAllRoles, getRoleById };
