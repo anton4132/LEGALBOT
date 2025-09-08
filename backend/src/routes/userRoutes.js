@@ -9,4 +9,9 @@ router.post('/', userController.createUser);
 router.put('/:id', userController.updateUser);
 router.delete('/:id', userController.deleteUser);
 
+
+router.get('/:id/especialidades', userController.getUserEspecialidades);
+router.put('/:id/especialidades', userController.updateUserEspecialidades);
+router.get('/:id/estudios', userController.getUserEstudios);
+router.post('/:id/estudios', userController.upsertUserEstudio);
 module.exports = router;

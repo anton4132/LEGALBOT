@@ -450,7 +450,7 @@ function openEstudioModal(userId) {
   // intenta precargar vínculo actual principal (si el backend tiene endpoint)
   apiFetch(`/users/${userId}/estudios`).then(list => {
     const arr = Array.isArray(list) ? list : (list.items ?? []);
-    // si hay principal, precargar
+    renderEstudiosActuales(arr);
     const principal = arr.find(v => v.principal) ?? arr[0];
     if (principal) {
       setValue('estudioId', principal.estudio_id);
@@ -469,6 +469,21 @@ function openEstudioModal(userId) {
   }).catch(() => { /* opcional */ });
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('estudioModal')).show();
+}
+
+function renderEstudiosActuales(estudios = []) {
+    const cont = document.getElementById('estudiosActuales');
+    if (!cont) return;
+    if (!estudios.length) {
+      cont.innerHTML = '<li class="list-group-item">Sin estudios registrados</li>';
+      return;
+    }
+    cont.innerHTML = estudios.map(v => {
+      const nombre = escapeHtml(v.estudio?.nombre_comercial ?? `ID ${v.estudio_id}`);
+      const rol = v.rol_en_estudio ? ` - ${escapeHtml(v.rol_en_estudio)}` : '';
+      const badge = v.principal ? ' <span class="badge bg-primary ms-2">Principal</span>' : '';
+      return `<li class="list-group-item d-flex justify-content-between align-items-center">${nombre}${rol}${badge}</li>`;
+    }).join('');
 }
 
 async function handleBuscarEstudio(e) {

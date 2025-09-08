@@ -825,6 +825,89 @@ const deleteUser = async (req, res) => {
   }
 };
 
+const getUserEspecialidades = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const perfil = await prisma.perfilabogado.findUnique({
+      where: { usuario_id: userId },
+      include: {
+        especialidades: { include: { especialidad: true } }
+      }
+    });
+    if (!perfil) return res.json([]);
+    const list = perfil.especialidades.map(pe => ({
+      id: pe.especialidad.id,
+      nombre: pe.especialidad.nombre
+    }));
+    res.json(list);
+  } catch (error) {
+    console.error('Error obteniendo especialidades de usuario:', error);
+    res.status(500).json({ message: 'Error obteniendo especialidades' });
+  }
+};
+
+const updateUserEspecialidades = async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  const ids = Array.isArray(req.body.ids)
+    ? req.body.ids.map(n => parseInt(n, 10)).filter(n => !isNaN(n))
+    : [];
+  try {
+    await prisma.$transaction(async (tx) => {
+      const perfil = await tx.perfilabogado.findUnique({ where: { usuario_id: userId } });
+      if (!perfil) throw new Error('Perfil de abogado no encontrado');
+      await syncPerfilEspecialidades(tx, userId, ids);
+    });
+    res.json({ success: true, ids });
+  } catch (error) {
+    console.error('Error actualizando especialidades:', error);
+    res.status(500).json({ message: error.message || 'Error actualizando especialidades' });
+  }
+};
+
+// ======== Estudios por usuario =========
+const getUserEstudios = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const rows = await prisma.abogadoestudio.findMany({
+      where: { usuario_id: userId, activo: true },
+      include: { estudio: true },
+      orderBy: { principal: 'desc' }
+    });
+    res.json(rows);
+  } catch (error) {
+    console.error('Error obteniendo estudios del usuario:', error);
+    res.status(500).json({ message: 'Error obteniendo estudios' });
+  }
+};
+
+const upsertUserEstudio = async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  let { estudio_id, principal, rol_en_estudio } = req.body || {};
+  estudio_id = parseInt(estudio_id, 10);
+  principal = !!principal;
+  try {
+    const vinculo = await prisma.$transaction(async (tx) => {
+      const row = await tx.abogadoestudio.upsert({
+        where: { usuario_id_estudio_id: { usuario_id: userId, estudio_id } },
+        update: { principal, rol_en_estudio, activo: true },
+        create: { usuario_id: userId, estudio_id, principal, rol_en_estudio },
+        include: { estudio: true }
+      });
+      if (principal) {
+        await tx.abogadoestudio.updateMany({
+          where: { usuario_id: userId, estudio_id: { not: estudio_id } },
+          data: { principal: false }
+        });
+      }
+      return row;
+    });
+    res.json({ success: true, vinculo });
+  } catch (error) {
+    console.error('Error guardando estudio del usuario:', error);
+    res.status(500).json({ message: 'Error guardando estudio del usuario' });
+  }
+};
+
 module.exports = {
   // listados
   getAllUsers,
@@ -834,6 +917,10 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  getUserEspecialidades,
+  updateUserEspecialidades,
+  getUserEstudios,
+  upsertUserEstudio,
   // auxiliares
   lookupDni,
   fetchDniInfo
