@@ -1,8 +1,6 @@
-// controllers/especialidadController.js
-// controllers/especialidadController.js
 const { prisma } = require('../config/database');
 
-exports.getAllEspecialidades = async (req, res) => {
+const getAllEspecialidades = async (req, res) => {
   try {
     const rows = await prisma.especialidad.findMany({
       select: { id: true, nombre: true },
@@ -14,3 +12,5 @@ exports.getAllEspecialidades = async (req, res) => {
     res.status(500).json({ message: 'Error listando especialidades' });
   }
 };
+
+module.exports = { getAllEspecialidades };
