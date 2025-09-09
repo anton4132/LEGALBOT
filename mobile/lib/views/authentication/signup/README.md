@@ -15,7 +15,11 @@ authentication/signup/
 ## 🔄 Flujo de Navegación
 
 ```
-1. UserTypeScreen → 2. PersonalInfoScreen → 3. ContactInfoScreen → 4. SecurityScreen → 5. ConfirmationScreen
+1. UserTypeScreen 
+→ 2. PersonalInfoScreen
+→ 3. ContactInfoScreen 
+→ 4. SecurityScreen 
+→ 5. ConfirmationScreen
 ```
 
 ## ✨ Características
