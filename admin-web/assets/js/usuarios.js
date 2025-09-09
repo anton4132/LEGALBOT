@@ -3,6 +3,9 @@ let roles = [];
 let especialidades = [];
 let currentUserId = null;
 let isEditing = false;
+let currentAvailability = [];
+let pendingDisponibilidad = [];
+
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
@@ -31,11 +34,25 @@ const toTimeDB         = (hhmm) => {
   if (!/^\d{2}$/.test(hh) || !/^\d{2}$/.test(mm)) return null;
   return `${hh}:${mm}:00`;
 };
+// Convierte valores de tiempo provenientes de la BD (Date u "HH:MM:SS") a "HH:MM"
+const fromTimeDB       = (t) => {
+  if (!t) return '';
+  if (typeof t === 'string') {
+    const timePart = t.includes('T') ? t.substring(11,16) : t.substring(0,5);
+    return /^\d{2}:\d{2}$/.test(timePart) ? timePart : '';
+
+  }
+  const d = new Date(t);
+  if (isNaN(d)) return '';
+  const hh = String(d.getUTCHours()).padStart(2,'0');
+  const mm = String(d.getUTCMinutes()).padStart(2,'0');
+  return `${hh}:${mm}`;
+};
+
 const isEmail          = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s ?? '').trim());
 const isDNI            = (s) => /^\d{8}$/.test(String(s ?? '').trim());
 const isRUC            = (s) => /^\d{11}$/.test(String(s ?? '').trim());
-const formatDate       = (d) => new Date(d).toLocaleDateString('es-ES', { year:'numeric', month:'2-digit', day:'2-digit' });
-
+const formatDate       = (d) => new Date(d).toLocaleDateString('es-PE', { year:'numeric', month:'2-digit', day:'2-digit' });
 /* ----------------- Bootstrap ------------------- */
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -584,8 +601,11 @@ async function openDisponibilidadModal(userId) {
   currentUserId = userId;
   try {
     const data = await apiFetch(`/users/${userId}/disponibilidad`);
-    const arr = Array.isArray(data) ? data : (data.items ?? []);
-    renderSchedule(arr);
+
+    currentAvailability = Array.isArray(data) ? data : (data.items ?? []);
+    pendingDisponibilidad = [];
+    renderSchedule(currentAvailability);
+
     bootstrap.Modal.getOrCreateInstance(document.getElementById('disponibilidadModal')).show();
   } catch (e) {
     showAlert(`No se pudo cargar la disponibilidad: ${e.message}`, 'danger');
@@ -606,23 +626,25 @@ function renderSchedule(availability = []) {
   container.innerHTML = html;
 
   // pintar bloques
-  availability.forEach(slot => {
+  const combined = availability.concat(pendingDisponibilidad.map((s, idx) => ({ ...s, id: `tmp-${idx}` })));
+  combined.forEach(slot => {
     const d = Number(slot.dia_semana);
-    const start = String(slot.hora_inicio ?? '').substring(0,5);
-    const end   = String(slot.hora_fin ?? '').substring(0,5);
+    const start = fromTimeDB(slot.hora_inicio);
+    const end   = fromTimeDB(slot.hora_fin);
     const [sh, sm] = start.split(':').map(Number);
     const [eh, em] = end.split(':').map(Number);
     const durationHours = (eh + em/60) - (sh + sm/60);
     const cell = document.getElementById(`slot-${d}-${sh}`);
     if (cell && durationHours > 0) {
       const block = document.createElement('div');
-      block.className = 'availability-block';
+      block.className = 'availability-block'+ (String(slot.id).startsWith('tmp-') ? ' pending-block' : '');
+
       block.style.top = `${(sm / 60) * 100}%`;
       block.style.height = `${durationHours * 100}%`;
-      const idStr = slot.id ?? '';
+      const idStr = slot.id;
       block.innerHTML = `
         ${start} - ${end}
-        <button class="delete-slot-btn" onclick="deleteDisponibilidad(${idStr})" title="Eliminar"><i class="bi bi-x-circle-fill"></i></button>`;
+        <button class="delete-slot-btn" onclick="deleteDisponibilidad('${idStr}')" title="Eliminar"><i class="bi bi-x-circle-fill"></i></button>`;
       cell.appendChild(block);
     }
   });
@@ -640,30 +662,50 @@ async function addDisponibilidad() {
   // normalizar a HH:mm:00
   const inicioDB = toTimeDB(ini);
   const finDB    = toTimeDB(fin);
-
+  pendingDisponibilidad.push({ dia_semana: dia, hora_inicio: inicioDB, hora_fin: finDB });
+  renderSchedule(currentAvailability);
+  document.getElementById('dispInicio').value = '';
+  document.getElementById('dispFin').value = '';
+  }
+  
+  async function saveDisponibilidad() {
+  if (currentUserId == null) return showAlert('Usuario no seleccionado.', 'danger');
+  if (!pendingDisponibilidad.length) {
+    return showAlert('No hay horarios nuevos para guardar.', 'info');
+  }
   try {
-    await apiFetch(`/users/${currentUserId}/disponibilidad`, {
-      method: 'POST',
-      body: JSON.stringify({ dia_semana: dia, hora_inicio: inicioDB, hora_fin: finDB })
-    });
-    showAlert('Horario añadido.', 'success');
-    // recargar grilla
+    for (const slot of pendingDisponibilidad) {
+      await apiFetch(`/users/${currentUserId}/disponibilidad`, {
+        method: 'POST',
+        body: JSON.stringify(slot)
+      });
+    }
+    showAlert('Disponibilidad guardada.', 'success');
     const data = await apiFetch(`/users/${currentUserId}/disponibilidad`);
-    const arr = Array.isArray(data) ? data : (data.items ?? []);
-    renderSchedule(arr);
+    currentAvailability = Array.isArray(data) ? data : (data.items ?? []);
+    pendingDisponibilidad = [];
+    renderSchedule(currentAvailability);
   } catch (e) {
-    showAlert(`Error añadiendo disponibilidad: ${e.message}`, 'danger');
+    showAlert(`Error guardando disponibilidad: ${e.message}`, 'danger');
   }
 }
 
 async function deleteDisponibilidad(slotId) {
-  if (currentUserId == null || slotId == null) return;
+  if (slotId == null) return;
+  const idStr = String(slotId);
+  if (idStr.startsWith('tmp-')) {
+    const idx = parseInt(idStr.split('-')[1], 10);
+    pendingDisponibilidad.splice(idx, 1);
+    renderSchedule(currentAvailability);
+    return;
+  }
+  if (currentUserId == null) return;
   try {
     await apiFetch(`/users/${currentUserId}/disponibilidad/${slotId}`, { method: 'DELETE' });
     showAlert('Horario eliminado.', 'success');
     const data = await apiFetch(`/users/${currentUserId}/disponibilidad`);
-    const arr = Array.isArray(data) ? data : (data.items ?? []);
-    renderSchedule(arr);
+    currentAvailability = Array.isArray(data) ? data : (data.items ?? []);
+    renderSchedule(currentAvailability);
   } catch (e) {
     showAlert(`Error eliminando disponibilidad: ${e.message}`, 'danger');
   }

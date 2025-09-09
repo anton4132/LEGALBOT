@@ -23,7 +23,7 @@ function hhmmToTimeDate(t) {
   const [hh, mm] = String(t).split(':');
   if (hh == null || mm == null) return null;
   // Devuelve Date local (Postgres TIME ignora fecha)
-  return new Date(1970, 0, 1, parseInt(hh, 10), parseInt(mm, 10), 0, 0);
+  return new Date(Date.UTC(1970, 0, 1, parseInt(hh, 10), parseInt(mm, 10), 0, 0));
 }
 
 // ========== API Perú (opcional) ==========
@@ -825,13 +825,60 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// ======== Perfil de abogado =========
+const getUserPerfil = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const perfil = await prisma.perfilabogado.findUnique({ where: { usuario_id: userId } });
+    if (!perfil) return res.status(404).json({ message: 'Perfil de abogado no encontrado' });
+    res.json(perfil);
+  } catch (error) {
+    console.error('Error obteniendo perfil de abogado:', error);
+    res.status(500).json({ message: 'Error obteniendo perfil de abogado' });
+  }
+};
+
+const updateUserPerfil = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const {
+      tarifa_base,
+      duracion_minutos,
+      direccion_atencion,
+      bio
+    } = req.body || {};
+
+    const perfil = await prisma.perfilabogado.upsert({
+      where: { usuario_id: userId },
+      update: {
+        tarifa_base: tarifa_base ?? undefined,
+        duracion_minutos: duracion_minutos ?? undefined,
+        direccion_atencion: direccion_atencion ?? undefined,
+        bio: bio ?? undefined
+      },
+      create: {
+        usuario_id: userId,
+        tarifa_base: tarifa_base ?? null,
+        duracion_minutos: duracion_minutos ?? 60,
+        direccion_atencion: direccion_atencion ?? null,
+        bio: bio ?? null
+      }
+    });
+
+    res.json({ success: true, perfil });
+  } catch (error) {
+    console.error('Error guardando perfil de abogado:', error);
+    res.status(500).json({ message: 'Error guardando perfil de abogado' });
+  }
+};
+
 const getUserEspecialidades = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     const perfil = await prisma.perfilabogado.findUnique({
       where: { usuario_id: userId },
       include: {
-        especialidades: { include: { especialidad: true } }
+        especialidades: { include: { especialidad: true  } }
       }
     });
     if (!perfil) return res.json([]);
@@ -908,6 +955,72 @@ const upsertUserEstudio = async (req, res) => {
   }
 };
 
+
+// ======== Disponibilidad de abogado =========
+const getUserDisponibilidad = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const slots = await prisma.disponibilidadabogado.findMany({
+      where: { abogado_id: userId },
+      orderBy: [{ dia_semana: 'asc' }, { hora_inicio: 'asc' }]
+    });
+    res.json(slots);
+  } catch (error) {
+    console.error('Error obteniendo disponibilidad del usuario:', error);
+    res.status(500).json({ message: 'Error obteniendo disponibilidad del usuario' });
+  }
+};
+
+const addUserDisponibilidad = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const { dia_semana, hora_inicio, hora_fin } = req.body || {};
+    const dia = parseInt(dia_semana, 10);
+    const ini = hhmmToTimeDate(hora_inicio);
+    const fin = hhmmToTimeDate(hora_fin);
+    if (!dia || !ini || !fin) {
+      return res.status(400).json({ message: 'Datos de disponibilidad inválidos' });
+    }
+    // asegurarnos de que el usuario tenga perfil de abogado
+    const perfil = await prisma.perfilabogado.findUnique({ where: { usuario_id: userId } });
+    if (!perfil) {
+      return res.status(404).json({ message: 'El usuario no tiene perfil de abogado' });
+    }
+    const slot = await prisma.disponibilidadabogado.create({
+      data: {
+        abogado_id: userId,
+        dia_semana: dia,
+        hora_inicio: ini,
+        hora_fin: fin
+      }
+    });
+    res.status(201).json({ success: true, slot });
+  } catch (error) {
+    if (error.code === 'P2002') {
+      return res.status(409).json({ message: 'Horario ya registrado' });
+    }
+    console.error('Error guardando disponibilidad del usuario:', error);
+    res.status(500).json({ message: 'Error guardando disponibilidad del usuario' });
+  }
+};
+
+const deleteUserDisponibilidad = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const slotId = parseInt(req.params.slotId, 10);
+    const result = await prisma.disponibilidadabogado.deleteMany({
+      where: { id: slotId, abogado_id: userId }
+    });
+    if (result.count === 0) {
+      return res.status(404).json({ message: 'Horario no encontrado' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error eliminando disponibilidad del usuario:', error);
+    res.status(500).json({ message: 'Error eliminando disponibilidad del usuario' });
+  }
+};
+
 module.exports = {
   // listados
   getAllUsers,
@@ -917,10 +1030,15 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  getUserPerfil,
+  updateUserPerfil,
   getUserEspecialidades,
   updateUserEspecialidades,
   getUserEstudios,
   upsertUserEstudio,
+  getUserDisponibilidad,
+  addUserDisponibilidad,
+  deleteUserDisponibilidad,
   // auxiliares
   lookupDni,
   fetchDniInfo

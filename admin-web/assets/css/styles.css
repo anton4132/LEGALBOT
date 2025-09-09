@@ -175,13 +175,14 @@
 
   .schedule-grid {
     display: grid;
-    grid-template-columns: 50px repeat(5, 1fr); /* Columna de hora + 5 días */
+    grid-template-columns: 50px repeat(7, 1fr); /* Columna de hora + 7 días */
     gap: 2px;
     background-color: #e9ecef;
     border: 1px solid #dee2e6;
     border-radius: .375rem;
     padding: 2px;
     font-size: 0.8rem;
+    overflow: auto;
 }
 .schedule-header, .schedule-time, .schedule-slot {
     background-color: #fff;
@@ -232,6 +233,17 @@
     transition: opacity 0.2s;
 }
 .availability-block:hover .delete-slot-btn { opacity: 1; }
+.pending-block {
+  background-color: rgba(255, 193, 7, 0.8);
+  border: 1px dashed #ffc107;
+  color: #212529;
+}
+
+@media (max-width: 768px) {
+  .schedule-grid {
+      font-size: 0.7rem;
+  }
+}
 .table-responsive { border: 1px solid #dee2e6; border-radius: .375rem; overflow: hidden; }
 .table { margin-bottom: 0; }
 .especialidad-chip {
