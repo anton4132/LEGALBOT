@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../Constants/colors.dart';
-import '../../../widgets/detailstext1.dart';
+import 'package:legalserviceapp/constants/colors.dart';
+import 'package:legalserviceapp/widgets/detailstext1.dart';
 import 'personal_info_screen.dart';
 
 class UserTypeScreen extends StatefulWidget {
