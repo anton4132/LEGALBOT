@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:legalserviceapp/constants/colors.dart';
-import 'package:legalserviceapp/widgets/custombtn.dart';
+import '../../../Constants/colors.dart';
+import '../../../Widgets/custombtn.dart';
 import '../login_screen.dart';
 import 'confirmation_screen.dart';
 
 class SecurityScreen extends StatefulWidget {
   final String userType;
   final Map<String, String> personalInfo;
-  final Map<String, String> contactInfo; // sigue viniendo como strings
-
+  final Map<String, String> contactInfo;
+  
   const SecurityScreen({
-    super.key,
-    required this.userType,
+    super.key, 
+    required this.userType, 
     required this.personalInfo,
     required this.contactInfo,
   });
@@ -26,39 +26,6 @@ class _SecurityScreenState extends State<SecurityScreen> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-
-  // Estructuras reales que llegan desde ContactInfoScreen vía RouteSettings.arguments
-  // { 'contactInfoRaw': <Map<String, dynamic>> }
-  Map<String, dynamic>? _contactInfoRaw; 
-
-  @override
-  void initState() {
-    super.initState();
-    // A veces ModalRoute aún no está listo en initState; por eso refuerzo en didChangeDependencies
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is Map<String, dynamic>) {
-      _contactInfoRaw = args['contactInfoRaw'] as Map<String, dynamic>?;
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    // Si no lo obtuvimos en initState, lo intentamos aquí (ciclo seguro)
-    if (_contactInfoRaw == null) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is Map<String, dynamic>) {
-        _contactInfoRaw = args['contactInfoRaw'] as Map<String, dynamic>?;
-      }
-    }
-    super.didChangeDependencies();
-  }
-
-  @override
-  void dispose() {
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
-  }
 
   Widget _buildCustomTextField({
     required TextEditingController controller,
@@ -106,6 +73,22 @@ class _SecurityScreenState extends State<SecurityScreen> {
     );
   }
 
+  void _nextStep() {
+    if (_validateFields()) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ConfirmationScreen(
+            userType: widget.userType,
+            personalInfo: widget.personalInfo,
+            contactInfo: widget.contactInfo,
+            password: _passwordController.text,
+          ),
+        ),
+      );
+    }
+  }
+
   bool _validateFields() {
     if (_passwordController.text.isEmpty || _confirmPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -140,28 +123,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
     return true;
   }
 
-  void _nextStep() {
-    if (!_validateFields()) return;
-
-    // Navega a ConfirmationScreen pasando:
-    // - props tradicionales (strings) para compatibilidad
-    // - y también los argumentos con contactInfoRaw (estructuras reales)
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ConfirmationScreen(
-          userType: widget.userType,
-          personalInfo: widget.personalInfo,
-          contactInfo: widget.contactInfo,
-          password: _passwordController.text,
-        ),
-        settings: RouteSettings(
-          arguments: {
-            'contactInfoRaw': _contactInfoRaw, // reenvía sin tocar
-          },
-        ),
-      ),
-    );
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -190,14 +156,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-
+                
                 // Progress indicator
                 Row(
                   children: [
                     Container(
                       width: 30,
                       height: 30,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: AppColors.buttonColor,
                         shape: BoxShape.circle,
                       ),
@@ -213,7 +179,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     Container(
                       width: 30,
                       height: 30,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: AppColors.buttonColor,
                         shape: BoxShape.circle,
                       ),
@@ -229,7 +195,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     Container(
                       width: 30,
                       height: 30,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: AppColors.buttonColor,
                         shape: BoxShape.circle,
                       ),
@@ -237,9 +203,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     ),
                   ],
                 ),
-
+                
                 const SizedBox(height: 30),
-
+                
                 const Text(
                   'Seguridad',
                   style: TextStyle(
@@ -256,9 +222,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     color: Colors.white.withOpacity(0.8),
                   ),
                 ),
-
+                
                 const SizedBox(height: 40),
-
+                
                 // Seguridad Container
                 Container(
                   width: double.infinity,
@@ -293,7 +259,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-
+                      
                       // Contraseña
                       _buildCustomTextField(
                         controller: _passwordController,
@@ -305,7 +271,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                           });
                         },
                       ),
-
+                      
                       // Confirmar contraseña
                       _buildCustomTextField(
                         controller: _confirmPasswordController,
@@ -317,9 +283,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                           });
                         },
                       ),
-
+                      
                       const SizedBox(height: 15),
-
+                      
                       // Información de seguridad
                       Container(
                         padding: const EdgeInsets.all(15),
@@ -347,9 +313,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     ],
                   ),
                 ),
-
+                
                 const SizedBox(height: 30),
-
+                
                 // Botón siguiente
                 SizedBox(
                   width: double.infinity,
@@ -359,9 +325,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     onTap: _nextStep,
                   ),
                 ),
-
+                
                 const SizedBox(height: 20),
-
+                
                 // Botón volver
                 SizedBox(
                   width: double.infinity,
@@ -369,7 +335,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.buttonColor),
+                      side: BorderSide(color: AppColors.buttonColor),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -391,4 +357,4 @@ class _SecurityScreenState extends State<SecurityScreen> {
       ),
     );
   }
-}
+} 
