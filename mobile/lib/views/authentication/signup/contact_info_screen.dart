@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../Constants/colors.dart';
-import '../../../Widgets/custombtn.dart';
-import 'security_screen.dart';
+import 'package:legalserviceapp/constants/colors.dart';
+import 'package:legalserviceapp/widgets/custombtn.dart';
+import 'package:legalserviceapp/views/authentication/security_screen.dart';
 
 // Widgets que creamos antes:
-import 'widgets/especialidades_selector.dart';
-import 'widgets/disponibilidad_modal.dart';
-import 'widgets/estudio_modal.dart';
+import 'package:legalserviceapp/views/authentication/widgets/especialidades_selector.dart';
+import 'package:legalserviceapp/views/authentication/widgets/disponibilidad_modal.dart';
+import 'package:legalserviceapp/views/authentication/widgets/estudio_modal.dart';
 
 class ContactInfoScreen extends StatefulWidget {
   final String userType;
@@ -342,9 +342,12 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                                   builder: (_) => Padding(
                                     padding: EdgeInsets.only(
                                       bottom: MediaQuery.of(context).viewInsets.bottom,
-                                      left: 16, right: 16, top: 16),
-                                    child: const SingleChildScrollView(
-                                      child: EspecialidadesSelector(inicial: []),
+                                      left: 16,
+                                      right: 16,
+                                      top: 16,
+                                    ),
+                                    child: SingleChildScrollView(
+                                      child: EspecialidadesSelector(inicial: _especialidadesIds),
                                     ),
                                   ),
                                 );
@@ -362,14 +365,14 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                                 final data = await showModalBottomSheet<List<Map<String, dynamic>>>(
                                   context: context,
                                   isScrollControlled: true,
-                                  builder: (_) => const DraggableScrollableSheet(
+                                  builder: (_) => DraggableScrollableSheet(
                                     expand: false,
                                     initialChildSize: 0.8,
                                     minChildSize: 0.5,
                                     maxChildSize: 0.95,
                                     builder: (ctx, sc) => SingleChildScrollView(
                                       controller: sc,
-                                      child: DisponibilidadModal(inicial: []),
+                                      child: DisponibilidadModal(inicial: _disponibilidad),
                                     ),
                                   ),
                                 );

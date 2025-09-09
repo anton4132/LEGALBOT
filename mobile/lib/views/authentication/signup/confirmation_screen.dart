@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../../../Constants/colors.dart';
-import '../../../Widgets/custombtn.dart';
-import '../login_screen.dart';
-import '../../../services/api_client.dart';
+import 'package:legalserviceapp/constants/colors.dart';
+import 'package:legalserviceapp/widgets/custombtn.dart';
+import 'package:legalserviceapp/views/authentication/login_screen.dart';
+import 'package:legalserviceapp/services/api_client.dart';
 
 class ConfirmationScreen extends StatefulWidget {
   final String userType;
@@ -153,7 +153,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
         };
       }
 
-      final resp = await ApiClient.signup(payload);
+      await ApiClient.signup(payload);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('¡Registro exitoso!'), backgroundColor: Colors.green),
@@ -273,7 +273,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     width: double.infinity, height: 55,
                     child: CustomButton(
                       text: _loading ? 'Creando...' : 'Confirmar Registro',
-                      onTap: _loading ? null : _completeRegistration,
+                      onTap: _loading ? null : () { _completeRegistration(); },
                     ),
                   ),
                 ),
