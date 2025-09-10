@@ -24,9 +24,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _direccionController = TextEditingController();
-List<dynamic> _especialidades = [];
-  String? _selectedEspecialidad;
+  List<Map<String, dynamic>> _especialidades = [];
+  int? _selectedEspecialidadId;
+  String? _selectedEspecialidadNombre;
   bool _loadingEspecialidades = false;
+
 
   @override
   void initState() {
@@ -96,8 +98,13 @@ List<dynamic> _especialidades = [];
               'phone': _phoneController.text,
               'email': _emailController.text,
               'direccion': _direccionController.text,
-              'especialidad':
-                  widget.userType == 'abogado' ? _selectedEspecialidad ?? '' : '',            },
+              'especialidadId': widget.userType == 'abogado'
+                  ? (_selectedEspecialidadId?.toString() ?? '')
+                  : '',
+              'especialidadNombre': widget.userType == 'abogado'
+                  ? (_selectedEspecialidadNombre ?? '')
+                  : '',
+            },
           ),
         ),
       );
@@ -118,8 +125,7 @@ List<dynamic> _especialidades = [];
       return false;
     }
 
-    if (widget.userType == 'abogado' &&
-        (_selectedEspecialidad == null || _selectedEspecialidad!.isEmpty)) {      
+        if (widget.userType == 'abogado' && _selectedEspecialidadId == null) {     
         ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Por favor selecciona tu especialidad legal'),
@@ -146,16 +152,21 @@ List<dynamic> _especialidades = [];
     }
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
-      child: DropdownButtonFormField<String>(
-        value: _selectedEspecialidad,
+      child: DropdownButtonFormField<int>(
+        value: _selectedEspecialidadId,
         items: _especialidades
-            .map<DropdownMenuItem<String>>((e) => DropdownMenuItem<String>(
-                  value: e['nombre'] as String,
+            .map<DropdownMenuItem<int>>((e) => DropdownMenuItem<int>(
+                  value: e['id'] as int,
                   child: Text(e['nombre'] as String),
                 ))
             .toList(),
-        onChanged: (value) => setState(() => _selectedEspecialidad = value),
-        decoration: InputDecoration(
+          onChanged: (value) => setState(() {
+              _selectedEspecialidadId = value;
+              _selectedEspecialidadNombre =
+                  _especialidades.firstWhere((e) => e['id'] == value)['nombre']
+                      as String;
+            }),
+          decoration: InputDecoration(
           labelText: 'Especialidad',
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),

@@ -1040,9 +1040,7 @@ module.exports = {
   addUserDisponibilidad,
   deleteUserDisponibilidad,
   // auxiliares
-  fetchDniInfo,
-  validateDni,
-  ensureEspecialidades,
-  hhmmToTimeDate,
-  upsertAbogadoEstudio
+  lookupDni,
+  fetchDniInfo
+
 };

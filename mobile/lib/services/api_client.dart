@@ -4,11 +4,12 @@ import 'package:http/http.dart' as http;
 class ApiClient {
   static const String _baseUrl = 'http://localhost:3000/api';
 
-  static Future<List<dynamic>> fetchEspecialidades() async {
+  static Future<List<Map<String, dynamic>>> fetchEspecialidades() async {
     final uri = Uri.parse('$_baseUrl/especialidades');
     final http.Response response = await http.get(uri);
     if (response.statusCode == 200) {
-      return jsonDecode(response.body) as List<dynamic>;
+      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+      return data.cast<Map<String, dynamic>>();
     }
     throw Exception('Error obteniendo especialidades');
   }
@@ -37,10 +38,10 @@ class ApiClient {
     };
 
     if (userType == 'abogado' &&
-        contactInfo['especialidad'] != null &&
-        contactInfo['especialidad']!.isNotEmpty) {
+        contactInfo['especialidadId'] != null &&
+        contactInfo['especialidadId']!.isNotEmpty) {
       payload['abogado_info'] = {
-        'especialidades': [contactInfo['especialidad']],
+        'especialidadesIds': [int.parse(contactInfo['especialidadId']!)]
       };
     }
 

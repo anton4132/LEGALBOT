@@ -93,6 +93,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       );
     }finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -275,8 +276,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                         
                         // Especialidad solo para abogados
                         if (widget.userType == 'abogado')
-                          _buildInfoRow('Especialidad', widget.contactInfo['especialidad'] ?? ''),
-                        
+                          _buildInfoRow('Especialidad', 
+                          widget.contactInfo['especialidadNombre'] ?? ''),                        
                         // Información de contacto
                         _buildInfoRow('DNI', widget.contactInfo['dni'] ?? ''),
                         _buildInfoRow('Teléfono', widget.contactInfo['phone'] ?? ''),
