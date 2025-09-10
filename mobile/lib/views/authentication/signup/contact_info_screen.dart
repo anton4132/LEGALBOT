@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../Constants/colors.dart';
 import '../../../Widgets/custombtn.dart';
+import '../../../services/api_client.dart';
 import 'security_screen.dart';
 
 class ContactInfoScreen extends StatefulWidget {
@@ -23,8 +24,29 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _direccionController = TextEditingController();
-  final TextEditingController _especialidadController = TextEditingController();
+List<dynamic> _especialidades = [];
+  String? _selectedEspecialidad;
+  bool _loadingEspecialidades = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.userType == 'abogado') {
+      _fetchEspecialidades();
+    }
+  }
+
+  Future<void> _fetchEspecialidades() async {
+    setState(() => _loadingEspecialidades = true);
+    try {
+      final data = await ApiClient.fetchEspecialidades();
+      setState(() => _especialidades = data);
+    } catch (_) {
+      // ignore error
+    } finally {
+      setState(() => _loadingEspecialidades = false);
+    }
+  }
   Widget _buildCustomTextField({
     required TextEditingController controller,
     required String label,
@@ -74,8 +96,8 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
               'phone': _phoneController.text,
               'email': _emailController.text,
               'direccion': _direccionController.text,
-              'especialidad': widget.userType == 'abogado' ? _especialidadController.text : '',
-            },
+              'especialidad':
+                  widget.userType == 'abogado' ? _selectedEspecialidad ?? '' : '',            },
           ),
         ),
       );
@@ -96,10 +118,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       return false;
     }
 
-    if (widget.userType == 'abogado' && _especialidadController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (widget.userType == 'abogado' &&
+        (_selectedEspecialidad == null || _selectedEspecialidad!.isEmpty)) {      
+        ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Por favor ingresa tu especialidad legal'),
+          content: Text('Por favor selecciona tu especialidad legal'),
           backgroundColor: Colors.red,
         ),
       );
@@ -115,10 +138,45 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _direccionController.dispose();
-    _especialidadController.dispose();
     super.dispose();
   }
-
+  Widget _buildEspecialidadDropdown() {
+    if (_loadingEspecialidades) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: DropdownButtonFormField<String>(
+        value: _selectedEspecialidad,
+        items: _especialidades
+            .map<DropdownMenuItem<String>>((e) => DropdownMenuItem<String>(
+                  value: e['nombre'] as String,
+                  child: Text(e['nombre'] as String),
+                ))
+            .toList(),
+        onChanged: (value) => setState(() => _selectedEspecialidad = value),
+        decoration: InputDecoration(
+          labelText: 'Especialidad',
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
+          ),
+          filled: true,
+          fillColor: Colors.grey.shade50,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        ),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -249,10 +307,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        _buildCustomTextField(
-                          controller: _especialidadController,
-                          label: 'Especialidad Legal *',
-                        ),
+                        _buildEspecialidadDropdown(),
                       ],
                     ),
                   ),

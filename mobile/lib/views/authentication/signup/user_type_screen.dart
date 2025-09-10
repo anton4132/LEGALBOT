@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../Constants/colors.dart';
+import '../../../constants/colors.dart';
 import '../../../widgets/detailstext1.dart';
 import 'personal_info_screen.dart';
 

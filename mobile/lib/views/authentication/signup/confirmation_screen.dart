@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../Constants/colors.dart';
-import '../../../Widgets/custombtn.dart';
+import '../../../constants/colors.dart';
+import '../../../widgets/custombtn.dart';
+import '../../../services/api_client.dart';
 import '../login_screen.dart';
 
 class ConfirmationScreen extends StatefulWidget {
@@ -54,27 +55,44 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     super.dispose();
   }
 
-  void _completeRegistration() {
-    // Aquí iría la lógica para enviar datos al backend
-    // Por ahora solo simulamos el registro exitoso
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('¡Registro exitoso! Redirigiendo al login...'),
-        backgroundColor: Colors.green,
-      ),
-    );
-    
-    // Redirigir al login después de 2 segundos
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const LoginScreen(),
-        ),
-        (route) => false, // Esto elimina todas las pantallas anteriores
+  bool _isSubmitting = false;
+
+  Future<void> _completeRegistration() async {
+    setState(() => _isSubmitting = true);
+    try {
+      await ApiClient.signup(
+        userType: widget.userType,
+        personalInfo: widget.personalInfo,
+        contactInfo: widget.contactInfo,
+        password: widget.password,
       );
-    });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('¡Registro exitoso! Redirigiendo al login...'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Future.delayed(const Duration(seconds: 2), () {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const LoginScreen(),
+          ),
+          (route) => false,
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al registrar: $e'),
+          backgroundColor: Colors.red,
+        ),
+
+      );
+    }finally {
+      if (mounted) setState(() => _isSubmitting = false);
   }
 
   @override
@@ -278,8 +296,10 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     width: double.infinity,
                     height: 55,
                     child: CustomButton(
-                      text: 'Confirmar Registro',
-                      onTap: _completeRegistration,
+                      text: _isSubmitting
+                          ? 'Enviando...'
+                          : 'Confirmar Registro',
+                      onTap: _isSubmitting ? null : _completeRegistration,
                     ),
                   ),
                 ),

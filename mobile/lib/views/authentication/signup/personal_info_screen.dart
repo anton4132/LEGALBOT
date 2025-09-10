@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../Constants/colors.dart';
-import '../../../Widgets/custombtn.dart';
+import '../../../constants/colors.dart';
+import '../../../widgets/custombtn.dart';
 import 'contact_info_screen.dart';
 
 class PersonalInfoScreen extends StatefulWidget {

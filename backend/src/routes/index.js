@@ -12,6 +12,8 @@ const estudioRoutes = require('./estudioRoute');
 
 // Importar controlador SOLO para endpoints sueltos como /dni
 const userController = require('../controllers/userController');
+const mobileController = require('../controllers/mobileUsuarioController');
+
 
 // Montaje de sub-routers
 router.use('/auth', authRoutes);
@@ -24,5 +26,6 @@ router.use('/estudios', estudioRoutes);
 
 // Endpoints sueltos
 router.get('/dni/:dni', userController.lookupDni); // /api/dni/:dni
+router.post('/registro', mobileController.register); // /api/registro
 
 module.exports = router;
