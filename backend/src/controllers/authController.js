@@ -1,131 +1,126 @@
 const { prisma } = require('../config/database');
+const jwt = require('jsonwebtoken');
 
-// Login de usuario
-const login = async (req, res) => {
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+
+// Paso 1: iniciar login con correo y devolver cuentas disponibles
+const start = async (req, res) => {
   try {
-    console.log('=== INICIO LOGIN ===');
-    console.log('Body recibido:', req.body);
-    
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      console.log('Error: Email o password faltantes');
-      return res.status(400).json({
-        success: false,
-        message: 'Email y contraseña son requeridos'
-      });
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: 'Email es requerido' });
     }
 
-    console.log('Intentando conectar a la BD...');
-    
-    // Verificar conexión a la BD
-    await prisma.$connect();
-    console.log('✅ Conexión a BD exitosa');
-
-    console.log('Buscando usuario con email:', email);
-    
-    // Buscar usuario por correo
-    const user = await prisma.usuario.findFirst({
-      where: {
-        persona: {
-          correo: email
-        }
-      },
+    const persona = await prisma.persona.findFirst({
+      where: { correo: email },
       include: {
-        persona: true,
-        role: true
+        usuario: {
+          include: { role: true }
+        }
       }
     });
 
-    console.log('Usuario encontrado:', user ? 'SÍ' : 'NO');
-    if (user) {
-      console.log('Datos del usuario:', {
-        id: user.id,
-        email: user.persona.correo,
-        rol: user.role.codigo
-      });
+    if (!persona) {
+      return res.status(401).json({ message: 'Credenciales incorrectas' });
     }
+
+    const cuentas = persona.usuario.map(u => ({
+      usuarioId: u.id,
+      rolId: u.rol_id,
+      rolNombre: u.role.nombre,
+      activo: u.activo,
+      requiere2FA: false
+    }));
+
+    const token = jwt.sign(
+      { personaId: persona.id, scope: 'select_account' },
+      JWT_SECRET,
+      { expiresIn: '5m' }
+    );
+
+    res.json({ personaId: persona.id, cuentas, token });
+  } catch (error) {
+    console.error('Error en start:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+// Paso 2: elegir cuenta y autenticar con contraseña
+const loginAccount = async (req, res) => {
+  try {
+    const { usuarioId, password } = req.body;
+    const personaId = req.ctx.personaId;
+
+    if (!usuarioId || !password) {
+      return res.status(400).json({ message: 'usuarioId y password son requeridos' });
+    }
+
+    const user = await prisma.usuario.findFirst({
+      where: { id: usuarioId, persona_id: personaId },
+      include: { role: true }
+    });
+
+    if (!user || user.clave !== password) {
+      return res.status(401).json({ message: 'Credenciales incorrectas' });
+    }
+
+    const token = jwt.sign(
+      {
+        personaId: user.persona_id,
+        usuarioId: user.id,
+        rolId: user.rol_id,
+        scope: 'full'
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.json({ token, personaId: user.persona_id, usuarioId: user.id, rolId: user.rol_id });
+  } catch (error) {
+    console.error('Error en loginAccount:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+// Cambiar de cuenta sin reautenticar (misma persona)
+const switchAccount = async (req, res) => {
+  try {
+    const { usuarioId } = req.body;
+    const personaId = req.ctx.personaId;
+
+    if (!usuarioId) {
+      return res.status(400).json({ message: 'usuarioId es requerido' });
+    }
+
+    const user = await prisma.usuario.findFirst({
+      where: { id: usuarioId, persona_id: personaId },
+      include: { role: true }
+    });
 
     if (!user) {
-      console.log('❌ Usuario no encontrado');
-      return res.status(401).json({
-        success: false,
-        message: 'Credenciales incorrectas'
-      });
+      return res.status(403).json({ message: 'Cuenta no pertenece a la persona' });
     }
 
-    // Verificar contraseña
-    if (user.clave !== password) {
-      console.log('❌ Contraseña incorrecta');
-      return res.status(401).json({
-        success: false,
-        message: 'Credenciales incorrectas'
-      });
-    }
+    const token = jwt.sign(
+      {
+        personaId: user.persona_id,
+        usuarioId: user.id,
+        rolId: user.rol_id,
+        scope: 'full'
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
 
-    console.log('✅ Login exitoso');
-    
-    // Login exitoso
-    res.json({
-      success: true,
-      message: 'Login exitoso',
-      user: {
-        id: user.id,
-        email: user.persona.correo,
-        nombre: `${user.persona.primer_nombre} ${user.persona.apellido_paterno}`,
-        rol: user.role.codigo
-      }
-    });
-
+    res.json({ token, personaId: user.persona_id, usuarioId: user.id, rolId: user.rol_id });
   } catch (error) {
-    console.error('❌ ERROR EN LOGIN:', error);
-    console.error('Stack trace:', error.stack);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
-// Logout de usuario
-const logout = async (req, res) => {
-  try {
-    // Aquí puedes implementar lógica de logout
-    // Por ejemplo, invalidar tokens, etc.
-    
-    res.json({
-      success: true,
-      message: 'Logout exitoso'
-    });
-  } catch (error) {
-    console.error('Error en logout:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor'
-    });
-  }
-};
-
-// Verificar token
-const verifyToken = async (req, res) => {
-  try {
-    // Aquí puedes implementar verificación de token
-    res.json({
-      success: true,
-      message: 'Token válido'
-    });
-  } catch (error) {
-    console.error('Error verificando token:', error);
-    res.status(401).json({
-      success: false,
-      message: 'Token inválido'
-    });
+    console.error('Error en switchAccount:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
   }
 };
 
 module.exports = {
-  login,
-  logout,
-  verifyToken
+  start,
+  loginAccount,
+  switchAccount
 };

@@ -1,66 +1,45 @@
-const { prisma } = require('../config/database');
+const jwt = require('jsonwebtoken');
 
-// Middleware para verificar autenticación
-const authenticateUser = async (req, res, next) => {
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+
+// Verifica el JWT y construye req.ctx
+const authenticate = (requiredScope = 'full') => (req, res, next) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Token de autenticación requerido'
-      });
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ message: 'Token de autenticación requerido' });
     }
 
-    // Aquí puedes implementar verificación de JWT
-    // Por ahora, asumimos que el token es válido
-    // En producción, deberías verificar el token JWT
-    
+    const token = authHeader.replace('Bearer ', '');
+    const payload = jwt.verify(token, JWT_SECRET);
+
+    if (requiredScope && payload.scope !== requiredScope) {
+      return res.status(403).json({ message: 'Scope inválido' });
+    }
+
+    req.ctx = {
+      personaId: payload.personaId,
+      usuarioId: payload.usuarioId,
+      rolId: payload.rolId
+    };
+    req.tokenScope = payload.scope;
+
     next();
   } catch (error) {
     console.error('Error en autenticación:', error);
-    res.status(401).json({
-      success: false,
-      message: 'Token inválido'
-    });
+    return res.status(401).json({ message: 'Token inválido' });
   }
 };
 
-// Middleware para verificar rol admin
-const requireAdmin = async (req, res, next) => {
-  try {
-    const userId = req.user?.id; // Asumiendo que el usuario está en req.user
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario no autenticado'
-      });
-    }
-
-    const user = await prisma.usuario.findUnique({
-      where: { id: userId },
-      include: { role: true }
-    });
-
-    if (!user || user.role.codigo !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Acceso denegado. Se requieren permisos de administrador.'
-      });
-    }
-
-    next();
-  } catch (error) {
-    console.error('Error verificando rol admin:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor'
-    });
+// Guard para roles permitidos
+const requireRole = (...rolesPermitidos) => (req, res, next) => {
+  if (!req.ctx || !rolesPermitidos.includes(req.ctx.rolId)) {
+    return res.status(403).end();
   }
+  next();
 };
 
 module.exports = {
-  authenticateUser,
-  requireAdmin
+  authenticate,
+  requireRole
 };
