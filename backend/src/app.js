@@ -3,6 +3,9 @@ const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
 const { testConnection } = require('./config/database');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
+
 
 // Importar rutas
 const apiRoutes = require('./routes');
@@ -19,6 +22,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, '../../admin-web')));
+
+const swaggerDocument = YAML.load(path.join(__dirname, '../swagger.yaml'));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Ruta de prueba
 app.get('/', (req, res) => {

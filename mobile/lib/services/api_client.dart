@@ -38,11 +38,12 @@ class ApiClient {
     };
 
     if (userType == 'abogado' &&
-        contactInfo['especialidadId'] != null &&
-        contactInfo['especialidadId']!.isNotEmpty) {
+        contactInfo['especialidadNombre'] != null &&
+        contactInfo['especialidadNombre']!.isNotEmpty) {
       payload['abogado_info'] = {
-        'especialidadesIds': [int.parse(contactInfo['especialidadId']!)]
+        'especialidades': [contactInfo['especialidadNombre']!]
       };
+    
     }
 
     final uri = Uri.parse('$_baseUrl/users');
@@ -52,8 +53,18 @@ class ApiClient {
       body: jsonEncode(payload),
     );
 
-    if (response.statusCode >= 400) {
-      throw Exception('Error registrando usuario');
+    Map<String, dynamic>? data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      // ignore json parse errors
+    }
+
+    if (response.statusCode >= 400 || (data != null && data['success'] == false)) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Error registrando usuario';
+      throw Exception(message);
     }
   }
 }

@@ -16,6 +16,7 @@ async function startServer() {
 
     // Iniciar servidor
     const server = app.listen(PORT, () => {
+      console.log('📚 Swagger UI en http://localhost:3000/api-docs');
       console.log(`🚀 Servidor activo en http://localhost:${PORT}`);
       console.log(`📊 API disponible en http://localhost:${PORT}/api`);
       console.log(`🌐 Admin Web en http://localhost:${PORT}/dashboard`);

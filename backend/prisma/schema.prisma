@@ -434,6 +434,7 @@ model persona {
   correo           String    @unique
   direccion        String?
   usuario          usuario[]
+  
 
   @@index([apellido_paterno])
   @@index([correo])
@@ -492,6 +493,7 @@ model usuario {
   @@index([plan_id])
   @@index([creado_el])
   @@index([activo])
+  @@unique([persona_id, rol_id])
 }
 
 model perfilabogado_especialidad {

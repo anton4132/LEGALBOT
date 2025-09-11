@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../Constants/colors.dart';
-import '../../../Widgets/custombtn.dart';
+import '../../../constants/colors.dart';
+import '../../../widgets/custombtn.dart';
 import '../login_screen.dart';
 import 'confirmation_screen.dart';
 
