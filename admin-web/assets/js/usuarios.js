@@ -7,7 +7,7 @@ let currentAvailability = [];
 let pendingDisponibilidad = [];
 
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 /* ------------------ Utils API ------------------ */
 async function apiFetch(path, options = {}) {
