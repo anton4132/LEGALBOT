@@ -2,10 +2,7 @@ let services = [];
 let currentServiceId = null;
 let isEditing = false;
 
-const API_BASE_URL =
-  typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'http://localhost:3000/api'
-    : '/api';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 console.log('✅ servicios.js cargado correctamente');
 
