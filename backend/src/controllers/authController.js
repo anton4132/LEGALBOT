@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
+
 // Paso 1: iniciar login con correo y devolver cuentas disponibles
 const start = async (req, res) => {
   try {

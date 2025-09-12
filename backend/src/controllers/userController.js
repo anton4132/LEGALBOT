@@ -329,13 +329,223 @@ const getUserById = async (req, res) => {
   }
 };
 
-// ========== Crear ==========
+// ========== Crear ==========// ========== Crear (con attachToExisting) ==========
 const createUser = async (req, res) => {
   try {
-    // Payload del frontend:
-    const { persona, rol_id, clave, abogado_info } = req.body || {};
-    if (!persona || !rol_id || !clave) {
-      return res.status(400).json({ success: false, message: 'Faltan campos requeridos' });
+    const { persona, rol_id, clave, abogado_info, attachToExisting } = req.body || {};
+    if (!rol_id || !clave) {
+      return res.status(400).json({ success: false, message: 'rol_id y clave son requeridos' });
+    }
+
+    // ---------------------------
+    // MODO 1: Adjuntar a persona existente
+    // ---------------------------
+    if (attachToExisting) {
+      // Requerimos al menos DNI o correo para localizar la persona
+      const dni = persona?.dni?.trim();
+      const correo = persona?.correo?.trim();
+
+      if (!dni && !correo) {
+        return res.status(400).json({ success: false, message: 'Para attachToExisting se requiere persona.dni o persona.correo' });
+      }
+
+      // Validar formato de DNI si viene
+      if (dni) {
+        const dniError = await validateDni(dni);
+        if (dniError) return res.status(400).json({ success: false, message: dniError });
+      }
+
+      // Buscar persona por DNI o correo (prefiere DNI si existe)
+      let personaExist = null;
+      if (dni) {
+        personaExist = await prisma.persona.findUnique({ where: { dni } });
+      }
+      if (!personaExist && correo) {
+        personaExist = await prisma.persona.findUnique({ where: { correo } });
+      }
+      if (!personaExist) {
+        return res.status(404).json({ success: false, message: 'Persona no encontrada para adjuntar cuenta' });
+      }
+
+      // Transacción: crear nueva fila en `usuario` si no existe ya ese rol
+      const result = await prisma.$transaction(async (tx) => {
+        // Evitar duplicar el mismo rol para la persona
+        const dup = await tx.usuario.findUnique({
+          where: { persona_id_rol_id: { persona_id: personaExist.id, rol_id: parseInt(rol_id, 10) } }
+        });
+        if (dup) {
+          throw new Error('La persona ya tiene una cuenta con ese rol');
+        }
+
+        const usuarioCreated = await tx.usuario.create({
+          data: {
+            persona_id: personaExist.id,
+            rol_id: parseInt(rol_id, 10),
+            clave, // IMPORTANTE: hashear a nivel de servicio
+            telefono_verificado: false,
+            activo: true
+          }
+        });
+
+        // Si no es abogado o no mandan info, retornar básico
+        const rol = await tx.role.findUnique({ where: { id: parseInt(rol_id, 10) } });
+        if (!rol || rol.codigo !== 'abogado' || !abogado_info) {
+          return tx.usuario.findUnique({
+            where: { id: usuarioCreated.id },
+            include: { persona: true, role: true }
+          });
+        }
+
+        // === PERFIL ABOGADO ===
+        await tx.perfilabogado.create({
+          data: {
+            usuario_id: usuarioCreated.id,
+            tarifa_base: abogado_info.tarifabase ?? null,
+            duracion_minutos: abogado_info.duracionMinutos ?? 60,
+            direccion_atencion: abogado_info.direccionAtencion || null,
+            bio: abogado_info.biografia || null
+          }
+        });
+
+        // === ESPECIALIDADES ===
+        const nombresEspecialidades = Array.isArray(abogado_info.especialidades)
+          ? abogado_info.especialidades
+          : (abogado_info.especialidad ? [abogado_info.especialidad] : []);
+        if (nombresEspecialidades.length) {
+          const especialidadRows = await Promise.all(
+            nombresEspecialidades
+              .map(n => n && n.trim())
+              .filter(Boolean)
+              .map(nombre =>
+                tx.especialidad.upsert({
+                  where: { nombre },
+                  update: {},
+                  create: { nombre }
+                })
+              )
+          );
+          await tx.perfilabogado_especialidad.createMany({
+            data: especialidadRows.map(esp => ({
+              perfilabogado_id: usuarioCreated.id,
+              especialidad_id: esp.id
+            })),
+            skipDuplicates: true
+          });
+        }
+
+        // === ESTUDIO + vínculo abogadoestudio ===
+        const e = abogado_info.estudio || {};
+        if (Object.keys(e).length) {
+          let estudioRow;
+          if (e.ruc && e.ruc.trim() !== '') {
+            estudioRow = await tx.estudio.upsert({
+              where: { ruc: e.ruc },
+              update: {
+                nombre_comercial: e.nombre || null,
+                pais: e.pais || null,
+                ciudad: e.ciudad || null,
+                correo_contacto: e.correo || null,
+                telefono: e.telefono || null,
+                direccion: e.direccion || null,
+                activo: e.activo ?? false
+              },
+              create: {
+                ruc: e.ruc,
+                nombre_comercial: e.nombre || null,
+                pais: e.pais || null,
+                ciudad: e.ciudad || null,
+                correo_contacto: e.correo || null,
+                telefono: e.telefono || null,
+                direccion: e.direccion || null,
+                activo: e.activo ?? false
+              }
+            });
+          } else {
+            estudioRow = await tx.estudio.create({
+              data: {
+                nombre_comercial: e.nombre || null,
+                pais: e.pais || null,
+                ciudad: e.ciudad || null,
+                correo_contacto: e.correo || null,
+                telefono: e.telefono || null,
+                direccion: e.direccion || null,
+                activo: e.activo ?? false
+              }
+            });
+          }
+
+          await tx.abogadoestudio.create({
+            data: {
+              usuario_id: usuarioCreated.id,
+              estudio_id: estudioRow.id,
+              principal: true,
+              rol_en_estudio: e.rol || null,
+              activo: true
+            }
+          });
+        }
+
+        // === DISPONIBILIDAD ===
+        const disp = (abogado_info.disponibilidad || [])
+          .map(s => {
+            const dia = dayNameToNum(s.dia);
+            const ini = hhmmToTimeDate(s.hora_inicio);
+            const fin = hhmmToTimeDate(s.hora_fin);
+            if (!dia || !ini || !fin) return null;
+            return { dia, ini, fin };
+          })
+          .filter(Boolean);
+
+        if (disp.length) {
+          await tx.disponibilidadabogado.createMany({
+            data: disp.map(s => ({
+              abogado_id: usuarioCreated.id,
+              dia_semana: s.dia,
+              hora_inicio: s.ini,
+              hora_fin: s.fin
+            })),
+            skipDuplicates: true
+          });
+        }
+
+        return tx.usuario.findUnique({
+          where: { id: usuarioCreated.id },
+          include: {
+            persona: true,
+            role: true,
+            perfilabogado: {
+              include: {
+                disponibilidadabogado: true,
+                especialidades: { include: { especialidad: true } }
+              }
+            },
+            abogadoestudios: {
+              include: { estudio: true },
+              where: { activo: true },
+              orderBy: { principal: 'desc' }
+            }
+          }
+        });
+      });
+
+      const user = result?.perfilabogado
+        ? {
+            ...result,
+            perfilabogado: {
+              ...result.perfilabogado,
+              especialidades: (result.perfilabogado.especialidades || []).map(pe => pe.especialidad)
+            }
+          }
+        : result;
+
+      return res.status(201).json({ success: true, message: 'Cuenta agregada a persona existente', user });
+    }
+
+    // ---------------------------
+    // MODO 2: Crear persona + usuario (comportamiento actual)
+    // ---------------------------
+    if (!persona) {
+      return res.status(400).json({ success: false, message: 'Faltan datos de persona' });
     }
     const {
       dni, telefono, correo, primer_nombre, segundo_nombre,
@@ -350,7 +560,7 @@ const createUser = async (req, res) => {
     const dniError = await validateDni(normalizedDni);
     if (dniError) return res.status(400).json({ success: false, message: dniError });
 
-    // Unicidad de persona
+    // Unicidad de persona (solo en modo crear persona)
     const [dniExist, correoExist] = await Promise.all([
       prisma.persona.findUnique({ where: { dni: normalizedDni } }),
       prisma.persona.findUnique({ where: { correo } })
@@ -376,8 +586,9 @@ const createUser = async (req, res) => {
         data: {
           persona_id: personaCreated.id,
           rol_id: parseInt(rol_id, 10),
-          clave, // OJO: hashea en tu capa de servicio si aún no
-          telefono_verificado: false
+          clave, // IMPORTANTE: hashear a nivel de servicio
+          telefono_verificado: false,
+          activo: true
         }
       });
 
@@ -390,9 +601,7 @@ const createUser = async (req, res) => {
         });
       }
 
-
-
-      // === Upsert perfilabogado (sin estudio/especialidad directos; van por otras tablas) ===
+      // === PERFIL ABOGADO ===
       await tx.perfilabogado.create({
         data: {
           usuario_id: usuarioCreated.id,
@@ -403,7 +612,7 @@ const createUser = async (req, res) => {
         }
       });
 
-      // === Especialidades ===
+      // === ESPECIALIDADES ===
       const nombresEspecialidades = Array.isArray(abogado_info.especialidades)
         ? abogado_info.especialidades
         : (abogado_info.especialidad ? [abogado_info.especialidad] : []);
@@ -429,7 +638,7 @@ const createUser = async (req, res) => {
         });
       }
 
-      // === Estudio + vínculo abogadoestudio ===
+      // === ESTUDIO + vínculo abogadoestudio ===
       const e = abogado_info.estudio || {};
       if (Object.keys(e).length) {
         let estudioRow;
@@ -481,7 +690,7 @@ const createUser = async (req, res) => {
         });
       }
 
-      // === Disponibilidad ===
+      // === DISPONIBILIDAD ===
       const disp = (abogado_info.disponibilidad || [])
         .map(s => {
           const dia = dayNameToNum(s.dia);
@@ -524,7 +733,6 @@ const createUser = async (req, res) => {
       });
     });
 
-    // Aplana especialidades
     const user = result?.perfilabogado
       ? {
           ...result,
@@ -537,6 +745,9 @@ const createUser = async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Usuario creado exitosamente', user });
   } catch (error) {
+    if (String(error.message || '').includes('ya tiene una cuenta con ese rol')) {
+      return res.status(409).json({ success: false, message: error.message });
+    }
     console.error('Error creando usuario:', error);
     res.status(500).json({ success: false, message: 'Error creando usuario' });
   }
@@ -573,6 +784,21 @@ const updateUser = async (req, res) => {
 
     const updated = await prisma.$transaction(async (tx) => {
       // Actualizar usuario/rol
+      if (rol_id && Number(rol_id) !== usuarioActual.rol_id) {
+        const dup = await tx.usuario.findUnique({
+          where: {
+            persona_id_rol_id: {
+              persona_id: usuarioActual.persona_id,
+              rol_id: Number(rol_id)
+            }
+          }
+        });
+        if (dup) {
+          // Lanzamos un error controlado para capturarlo fuera
+          throw new Error('DUP_ROLE');
+        }
+      }
+
       if (rol_id) {
         await tx.usuario.update({
           where: { id: userId },
@@ -787,11 +1013,13 @@ const updateUser = async (req, res) => {
 
     res.json({ success: true, message: 'Usuario actualizado exitosamente', user });
   } catch (error) {
-    console.error('Error actualizando usuario:', error);
-    res.status(500).json({ success: false, message: 'Error actualizando usuario' });
+    if (error?.message === 'DUP_ROLE') {
+    return res.status(409).json({ success: false, message: 'La persona ya tiene ese rol' });
+  }
+  console.error('Error actualizando usuario:', error);
+  res.status(500).json({ success: false, message: 'Error actualizando usuario' });
   }
 };
-
 // ========== Eliminar ==========
 const deleteUser = async (req, res) => {
   try {
@@ -806,16 +1034,21 @@ const deleteUser = async (req, res) => {
     await prisma.$transaction(async (tx) => {
       // Si es abogado, limpia dependencias manuales
       if (usuario.perfilabogado) {
-        
         await tx.disponibilidadabogado.deleteMany({ where: { abogado_id: id } });
         await tx.perfilabogado_especialidad.deleteMany({ where: { perfilabogado_id: id } });
         await tx.perfilabogado.delete({ where: { usuario_id: id } });
       }
-      // Desactiva vínculos con estudios (por si no hiciera cascade en DB)
+      // Desactiva vínculos con estudios
       await tx.abogadoestudio.deleteMany({ where: { usuario_id: id } });
 
+      // Borrar el usuario
       await tx.usuario.delete({ where: { id } });
-      await tx.persona.delete({ where: { id: usuario.persona_id } });
+
+      // 🔑 Aquí va el cambio:
+      const remaining = await tx.usuario.count({ where: { persona_id: usuario.persona_id } });
+      if (remaining === 0) {
+        await tx.persona.delete({ where: { id: usuario.persona_id } });
+      }
     });
 
     res.json({ success: true, message: 'Usuario eliminado exitosamente' });
