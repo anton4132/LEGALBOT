@@ -2,7 +2,7 @@ let services = [];
 let currentServiceId = null;
 let isEditing = false;
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = '/api';
 
 console.log('✅ servicios.js cargado correctamente');
 
