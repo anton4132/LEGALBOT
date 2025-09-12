@@ -16,7 +16,7 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors({ origin: 'https://legalbot-kjwg.vercel.app/', credentials: true }));
+app.use(cors({ origin: 'https://legalbot-kjwg-pye5avlb3-joel-guillens-projects-3fee480e.vercel.app', credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
