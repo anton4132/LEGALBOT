@@ -16,9 +16,11 @@ async function startServer() {
 
     // Iniciar servidor
     const server = app.listen(PORT, () => {
+      const apiPath = process.env.VERCEL ? '' : '/api';
       console.log('📚 Swagger UI en http://localhost:3000/api-docs');
       console.log(`🚀 Servidor activo en http://localhost:${PORT}`);
-      console.log(`📊 API disponible en http://localhost:${PORT}/api`);
+      console.log(`📊 API disponible en http://localhost:${PORT}${apiPath}`);
+
       console.log(`🌐 Admin Web en http://localhost:${PORT}/dashboard`);
       console.log(`🔐 Login en http://localhost:${PORT}/login`);
     });

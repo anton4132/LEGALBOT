@@ -63,7 +63,6 @@ app.get('/servicios', (req, res) => {
 
 
 
-// API Routes
 app.use('/api', apiRoutes);
 
 // Middleware de manejo de errores

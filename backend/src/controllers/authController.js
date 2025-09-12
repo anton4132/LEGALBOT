@@ -3,6 +3,42 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
+// Login directo para compatibilidad con frontend existente
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email y password son requeridos' });
+    }
+
+    const persona = await prisma.persona.findFirst({
+      where: { correo: email },
+      include: { usuario: true }
+    });
+
+    if (!persona) {
+      return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
+    }
+
+    const user = persona.usuario.find(u => u.clave === password);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: persona.correo,
+        nombre: `${persona.primer_nombre} ${persona.apellido_paterno}`.trim()
+      }
+    });
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
 
 // Paso 1: iniciar login con correo y devolver cuentas disponibles
 const start = async (req, res) => {
@@ -121,6 +157,7 @@ const switchAccount = async (req, res) => {
 };
 
 module.exports = {
+  login,
   start,
   loginAccount,
   switchAccount
