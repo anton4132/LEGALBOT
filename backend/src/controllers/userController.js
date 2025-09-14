@@ -561,30 +561,48 @@ const createUser = async (req, res) => {
     if (dniError) return res.status(400).json({ success: false, message: dniError });
 
     // Unicidad de persona (solo en modo crear persona)
-    const [dniExist, correoExist] = await Promise.all([
+    const [personaByDni, personaByCorreo] = await Promise.all([
       prisma.persona.findUnique({ where: { dni: normalizedDni } }),
       prisma.persona.findUnique({ where: { correo } })
     ]);
-    if (dniExist)   return res.status(400).json({ success: false, message: 'El DNI ya está registrado' });
-    if (correoExist) return res.status(400).json({ success: false, message: 'El email ya está registrado' });
+    if (personaByDni && personaByCorreo && personaByDni.id !== personaByCorreo.id) {
+      return res.status(409).json({ success: false, message: 'DNI y correo pertenecen a personas diferentes' });
+    }
+    const personaExistente = personaByDni || personaByCorreo;
+
+    // Si existe, validar que no tenga ya el mismo rol
+    if (personaExistente) {
+      const existingUserRole = await prisma.usuario.findFirst({
+        where: { persona_id: personaExistente.id, rol_id: parseInt(rol_id, 10) }
+      });
+      if (existingUserRole) {
+        return res.status(409).json({ success: false, message: 'La persona ya posee un usuario con ese rol' });
+      }
+    }
 
     const result = await prisma.$transaction(async (tx) => {
-      const personaCreated = await tx.persona.create({
-        data: {
-          dni: normalizedDni,
-          telefono: telefono || null,
-          correo,
-          primer_nombre,
-          segundo_nombre: segundo_nombre || null,
-          apellido_paterno,
-          apellido_materno: apellido_materno || null,
-          direccion: direccion || null
-        }
-      });
+      let personaId;
+      if (personaExistente) {
+        personaId = personaExistente.id;
+      } else {
+        const personaCreated = await tx.persona.create({
+          data: {
+            dni: normalizedDni,
+            telefono: telefono || null,
+            correo,
+            primer_nombre,
+            segundo_nombre: segundo_nombre || null,
+            apellido_paterno,
+            apellido_materno: apellido_materno || null,
+            direccion: direccion || null
+          }
+        });
+        personaId = personaCreated.id;
+      }
 
       const usuarioCreated = await tx.usuario.create({
         data: {
-          persona_id: personaCreated.id,
+          persona_id: personaId,
           rol_id: parseInt(rol_id, 10),
           clave, // IMPORTANTE: hashear a nivel de servicio
           telefono_verificado: false,
@@ -781,7 +799,19 @@ const updateUser = async (req, res) => {
       const emailExists = await prisma.persona.findUnique({ where: { correo: persona.correo } });
       if (emailExists) return res.status(400).json({ success: false, message: 'El email ya está registrado por otro usuario' });
     }
-
+     // Si cambian de rol, validar que no exista otro usuario de la misma persona con ese rol
+     if (rol_id && parseInt(rol_id, 10) !== usuarioActual.rol_id) {
+      const roleTaken = await prisma.usuario.findFirst({
+        where: {
+          persona_id: usuarioActual.persona_id,
+          rol_id: parseInt(rol_id, 10),
+          id: { not: userId }
+        }
+      });
+      if (roleTaken) {
+        return res.status(409).json({ success: false, message: 'La persona ya posee un usuario con ese rol' });
+      }
+    }
     const updated = await prisma.$transaction(async (tx) => {
       // Actualizar usuario/rol
       if (rol_id && Number(rol_id) !== usuarioActual.rol_id) {
