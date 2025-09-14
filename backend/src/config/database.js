@@ -1,6 +1,10 @@
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+if (!global.prisma) {
+  global.prisma = new PrismaClient();
+}
+
+const prisma = global.prisma;
 
 // Función para verificar conexión
 async function testConnection() {
