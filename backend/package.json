@@ -19,9 +19,6 @@
   ],
   "author": "LegalBot Team",
   "license": "ISC",
-  "engines": {
-    "node": ">=18"
-  },
   "dependencies": {
     "@prisma/client": "^6.12.0",
     "cors": "^2.8.5",
