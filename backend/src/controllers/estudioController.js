@@ -33,7 +33,7 @@ const createEstudio = async (req, res) => {
         correo_contacto: data.correo_contacto ?? null,
         telefono: data.telefono ?? null,
         direccion: data.direccion ?? null,
-        activo: true
+        activo: false
       }
     });
     res.status(201).json(created);

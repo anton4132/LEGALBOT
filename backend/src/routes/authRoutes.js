@@ -53,7 +53,7 @@ const { authenticate } = require('../middleware/auth');
  *       properties:
  *         usuarioId:
  *           type: integer
- *           example: 34
+ *           example: 51
  *     ErrorResponse:
  *       type: object
  *       properties:
@@ -115,15 +115,10 @@ router.post('/start', authController.start);
  * /auth/login-account:
  *   post:
  *     summary: Selecciona cuenta y autentica con contraseña (paso 2)
+ *     description: Enviar el token devuelto por /auth/start en la cabecera `Authorization` como `Bearer <token>`.
  *     tags: [Auth]
- *     parameters:
- *       - in: header
- *         name: Authorization
- *         required: true
- *         description: Bearer token devuelto por /auth/start (scope=select_account)
- *         schema:
- *           type: string
- *         example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     security:
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

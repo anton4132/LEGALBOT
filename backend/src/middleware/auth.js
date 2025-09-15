@@ -5,12 +5,21 @@ const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 // Verifica el JWT y construye req.ctx
 const authenticate = (requiredScope = 'full') => (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
+    let token;
+
+    if (req.headers.authorization) {
+      const parts = req.headers.authorization.split(' ');
+      token = parts.length === 2 ? parts[1] : parts[0];
+    } else if (req.body && req.body.token) {
+      token = req.body.token;
+    } else if (req.query && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (!token) {
       return res.status(401).json({ message: 'Token de autenticación requerido' });
     }
 
-    const token = authHeader.replace('Bearer ', '');
     const payload = jwt.verify(token, JWT_SECRET);
 
     if (requiredScope && payload.scope !== requiredScope) {
@@ -27,6 +36,9 @@ const authenticate = (requiredScope = 'full') => (req, res, next) => {
     next();
   } catch (error) {
     console.error('Error en autenticación:', error);
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expirado' });
+    }
     return res.status(401).json({ message: 'Token inválido' });
   }
 };
