@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import '../../../Constants/colors.dart';
-import '../../../Widgets/custombtn.dart';
-import '../../../Widgets/custom_app_bar.dart';
-import '../../../Widgets/custom_drawer.dart';
-import '../../../Widgets/gradient_container.dart';
-import '../../../Widgets/shadow_card.dart';
-import '../../../Widgets/option_card.dart';
-import '../../../Widgets/section_header.dart';
-import '../../../Widgets/consultation_input.dart';
+import '../../../constants/colors.dart';
+import '../../../widgets/custombtn.dart';
+import '../../../widgets/custom_app_bar.dart';
+import '../../../widgets/custom_drawer.dart';
+import '../../../widgets/gradient_container.dart';
+import '../../../widgets/shadow_card.dart';
+import '../../../widgets/option_card.dart';
+import '../../../widgets/section_header.dart';
+import '../../../widgets/consultation_input.dart';
+import '../../authentication/login_screen.dart';
 
 class ClientHome extends StatefulWidget {
   const ClientHome({super.key});
@@ -45,6 +46,38 @@ class _ClientHomeState extends State<ClientHome> {
     } else {
       print('Deteniendo grabación...');
     }
+  }
+
+  void _handleLogout() async {
+    final bool? shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.buttonColor,
+            ),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+
+    if (!(shouldLogout ?? false) || !mounted) {
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -102,9 +135,8 @@ class _ClientHomeState extends State<ClientHome> {
             },
           ),
         ],
-        onLogout: () {
-          // TODO: Implementar logout
-        },
+        onLogout: _handleLogout,
+
       ),
       body: GradientContainer(
         child: Column(

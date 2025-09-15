@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  static const String _baseUrl = 'https://localhost:3000/api';
+  static const String _baseUrl = 'http://legalbot1-tan.vercel.app/api';
+
 
   static Future<List<Map<String, dynamic>>> fetchEspecialidades() async {
     final uri = Uri.parse('$_baseUrl/especialidades');
@@ -72,7 +73,7 @@ class ApiClient {
     required String dni,
     required String password,
   }) async {
-      String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
+    String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
      final uri = Uri.parse('$_baseUrl/auth/mobile-login');
     final http.Response response = await http.post(
       uri,

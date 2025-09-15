@@ -1,6 +1,9 @@
+/*
 generator erd {
   provider = "prisma-erd-generator"
 }
+
+*/
 
 generator client {
   provider = "prisma-client-js"
