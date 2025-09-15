@@ -1,7 +1,10 @@
 
+/*
 generator erd {
   provider = "prisma-erd-generator"
 }
+
+*/
 
 
 generator client {
