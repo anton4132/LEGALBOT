@@ -23,7 +23,23 @@ router.use('/services', serviceRoutes);
 router.use('/especialidades', especialidadRoutes);
 router.use('/estudios', estudioRoutes);
 
-// Endpoints sueltos
+/**
+ * @swagger
+ * /dni/{dni}:
+ *   get:
+ *     summary: Consulta información de un DNI
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: dni
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Número de DNI a consultar
+ *     responses:
+ *       200:
+ *         description: Información del DNI
+ */
 router.get('/dni/:dni', userController.lookupDni); // /api/dni/:dni
 
 module.exports = router;

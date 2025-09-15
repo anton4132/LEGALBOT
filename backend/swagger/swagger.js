@@ -1,25 +1,26 @@
-import swaggerJsdoc from 'swagger-jsdoc';
+const swaggerJsdoc = require('swagger-jsdoc');
+const path = require('path');
 
 const options = {
-    definition: {
-        openapi: '3.0.0',
-        info: {
-            title: 'Jedi API',
-            version: '1.0.0',
-            description: 'API for managing Jedi',
-            contact: {
-                name: 'IDW'
-            },
-            servers: [
-                {
-                    url: 'http://localhost:3000',
-                    description: 'Local server'
-                }
-            ]
-        }
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'LegalBot API',
+      version: '1.0.0',
+      description: 'API for managing LegalBot resources',
+      contact: {
+        name: 'LegalBot Team'
+      }
     },
-    apis: ['./routes/*.js']
+    servers: [
+      {
+        url: 'http://localhost:3000/api',
+        description: 'Local server'
+      }
+    ]
+  },
+  apis: [path.join(__dirname, '../src/routes/*.js')]
 };
 
 const specs = swaggerJsdoc(options);
-export default specs;
+module.exports = specs;

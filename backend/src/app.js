@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 const { testConnection } = require('./config/database');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
-import specs from '../swagger/swagger.js';
+const specs = require('../swagger/swagger');
 
 
 // Importar rutas
