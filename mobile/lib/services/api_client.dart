@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api';
+  static const String _baseUrl = 'https://localhost:3000/api';
 
   static Future<List<Map<String, dynamic>>> fetchEspecialidades() async {
     final uri = Uri.parse('$_baseUrl/especialidades');
@@ -72,13 +72,14 @@ class ApiClient {
     required String dni,
     required String password,
   }) async {
-    final uri = Uri.parse('$_baseUrl/auth/login');
+      String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
+     final uri = Uri.parse('$_baseUrl/auth/mobile-login');
     final http.Response response = await http.post(
       uri,
       headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({
-        'telefono': phone,
-        'dni': dni,
+        'telefono': _digitsOnly(phone),
+        'dni': _digitsOnly(dni),
         'password': password,
       }),
     );
@@ -97,7 +98,7 @@ class ApiClient {
     }
 
     final message = data != null && data['message'] is String
-        ? data!['message'] as String
+        ? data['message'] as String
         : 'No se pudo iniciar sesión';
     throw Exception(message);
   }

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
+const mobileAuthController = require('../controllers/mobileAuthController');
 const { authenticate } = require('../middleware/auth');
 
 /**
@@ -85,7 +86,7 @@ const { authenticate } = require('../middleware/auth');
  *         description: Error interno
  */
 router.post('/login', authController.login);
-
+router.post('/mobile-login', mobileAuthController.loginFlutter);
 /**
  * @swagger
  * /auth/start:
