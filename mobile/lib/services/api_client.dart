@@ -67,4 +67,38 @@ class ApiClient {
       throw Exception(message);
     }
   }
+    static Future<Map<String, dynamic>> login({
+    required String phone,
+    required String dni,
+    required String password,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/login');
+    final http.Response response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'telefono': phone,
+        'dni': dni,
+        'password': password,
+      }),
+    );
+
+    Map<String, dynamic>? data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      // ignore parse errors; handled below
+    }
+
+    final bool success =
+        response.statusCode == 200 && (data?['success'] as bool? ?? false);
+    if (success && data != null && data['user'] is Map<String, dynamic>) {
+      return data['user'] as Map<String, dynamic>;
+    }
+
+    final message = data != null && data['message'] is String
+        ? data!['message'] as String
+        : 'No se pudo iniciar sesión';
+    throw Exception(message);
+  }
 }

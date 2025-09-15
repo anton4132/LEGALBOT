@@ -1,17 +1,13 @@
-
 //import 'package:legalserviceapp/views/Authentication/signup_screen.dart';
-import 'signup_screen.dart';
-
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../Constants/colors.dart';
-import '../../Widgets/custombtn.dart';
-import '../../Widgets/customtextfield.dart';
+import '../../constants/colors.dart';
+import '../../services/api_client.dart';
+import '../../widgets/custombtn.dart';
 import '../../widgets/detailstext1.dart';
-import '../Home/homescreen.dart';
+import '../client/home/client_home.dart';
 import 'forgot_password.dart';
-import '../common/user_selection_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,11 +19,11 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   bool _rememberMe = false;
+  bool _isLoading = false;
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // Controllers para los campos
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -62,33 +58,85 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
+  Future<void> _handleLogin() async {
+    FocusScope.of(context).unfocus();
+    final String phone = _phoneController.text.trim();
+    final String dni = _dniController.text.trim();
+    final String password = _passwordController.text.trim();
+
+    if (phone.isEmpty || dni.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor completa todos los campos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (phone.length < 9) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El teléfono debe tener al menos 9 dígitos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (dni.length != 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El DNI debe tener exactamente 8 dígitos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (password.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('La clave debe tener exactamente 6 dígitos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await ApiClient.login(
+        phone: phone,
+        dni: dni,
+        password: password,
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const ClientHome()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message.isEmpty ? 'No se pudo iniciar sesión' : message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
-        children: [
-          // Background with title
-          Container(
-            width: double.infinity,
-            color: AppColors.buttonColor,
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  SizedBox(height: 100),
-                  Text1(
-                    text1: 'LegalBot',
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Login Form
-          Positioned.fill(
-            child: Align(
+@@ -144,56 +160,86 @@ class _LoginScreenState extends State<LoginScreen>
               alignment: Alignment.bottomCenter,
               child: SlideTransition(
                 position: _slideAnimation,
@@ -113,7 +161,6 @@ class _LoginScreenState extends State<LoginScreen>
                             color: AppColors.buttonColor,
                           ),
                           const SizedBox(height: 30),
-                          // Campo de teléfono
                           TextFormField(
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
@@ -123,18 +170,23 @@ class _LoginScreenState extends State<LoginScreen>
                             ],
                             decoration: InputDecoration(
                               labelText: 'Número de Teléfono',
-                              prefixIcon: const Icon(Icons.phone, color: AppColors.buttonColor),
+                              prefixIcon: const Icon(
+                                Icons.phone,
+                                color: AppColors.buttonColor,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.buttonColor, width: 2),
+                                borderSide: const BorderSide(
+                                  color: AppColors.buttonColor,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(height: 20),
-                          // Campo de DNI
                           TextFormField(
                             controller: _dniController,
                             keyboardType: TextInputType.number,
@@ -144,18 +196,23 @@ class _LoginScreenState extends State<LoginScreen>
                             ],
                             decoration: InputDecoration(
                               labelText: 'DNI',
-                              prefixIcon: const Icon(Icons.badge, color: AppColors.buttonColor),
+                              prefixIcon: const Icon(
+                                Icons.badge,
+                                color: AppColors.buttonColor,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.buttonColor, width: 2),
+                                borderSide: const BorderSide(
+                                  color: AppColors.buttonColor,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(height: 20),
-                          // Campo de contraseña
                           TextFormField(
                             controller: _passwordController,
                             obscureText: true,
@@ -166,14 +223,23 @@ class _LoginScreenState extends State<LoginScreen>
                             ],
                             decoration: InputDecoration(
                               labelText: 'Clave (6 dígitos)',
-                              prefixIcon: const Icon(Icons.lock, color: AppColors.buttonColor),
-                              suffixIcon: const Icon(Icons.visibility_off, color: Colors.grey),
+                              prefixIcon: const Icon(
+                                Icons.lock,
+                                color: AppColors.buttonColor,
+                              ),
+                              suffixIcon: const Icon(
+                                Icons.visibility_off,
+                                color: Colors.grey,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.buttonColor, width: 2),
+                                borderSide: const BorderSide(
+                                  color: AppColors.buttonColor,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
@@ -217,7 +283,9 @@ class _LoginScreenState extends State<LoginScreen>
                               Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const UserSelectionScreen(), // En lugar de HomePage()
+                                  builder:
+                                      (context) =>
+                                          const UserSelectionScreen(), // En lugar de HomePage()
                                 ),
                               );
                             },
@@ -266,12 +334,12 @@ class _LoginScreenState extends State<LoginScreen>
         const end = Offset.zero;
         const curve = Curves.easeInOut;
 
-        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+        var tween = Tween(
+          begin: begin,
+          end: end,
+        ).chain(CurveTween(curve: curve));
 
-        return SlideTransition(
-          position: animation.drive(tween),
-          child: child,
-        );
+        return SlideTransition(position: animation.drive(tween), child: child);
       },
     );
   }
