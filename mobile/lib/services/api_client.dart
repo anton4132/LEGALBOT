@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  static const String _baseUrl = 'http://legalbot1-tan.vercel.app/api';
-
+  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api';
 
   static Future<List<Map<String, dynamic>>> fetchEspecialidades() async {
     final uri = Uri.parse('$_baseUrl/especialidades');
@@ -42,9 +41,8 @@ class ApiClient {
         contactInfo['especialidadNombre'] != null &&
         contactInfo['especialidadNombre']!.isNotEmpty) {
       payload['abogado_info'] = {
-        'especialidades': [contactInfo['especialidadNombre']!]
+        'especialidades': [contactInfo['especialidadNombre']!],
       };
-    
     }
 
     final uri = Uri.parse('$_baseUrl/users');
@@ -61,20 +59,23 @@ class ApiClient {
       // ignore json parse errors
     }
 
-    if (response.statusCode >= 400 || (data != null && data['success'] == false)) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Error registrando usuario';
+    if (response.statusCode >= 400 ||
+        (data != null && data['success'] == false)) {
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Error registrando usuario';
       throw Exception(message);
     }
   }
-    static Future<Map<String, dynamic>> login({
+
+  static Future<Map<String, dynamic>> login({
     required String phone,
     required String dni,
     required String password,
   }) async {
     String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
-     final uri = Uri.parse('$_baseUrl/auth/mobile-login');
+    final uri = Uri.parse('$_baseUrl/auth/mobile-login');
     final http.Response response = await http.post(
       uri,
       headers: const {'Content-Type': 'application/json'},
@@ -98,9 +99,10 @@ class ApiClient {
       return data['user'] as Map<String, dynamic>;
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo iniciar sesión';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo iniciar sesión';
     throw Exception(message);
   }
 }

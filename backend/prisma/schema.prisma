@@ -1,10 +1,8 @@
 
-/*
 generator erd {
   provider = "prisma-erd-generator"
 }
 
-*/
 
 
 generator client {
@@ -374,7 +372,7 @@ model pasarelametodo {
 model estudio {
   id               Int     @id @default(autoincrement())
   /////////////////////////
-  ruc              String? @unique
+  ruc              String @unique
   nombre_comercial String?
   pais             String?
   ciudad           String?
@@ -427,6 +425,23 @@ model perfilabogado {
   disponibilidadabogado disponibilidadabogado[]
 
   especialidades perfilabogado_especialidad[] @relation("PerfilEspecialidades")
+}
+
+enum EstadoVerificacion { PENDIENTE OBSERVADA APROBADA RECHAZADA }
+
+model verificacionabogado {
+  id             Int                 @id @default(autoincrement())
+  persona_id     Int                 @unique   // <-- hace la relación 1:1
+  linkedin_url   String?
+  titulo_url     String?
+  estado         EstadoVerificacion  @default(PENDIENTE)
+  observaciones   String?
+  aprobado_el    DateTime?
+  creado_el      DateTime            @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime            @updatedAt @db.Timestamptz(6)
+
+  persona        persona             @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+  @@index([estado])
 }
 
 model persona {
