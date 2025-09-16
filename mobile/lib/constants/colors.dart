@@ -55,12 +55,14 @@ class AppColors {
         iconTheme: IconThemeData(color: primaryColor),
       ),
 
-      cardTheme: CardTheme(
+      cardTheme: const CardThemeData(
         color: cardColor,
         elevation: 4,
-        margin: const EdgeInsets.symmetric(vertical: 8.0),
+        margin: EdgeInsets.symmetric(vertical: 8.0),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16.0),
+          borderRadius: BorderRadius.all(
+            Radius.circular(16.0),
+          ),
         ),
       ),
 

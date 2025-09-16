@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../../constants/colors.dart';
+import '../../../constants/colors.dart';
 
 // Enum para manejar los estados de la verificación de forma clara.
 enum VerificationStatus { none, pending, approved, rejected, observed }
@@ -68,14 +68,14 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
                 'Completa tu postulación',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryColor
+                      color: AppColors.primaryColor
                     ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Envía tus datos para que nuestro equipo pueda verificar tu perfil profesional.',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppTheme.textSecondaryColor,
+                      color: AppColors.textSecondaryColor,
                     ),
               ),
               const SizedBox(height: 30),
@@ -148,25 +148,25 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         icon = Icons.hourglass_top_rounded;
         title = 'Postulación Pendiente';
         subtitle = 'Hemos recibido tus datos. Nuestro equipo los revisará pronto.';
-        color = AppTheme.pendingColor;
+        color = AppColors.pendingColor;
         break;
       case VerificationStatus.approved:
         icon = Icons.check_circle_rounded;
         title = '¡Felicidades! Postulación Aprobada';
         subtitle = 'Tu perfil ha sido verificado. Ahora tienes acceso a las funciones de abogado.';
-        color = AppTheme.approvedColor;
+        color = AppColors.approvedColor;
         break;
       case VerificationStatus.rejected:
         icon = Icons.cancel_rounded;
         title = 'Postulación Rechazada';
         subtitle = 'Lamentablemente, no pudimos verificar tus datos en este momento.';
-        color = AppTheme.rejectedColor;
+        color = AppColors.rejectedColor;
         break;
       case VerificationStatus.observed:
         icon = Icons.info_rounded;
         title = 'Postulación Observada';
         subtitle = 'Se requiere una acción de tu parte para continuar.';
-        color = AppTheme.observedColor;
+        color = AppColors.observedColor;
         break;
       default:
         return const SizedBox.shrink();
@@ -201,7 +201,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
                       Text(
                         subtitle,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppTheme.textSecondaryColor,
+                              color: AppColors.textSecondaryColor,
                             ),
                       ),
                     ],
@@ -216,7 +216,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
                 child: Text(
                   'Observación: $_observationMessage',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.textColor,
+                    color: AppColors.textColor,
                     fontStyle: FontStyle.italic
                   ),
                 ),
