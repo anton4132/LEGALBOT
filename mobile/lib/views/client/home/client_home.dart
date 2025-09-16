@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../constants/colors.dart'; // Debe exportar AppTheme
+import '../../../constants/colors.dart';
 import '../../../widgets/custombtn.dart';
 import '../../../widgets/custom_app_bar.dart';
 import '../../../widgets/custom_drawer.dart';
@@ -9,10 +9,8 @@ import '../../../widgets/option_card.dart';
 import '../../../widgets/section_header.dart';
 import '../../../widgets/consultation_input.dart';
 import '../../authentication/login_screen.dart';
+import '../../lawyer/home/lawyer_home.dart';
 import 'become_lawyer_screen.dart';
-
-
-//import 'lawyer_screen.dart'; // <- Ajusta la ruta si tu archivo está en otro sitio
 
 class ClientHome extends StatefulWidget {
   const ClientHome({super.key});
@@ -62,7 +60,8 @@ class _ClientHomeState extends State<ClientHome> {
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryColor,
+              backgroundColor: AppColors.buttonColor,
+              foregroundColor: AppColors.buttonTextColor,
             ),
             child: const Text('Cerrar sesión'),
           ),
@@ -88,7 +87,7 @@ class _ClientHomeState extends State<ClientHome> {
   void _navigateToLawyerPanel() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const LawyerScreen()),
+      MaterialPageRoute(builder: (_) => const LawyerHome()),
     );
   }
 
@@ -164,14 +163,15 @@ class _ClientHomeState extends State<ClientHome> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.waving_hand, color: AppColors.primaryColor, size: 24),
+                        const Icon(Icons.waving_hand,
+                            color: AppColors.buttonColor, size: 24),
                         const SizedBox(width: 8),
-                        Text(
+                        const Text(
                           '¡Hola!',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.primaryColor,
+                            color: AppColors.buttonColor,
                           ),
                         ),
                       ],
@@ -179,7 +179,10 @@ class _ClientHomeState extends State<ClientHome> {
                     const SizedBox(height: 5),
                     const Text(
                       '¿En qué puedo ayudarte hoy?',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.text2Color,
+                      ),
                     ),
                   ],
                 ),
@@ -194,15 +197,16 @@ class _ClientHomeState extends State<ClientHome> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: [
-                        Icon(Icons.chat_bubble_outline, color: AppColors.primaryColor, size: 20),
-                        const SizedBox(width: 8),
+                      children: const [
+                        Icon(Icons.chat_bubble_outline,
+                            color: AppColors.buttonColor, size: 20),
+                        SizedBox(width: 8),
                         Text(
                           'Consulta Rápida',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.primaryColor,
+                            color: AppColors.buttonColor,
                           ),
                         ),
                       ],
@@ -210,7 +214,7 @@ class _ClientHomeState extends State<ClientHome> {
                     const SizedBox(height: 8),
                     const Text(
                       'Escribe tu consulta legal o usa el micrófono para dictar',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: AppColors.text2Color),
                     ),
                     const SizedBox(height: 10),
                     ConsultationInput(
@@ -237,42 +241,11 @@ class _ClientHomeState extends State<ClientHome> {
                 crossAxisSpacing: 15,
                 mainAxisSpacing: 15,
                 childAspectRatio: 1.1,
-                children: [
-                  OptionCard(
-                    icon: Icons.question_answer,
-                    title: 'Consultas\nLegales',
-                    color: Colors.blue,
-                    onTap: () {
-                      // TODO
-                    },
-                  ),
-                  OptionCard(
-                    icon: Icons.directions_car,
-                    title: 'Búsqueda\nVehicular',
-                    color: Colors.orange,
-                    onTap: () {
-                      // TODO
-                    },
-                  ),
-                  OptionCard(
-                    icon: Icons.search,
-                    title: 'Buscar\nAbogados',
-                    color: Colors.green,
-                    onTap: () {
-                      // TODO
-                    },
-                  ),
-                  OptionCard(
-                    icon: Icons.history,
-                    title: 'Mi\nHistorial',
-                    color: Colors.purple,
-                    onTap: () {
-                      // TODO
-                    },
-                  ),
-                ],
-              ),
-
+                children: [ OptionCard( icon: Icons.question_answer, title: 'Consultas\nLegales', color: Colors.blue, onTap: () { // TODO 
+                }, ), OptionCard( icon: Icons.directions_car, title: 'Búsqueda\nVehicular', color: Colors.orange, onTap: () { // TODO
+                 }, ), OptionCard( icon: Icons.search, title: 'Buscar\nAbogados', color: Colors.green, onTap: () { // TODO 
+                 }, ), OptionCard( icon: Icons.history, title: 'Mi\nHistorial', color: Colors.purple, onTap: () { // TODO
+                 }, ), ], ),
               const SizedBox(height: 20),
 
               // Ayuda rápida
@@ -282,15 +255,16 @@ class _ClientHomeState extends State<ClientHome> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: [
-                        Icon(Icons.help_outline, color: AppColors.primaryColor, size: 20),
-                        const SizedBox(width: 8),
+                      children: const [
+                        Icon(Icons.help_outline,
+                            color: AppColors.buttonColor, size: 20),
+                        SizedBox(width: 8),
                         Text(
                           '¿Necesitas ayuda?',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.primaryColor,
+                            color: AppColors.buttonColor,
                           ),
                         ),
                       ],
@@ -298,7 +272,7 @@ class _ClientHomeState extends State<ClientHome> {
                     const SizedBox(height: 8),
                     const Text(
                       'Nuestro equipo legal está disponible 24/7 para ayudarte con cualquier consulta.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: AppColors.text2Color),
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
@@ -316,7 +290,7 @@ class _ClientHomeState extends State<ClientHome> {
 
               const SizedBox(height: 20),
 
-              // CTA Conviértete en Abogado
+              // CTA Conviértete en Abogado (degradado armónico dentro de la paleta)
               _buildBecomeLawyerCard(),
             ],
           ),
@@ -326,44 +300,65 @@ class _ClientHomeState extends State<ClientHome> {
   }
 
   Widget _buildBecomeLawyerCard() {
-    return Card(
-      color: AppColors.accentColor.withOpacity(0.2),
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: AppColors.accentColor, width: 1.5),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.tabColor.withOpacity(0.92),
+            AppColors.button2Color.withOpacity(0.95),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.tabColor.withOpacity(0.28),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: _navigateToBecomeLawyer,
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Row(
-            children: [
-              const Icon(Icons.school_rounded, color: AppColors.accentColor, size: 40),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Conviértete en Abogado',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Únete a nuestra red de profesionales y expande tus servicios.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondaryColor,
-                          ),
-                    ),
-                  ],
+        child: InkWell(
+          onTap: _navigateToBecomeLawyer,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              children: [
+                const Icon(Icons.school_rounded,
+                    color: AppColors.buttonTextColor, size: 40),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Conviértete en Abogado',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: AppColors.buttonTextColor,
+                        ),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Únete a nuestra red de profesionales y expande tus servicios.',
+                        style: TextStyle(
+                          color: AppColors.buttonTextColor,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textSecondaryColor),
-            ],
+                const Icon(Icons.arrow_forward_ios_rounded,
+                    color: AppColors.buttonTextColor),
+              ],
+            ),
           ),
         ),
       ),

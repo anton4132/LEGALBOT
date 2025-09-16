@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../../Constants/colors.dart';
-import '../../../Widgets/custombtn.dart';
-import '../../../Widgets/custom_app_bar.dart';
-import '../../../Widgets/custom_drawer.dart';
-import '../../../Widgets/gradient_container.dart';
-import '../../../Widgets/shadow_card.dart';
-import '../../../Widgets/option_card.dart';
-import '../../../Widgets/section_header.dart';
-import '../../../Widgets/consultation_input.dart';
-
+import '../../../constants/colors.dart';
+import '../../../widgets/custombtn.dart';
+import '../../../widgets/custom_app_bar.dart';
+import '../../../widgets/custom_drawer.dart';
+import '../../../widgets/gradient_container.dart';
+import '../../../widgets/shadow_card.dart';
+import '../../../widgets/option_card.dart';
+import '../../../widgets/section_header.dart';
+import '../../../widgets/consultation_input.dart';
 class LawyerHome extends StatefulWidget {
   const LawyerHome({super.key});
 
