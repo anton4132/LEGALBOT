@@ -1,4 +1,7 @@
 const { prisma } = require('../config/database');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
 const normalizeDigits = (value = '') => String(value).replace(/\D/g, '');
 
@@ -13,6 +16,21 @@ const buildFullName = (persona) =>
     .filter((part) => part.length > 0)
     .join(' ')
     .trim();
+
+const mapVerification = (record) => {
+  if (!record) return null;
+  return {
+    id: record.id,
+    personaId: record.persona_id,
+    estado: record.estado,
+    linkedinUrl: record.linkedin_url,
+    tituloUrl: record.titulo_url,
+    observaciones: record.observaciones,
+    aprobadoEl: record.aprobado_el,
+    creadoEl: record.creado_el,
+    actualizadoEl: record.actualizado_el,
+  };
+};
 
 const loginFlutter = async (req, res) => {
   try {
@@ -42,13 +60,7 @@ const loginFlutter = async (req, res) => {
 
     const persona = await prisma.persona.findUnique({
       where: { dni: sanitizedDni },
-      include: {
-        usuario: {
-          include: { role: true },
-        },
-      },
     });
-
     if (!persona) {
       return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
     }
@@ -75,8 +87,24 @@ const loginFlutter = async (req, res) => {
 
     const nombreCompleto = buildFullName(persona);
 
+    const token = jwt.sign(
+      {
+        personaId: persona.id,
+        usuarioId: preferredAccount.id,
+        rolId: preferredAccount.rol_id,
+        scope: 'full',
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' },
+    );
+
+    const verification = await prisma.verificacionabogado.findUnique({
+      where: { persona_id: persona.id },
+    });
+
     return res.json({
       success: true,
+      token,
       user: {
         personaId: persona.id,
         usuarioId: preferredAccount.id,
@@ -89,6 +117,14 @@ const loginFlutter = async (req, res) => {
         correo: persona.correo,
         nombreCompleto,
       },
+      accounts: matchingAccounts.map((u) => ({
+        usuarioId: u.id,
+        rolId: u.rol_id,
+        rolCodigo: u.role?.codigo || null,
+        rolNombre: u.role?.nombre || null,
+        activo: u.activo,
+      })),
+      verification: mapVerification(verification),
     });
   } catch (error) {
     console.error('Error en login móvil:', error);

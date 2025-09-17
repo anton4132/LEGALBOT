@@ -435,6 +435,7 @@ model verificacionabogado {
   linkedin_url   String?
   titulo_url     String?
   estado         EstadoVerificacion  @default(PENDIENTE)
+  motivo_rechazo   String?
   observaciones   String?
   aprobado_el    DateTime?
   creado_el      DateTime            @default(now()) @db.Timestamptz(6)

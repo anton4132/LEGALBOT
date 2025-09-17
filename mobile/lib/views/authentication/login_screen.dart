@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import '../../constants/colors.dart';
 import '../../services/api_client.dart';
+import '../../services/session_service.dart';
 import '../../widgets/custombtn.dart';
 import '../../widgets/detailstext1.dart';
 import '../client/home/client_home.dart';
 import 'forgot_password.dart';
 import 'signup_screen.dart';
+import '../../services/session_service.dart';
 
 
 
@@ -77,16 +78,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await ApiClient.login(
+      final session = await ApiClient.login(
         phone: _phoneController.text.trim(),
         dni: _dniController.text.trim(),
         password: _passwordController.text.trim(),
       );
+      SessionService.instance.setSession(session);
 
       if (!mounted) return;
+      final Widget destination =
+          session.isCurrentLawyer && !session.hasClientAccount
+              ? const LawyerHome()
+              : const ClientHome();
+
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const ClientHome()),
+        MaterialPageRoute(builder: (_) => destination),
       );
     } catch (e) {
       if (!mounted) return;

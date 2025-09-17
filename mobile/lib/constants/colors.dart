@@ -64,7 +64,7 @@ class AppColors {
       ),
 
       // Cards limpias con borde sutil y radios amables
-      cardTheme: const CardTheme(
+      cardTheme: const CardThemeData(
         color: Colors.white,
         elevation: 4,
         margin: EdgeInsets.symmetric(vertical: 8.0),

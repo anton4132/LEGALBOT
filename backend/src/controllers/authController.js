@@ -114,7 +114,16 @@ const loginAccount = async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    res.json({ token, personaId: user.persona_id, usuarioId: user.id, rolId: user.rol_id });
+    
+    res.json({
+      token,
+      personaId: user.persona_id,
+      usuarioId: user.id,
+      rolId: user.rol_id,
+      rolCodigo: user.role?.codigo || null,
+      rolNombre: user.role?.nombre || null,
+      activo: user.activo,
+    });
   } catch (error) {
     console.error('Error en loginAccount:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
@@ -151,7 +160,15 @@ const switchAccount = async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    res.json({ token, personaId: user.persona_id, usuarioId: user.id, rolId: user.rol_id });
+    res.json({
+      token,
+      personaId: user.persona_id,
+      usuarioId: user.id,
+      rolId: user.rol_id,
+      rolCodigo: user.role?.codigo || null,
+      rolNombre: user.role?.nombre || null,
+      activo: user.activo,
+    });
   } catch (error) {
     console.error('Error en switchAccount:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
