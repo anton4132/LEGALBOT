@@ -44,16 +44,45 @@ class ApiClient {
     required String password,
   }) async {
     final int rolId = userType == 'abogado' ? 2 : 3;
+     String? trimOrNull(String? value) {
+      if (value == null) return null;
+      final trimmed = value.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+
+    String? digitsOrNull(String? value) {
+      if (value == null) return null;
+      final digits = value.replaceAll(RegExp(r'\D'), '');
+      return digits.isEmpty ? null : digits;
+    }
+
+    final persona = <String, dynamic>{
+      'dni': trimOrNull(contactInfo['dni']),
+      'telefono': digitsOrNull(contactInfo['phone']),
+      'correo': trimOrNull(contactInfo['email']),
+      'primer_nombre': trimOrNull(personalInfo['primerNombre']),
+      'segundo_nombre': trimOrNull(personalInfo['segundoNombre']),
+      'apellido_paterno': trimOrNull(personalInfo['apellidoPaterno']),
+      'apellido_materno': trimOrNull(personalInfo['apellidoMaterno']),
+      'direccion': trimOrNull(contactInfo['direccion']),
+    };
+    persona.removeWhere((key, value) => value == null);
 
     final Map<String, dynamic> payload = {
-      'persona': {
-        'dni': contactInfo['dni'],
-        'telefono': contactInfo['phone'],
-        'correo': contactInfo['email'],
-        'primer_nombre': personalInfo['primerNombre'],
-        'segundo_nombre': personalInfo['segundoNombre'],
+      'rol_id': rolId,
+      'clave': password,
+      'persona': persona,
+    };
+
+    if (userType == 'abogado') {
+      final especialidadNombre = trimOrNull(contactInfo['especialidadNombre']);
+      if (especialidadNombre != null) {
+        payload['abogado_info'] = {
+          'especialidades': [especialidadNombre],
+        };
       }
-      
+    }
+
     final uri = Uri.parse('$_baseUrl/users');
     final http.Response response = await http.post(
       uri,

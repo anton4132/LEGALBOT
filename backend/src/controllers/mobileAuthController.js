@@ -60,6 +60,13 @@ const loginFlutter = async (req, res) => {
 
     const persona = await prisma.persona.findUnique({
       where: { dni: sanitizedDni },
+      include: {
+        usuario: {
+          include: {
+            role: true,
+          },
+        },
+      },
     });
     if (!persona) {
       return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
@@ -75,7 +82,14 @@ const loginFlutter = async (req, res) => {
     }
 
     const passwordValue = String(password).trim();
-    const matchingAccounts = persona.usuario.filter((u) => u.clave === passwordValue);
+    
+    const cuentas = Array.isArray(persona.usuario) ? persona.usuario : [];
+
+    if (cuentas.length === 0) {
+      return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
+    }
+
+    const matchingAccounts = cuentas.filter((u) => u.clave === passwordValue);
 
     if (matchingAccounts.length === 0) {
       return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });

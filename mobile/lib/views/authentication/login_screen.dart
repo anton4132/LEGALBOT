@@ -6,6 +6,7 @@ import '../../services/session_service.dart';
 import '../../widgets/custombtn.dart';
 import '../../widgets/detailstext1.dart';
 import '../client/home/client_home.dart';
+import '../lawyer/home/lawyer_home.dart';
 import 'forgot_password.dart';
 import 'signup_screen.dart';
 import '../../services/session_service.dart';

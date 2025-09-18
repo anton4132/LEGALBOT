@@ -1,8 +1,12 @@
 const { EstadoVerificacion } = require('@prisma/client');
 const { prisma } = require('../config/database');
 
+
+//limpia strings (trim). Si no es string, devuelve ''.
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
+
+//verifica que la URL sea http/https usando new URL(...).
 const isValidUrl = (value) => {
   if (!value) return false;
   try {
@@ -13,6 +17,7 @@ const isValidUrl = (value) => {
   }
 };
 
+//mapApplication(row): normaliza el objeto verificacionabogado a un JSON limpio para responder.
 const mapApplication = (row) => {
   if (!row) return null;
   return {
@@ -28,6 +33,7 @@ const mapApplication = (row) => {
   };
 };
 
+//ensureAdmin(rolId): verifica si el rol es admin o superadmin.
 const ensureAdmin = async (rolId) => {
   if (!rolId) return false;
   const role = await prisma.role.findUnique({ where: { id: rolId } });
@@ -35,6 +41,7 @@ const ensureAdmin = async (rolId) => {
   return code === 'admin' || code === 'superadmin';
 };
 
+//ensureLawyerAccount(tx, personaId): verifica si la persona tiene una cuenta de abogado activa.
 const ensureLawyerAccount = async (tx, personaId) => {
   const role = await tx.role.findFirst({ where: { codigo: 'abogado' } });
   if (!role) {

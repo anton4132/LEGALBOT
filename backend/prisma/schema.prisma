@@ -1,18 +1,17 @@
-
+/*
 generator erd {
   provider = "prisma-erd-generator"
 }
 
-
+*/
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")          // pooled (PgBouncer)
-
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // pooled (PgBouncer)
 }
 
 /**
@@ -372,7 +371,7 @@ model pasarelametodo {
 model estudio {
   id               Int     @id @default(autoincrement())
   /////////////////////////
-  ruc              String @unique
+  ruc              String  @unique
   nombre_comercial String?
   pais             String?
   ciudad           String?
@@ -427,36 +426,41 @@ model perfilabogado {
   especialidades perfilabogado_especialidad[] @relation("PerfilEspecialidades")
 }
 
-enum EstadoVerificacion { PENDIENTE OBSERVADA APROBADA RECHAZADA }
+enum EstadoVerificacion {
+  PENDIENTE
+  OBSERVADA
+  APROBADA
+  RECHAZADA
+}
 
 model verificacionabogado {
-  id             Int                 @id @default(autoincrement())
-  persona_id     Int                 @unique   // <-- hace la relación 1:1
+  id             Int                @id @default(autoincrement())
+  persona_id     Int                @unique // <-- hace la relación 1:1
   linkedin_url   String?
   titulo_url     String?
-  estado         EstadoVerificacion  @default(PENDIENTE)
-  motivo_rechazo   String?
-  observaciones   String?
+  estado         EstadoVerificacion @default(PENDIENTE)
+  observaciones  String?
   aprobado_el    DateTime?
-  creado_el      DateTime            @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime            @updatedAt @db.Timestamptz(6)
+  creado_el      DateTime           @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime           @updatedAt @db.Timestamptz(6)
 
-  persona        persona             @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+  persona persona @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+
   @@index([estado])
 }
 
 model persona {
-  id               Int       @id @default(autoincrement())
-  dni              String    @unique @db.Char(8)
-  telefono         String?   @db.VarChar(15)
-  primer_nombre    String    @db.VarChar(100)
-  segundo_nombre   String?   @db.VarChar(100)
-  apellido_paterno String    @db.VarChar(100)
-  apellido_materno String?   @db.VarChar(100)
-  correo           String    @unique
-  direccion        String?
-  usuario          usuario[]
-  
+  id                  Int                  @id @default(autoincrement())
+  dni                 String               @unique @db.Char(8)
+  telefono            String?              @db.VarChar(15)
+  primer_nombre       String               @db.VarChar(100)
+  segundo_nombre      String?              @db.VarChar(100)
+  apellido_paterno    String               @db.VarChar(100)
+  apellido_materno    String?              @db.VarChar(100)
+  correo              String               @unique
+  direccion           String?
+  usuario             usuario[]
+  verificacionabogado verificacionabogado?
 
   @@index([apellido_paterno])
   @@index([correo])
@@ -510,12 +514,12 @@ model usuario {
   role                                              role                 @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
 
+  @@unique([persona_id, rol_id])
   @@index([persona_id])
   @@index([rol_id])
   @@index([plan_id])
   @@index([creado_el])
   @@index([activo])
-  @@unique([persona_id, rol_id])
 }
 
 model perfilabogado_especialidad {
