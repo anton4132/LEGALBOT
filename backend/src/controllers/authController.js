@@ -88,7 +88,5 @@ const switchAccount = async (req, res) => {
 
 module.exports = {
   login,
-  start,
-  loginAccount,
   switchAccount
 };

@@ -163,7 +163,7 @@ class ApiClient {
     throw Exception(message);
   }
 
-  static Future<LawyerApplicationStatus> fetchLawyerApplicationStatus(
+ static Future<LawyerApplicationStatus> fetchLawyerApplicationStatus(
       {required String token}) async {
     final uri = Uri.parse('$_baseUrl/lawyers/applications/me');
     final response = await http.get(uri, headers: _authHeaders(token));
@@ -186,23 +186,43 @@ class ApiClient {
     required String tituloUrl,
     required String colegiaturaNumero,
     required String colegiaturaEstado,
-    required String colegiaturaComprobanteUrl,
     required String colegioNombre,
     required String colegioRegion,
+    String? colegiaturaComprobanteUrl,
+    List<int>? comprobanteArchivoBytes,
+    String? comprobanteArchivoNombre,
   }) async {
     final uri = Uri.parse('$_baseUrl/lawyers/applications');
+    final Map<String, dynamic> payload = {
+      'linkedinUrl': linkedinUrl,
+      'tituloUrl': tituloUrl,
+      'colegiaturaNumero': colegiaturaNumero,
+      'colegiaturaEstado': colegiaturaEstado,
+      'colegioNombre': colegioNombre,
+      'colegioRegion': colegioRegion,
+    };
+
+    if (colegiaturaComprobanteUrl != null &&
+        colegiaturaComprobanteUrl.trim().isNotEmpty) {
+      payload['colegiaturaComprobanteUrl'] = colegiaturaComprobanteUrl;
+    }
+
+    if (comprobanteArchivoBytes != null && comprobanteArchivoBytes.isNotEmpty) {
+      payload['comprobanteArchivoBytes'] =
+          base64Encode(comprobanteArchivoBytes);
+      if (comprobanteArchivoNombre != null &&
+          comprobanteArchivoNombre.trim().isNotEmpty) {
+        payload['comprobanteArchivoNombre'] = comprobanteArchivoNombre;
+      }
+    } else if (comprobanteArchivoNombre != null &&
+        comprobanteArchivoNombre.trim().isNotEmpty) {
+      payload['comprobanteArchivoNombre'] = comprobanteArchivoNombre;
+    }
+
     final response = await http.post(
       uri,
       headers: _authHeaders(token, json: true),
-      body: jsonEncode({
-        'linkedinUrl': linkedinUrl,
-        'tituloUrl': tituloUrl,
-        'colegiaturaNumero': colegiaturaNumero,
-        'colegiaturaEstado': colegiaturaEstado,
-        'colegiaturaComprobanteUrl': colegiaturaComprobanteUrl,
-        'colegioNombre': colegioNombre,
-        'colegioRegion': colegioRegion,
-      }),
+      body: jsonEncode(payload),
     );
 
     final data = _tryDecodeJson(response.body);

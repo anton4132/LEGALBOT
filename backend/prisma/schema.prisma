@@ -452,8 +452,6 @@ model verificacionabogado {
   @@index([estado])
 }
 
-
-
 model colegioabogado {
   id             Int      @id @default(autoincrement())
   region         String? // p.ej. "Tacna", "Lima"
@@ -468,7 +466,6 @@ model colegioabogado {
   @@index([region])
 }
 
-
 enum EstadoColegiatura {
   VIGENTE
   SUSPENDIDA
@@ -481,7 +478,7 @@ model colegiaturaabogado {
   colegio_id           Int
   numero               String            @db.VarChar(30)
   estado               EstadoColegiatura @default(VIGENTE)
-  comprobante_url      String?
+  carnet               String?
   fecha_emision        DateTime?         @db.Timestamptz(6)
   fecha_vigencia_hasta DateTime?         @db.Timestamptz(6)
   creado_el            DateTime          @default(now()) @db.Timestamptz(6)

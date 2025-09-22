@@ -143,7 +143,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     setState(() {
       final estado = status.colegiaturaEstado;
       final region = status.colegioRegion;
-      final comprobante = status.comprobanteUrl;
+      final comprobante = status.colegiaturaComprobanteUrl;
 
       _selectedColegiaturaEstado =
           (estado != null && estado.trim().isNotEmpty) ? estado : null;
@@ -351,6 +351,137 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     );
   }
 
+  Widget _buildStatusIndicator() {
+    final LawyerApplicationStatus status = _status;
+
+    IconData icon;
+    Color color;
+    String title;
+    String description;
+
+    switch (status.state) {
+      case LawyerApplicationState.pendiente:
+        icon = Icons.hourglass_top_rounded;
+        color = AppColors.button2Color;
+        title = 'Solicitud en revisión';
+        description =
+            'Nuestro equipo está evaluando la información que enviaste.';
+        break;
+      case LawyerApplicationState.observada:
+        icon = Icons.error_outline_rounded;
+        color = AppColors.text3Color;
+        title = 'Solicitud con observaciones';
+        description =
+            'Revisa los comentarios y vuelve a enviar la información solicitada.';
+        break;
+      case LawyerApplicationState.aprobada:
+        icon = Icons.verified_rounded;
+        color = Colors.green;
+        title = 'Solicitud aprobada';
+        description =
+            'Tu documentación fue validada. Activaremos tu perfil profesional en breve.';
+        break;
+      case LawyerApplicationState.rechazada:
+        icon = Icons.highlight_off_rounded;
+        color = Colors.redAccent;
+        title = 'Solicitud rechazada';
+        description =
+            'Tu postulación no fue aprobada. Puedes comunicarte con soporte para más detalles.';
+        break;
+      case LawyerApplicationState.none:
+      default:
+        icon = Icons.info_outline_rounded;
+        color = AppColors.text2Color;
+        title = 'Sin estado disponible';
+        description =
+            'Aún no registramos movimientos en tu postulación de abogado.';
+        break;
+    }
+
+    final String? observation = status.observation?.trim();
+    final bool hasObservation = observation != null && observation.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.18),
+              shape: BoxShape.circle,
+            ),
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, color: color, size: 26),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.text2Color,
+                    height: 1.4,
+                  ),
+                ),
+                if (hasObservation) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.buttonTextColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.strokeColor),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Observaciones',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          observation!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.text1Color,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadStatus() async {
     final session = _session;
     if (session == null) return;
@@ -413,7 +544,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       }
     }
 
-    final String? comprobanteUrl =
+    final String? colegiaturaComprobanteUrl =
         comprobante == null ? _existingComprobanteUrl : null;
 
     setState(() => _isSubmitting = true);
@@ -426,7 +557,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         colegiaturaEstado: colegiaturaEstado,
         colegioNombre: colegioNombre,
         colegioRegion: colegioRegion,
-        comprobanteUrl: comprobanteUrl,
+        colegiaturaComprobanteUrl: colegiaturaComprobanteUrl,
         comprobanteArchivoBytes: comprobanteBytes,
         comprobanteArchivoNombre: comprobanteNombre,
       );
@@ -780,3 +911,4 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       ),
     );
   }
+}
