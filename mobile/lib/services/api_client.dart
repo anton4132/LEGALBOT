@@ -5,7 +5,7 @@ import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
 
 class ApiClient {
-  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api';
+  static const String _baseUrl = 'http://localhost:3000/api';
 
   static Map<String, dynamic>? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;

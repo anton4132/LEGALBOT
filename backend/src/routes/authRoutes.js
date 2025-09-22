@@ -62,7 +62,7 @@ const { authenticate } = require('../middleware/auth');
  *           type: string
  *           example: Credenciales incorrectas
  */
-
+router.post('/login', authController.login);
 /**
  * @swagger
  * /auth/login:
@@ -85,58 +85,9 @@ const { authenticate } = require('../middleware/auth');
  *       500:
  *         description: Error interno
  */
-router.post('/login', authController.login);
-router.post('/mobile-login', mobileAuthController.loginFlutter);
-/**
- * @swagger
- * /auth/start:
- *   post:
- *     summary: Inicia el flujo de autenticación con email (paso 1)
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/StartRequest'
- *     responses:
- *       200:
- *         description: Devuelve cuentas disponibles y un token temporal
- *       400:
- *         description: Falta email
- *       401:
- *         description: Usuario no encontrado
- *       500:
- *         description: Error interno
- */
-router.post('/start', authController.start);
 
-/**
- * @swagger
- * /auth/login-account:
- *   post:
- *     summary: Selecciona cuenta y autentica con contraseña (paso 2)
- *     description: Enviar el token devuelto por /auth/start en la cabecera `Authorization` como `Bearer <token>`.
- *     tags: [Auth]
- *     security:
- *       - BearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LoginAccountRequest'
- *     responses:
- *       200:
- *         description: Devuelve JWT completo para la cuenta
- *       400:
- *         description: Campos faltantes
- *       401:
- *         description: Token inválido/expirado o credenciales incorrectas
- *       500:
- *         description: Error interno
- */
-router.post('/login-account', authenticate('select_account'), authController.loginAccount);
+router.post('/mobile-login', mobileAuthController.loginFlutter);
+
 
 /**
  * @swagger

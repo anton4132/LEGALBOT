@@ -1,9 +1,8 @@
-/*
-generator erd {
-  provider = "prisma-erd-generator"
-}
-
-*/
+/**
+ * generator erd {
+ * provider = "prisma-erd-generator"
+ * }
+ */
 
 generator client {
   provider = "prisma-client-js"
@@ -435,7 +434,7 @@ enum EstadoVerificacion {
 
 model verificacionabogado {
   id             Int                @id @default(autoincrement())
-  persona_id     Int                @unique // <-- hace la relación 1:1
+  persona_id     Int                @unique
   linkedin_url   String?
   titulo_url     String?
   estado         EstadoVerificacion @default(PENDIENTE)
@@ -446,13 +445,62 @@ model verificacionabogado {
 
   persona persona @relation(fields: [persona_id], references: [id], onDelete: Cascade)
 
+  colegiatura_id Int?
+  colegiatura    colegiaturaabogado? @relation(fields: [colegiatura_id], references: [id], onDelete: SetNull)
+
+  @@index([colegiatura_id])
+  @@index([estado])
+}
+
+
+
+model colegioabogado {
+  id             Int      @id @default(autoincrement())
+  region         String? // p.ej. "Tacna", "Lima"
+  nombre         String
+  activo         Boolean  @default(true)
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
+
+  colegiaturas colegiaturaabogado[]
+
+  @@index([activo])
+  @@index([region])
+}
+
+
+enum EstadoColegiatura {
+  VIGENTE
+  SUSPENDIDA
+  CANCELADA
+}
+
+model colegiaturaabogado {
+  id                   Int               @id @default(autoincrement())
+  persona_id           Int               @unique
+  colegio_id           Int
+  numero               String            @db.VarChar(30)
+  estado               EstadoColegiatura @default(VIGENTE)
+  comprobante_url      String?
+  fecha_emision        DateTime?         @db.Timestamptz(6)
+  fecha_vigencia_hasta DateTime?         @db.Timestamptz(6)
+  creado_el            DateTime          @default(now()) @db.Timestamptz(6)
+  actualizado_el       DateTime          @updatedAt @db.Timestamptz(6)
+
+  persona             persona               @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+  colegio             colegioabogado        @relation(fields: [colegio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  verificacionabogado verificacionabogado[]
+
+  @@unique([colegio_id, numero]) // el mismo número no se repite dentro del mismo colegio
+  @@unique([id, persona_id])
+  @@index([colegio_id])
   @@index([estado])
 }
 
 model persona {
   id                  Int                  @id @default(autoincrement())
   dni                 String               @unique @db.Char(8)
-  telefono            String?              @db.VarChar(15)
+  telefono            String?              @unique @db.VarChar(15)
   primer_nombre       String               @db.VarChar(100)
   segundo_nombre      String?              @db.VarChar(100)
   apellido_paterno    String               @db.VarChar(100)
@@ -461,6 +509,7 @@ model persona {
   direccion           String?
   usuario             usuario[]
   verificacionabogado verificacionabogado?
+  colegiatura         colegiaturaabogado?
 
   @@index([apellido_paterno])
   @@index([correo])
