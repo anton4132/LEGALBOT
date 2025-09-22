@@ -28,6 +28,11 @@ class LawyerApplicationStatus {
   final String? observation;
   final String? linkedinUrl;
   final String? tituloUrl;
+  final String? colegiaturaNumero;
+  final String? colegiaturaEstado;
+  final String? colegiaturaComprobanteUrl;
+  final String? colegioNombre;
+  final String? colegioRegion;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? approvedAt;
@@ -38,6 +43,11 @@ class LawyerApplicationStatus {
     this.observation,
     this.linkedinUrl,
     this.tituloUrl,
+    this.colegiaturaNumero,
+    this.colegiaturaEstado,
+    this.colegiaturaComprobanteUrl,
+    this.colegioNombre,
+    this.colegioRegion,
     this.createdAt,
     this.updatedAt,
     this.approvedAt,
@@ -67,6 +77,21 @@ class LawyerApplicationStatus {
       observation: json['observaciones'] as String?,
       linkedinUrl: json['linkedinUrl'] as String? ?? json['linkedin_url'] as String?,
       tituloUrl: json['tituloUrl'] as String? ?? json['titulo_url'] as String?,
+
+      colegiaturaNumero: json['colegiaturaNumero'] as String?
+          ?? json['colegiatura_numero'] as String?,
+
+      colegiaturaEstado: json['colegiaturaEstado'] as String?
+          ?? json['colegiatura_estado'] as String?,
+
+      colegiaturaComprobanteUrl: json['colegiaturaComprobanteUrl'] as String?
+          ?? json['colegiatura_comprobante_url'] as String?,
+
+      colegioNombre:
+          json['colegioNombre'] as String? ?? json['colegio_nombre'] as String?,
+      colegioRegion:
+      
+          json['colegioRegion'] as String? ?? json['colegio_region'] as String?,
       createdAt: _parseDate(json['creadoEl'] ?? json['creado_el']),
       updatedAt: _parseDate(json['actualizadoEl'] ?? json['actualizado_el']),
       approvedAt: _parseDate(json['aprobadoEl'] ?? json['aprobado_el']),
@@ -79,6 +104,11 @@ class LawyerApplicationStatus {
     String? observation,
     String? linkedinUrl,
     String? tituloUrl,
+    String? colegiaturaNumero,
+    String? colegiaturaEstado,
+    String? colegiaturaComprobanteUrl,
+    String? colegioNombre,
+    String? colegioRegion,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? approvedAt,
@@ -89,6 +119,12 @@ class LawyerApplicationStatus {
       observation: observation ?? this.observation,
       linkedinUrl: linkedinUrl ?? this.linkedinUrl,
       tituloUrl: tituloUrl ?? this.tituloUrl,
+      colegiaturaNumero: colegiaturaNumero ?? this.colegiaturaNumero,
+      colegiaturaEstado: colegiaturaEstado ?? this.colegiaturaEstado,
+      colegiaturaComprobanteUrl:
+          colegiaturaComprobanteUrl ?? this.colegiaturaComprobanteUrl,
+      colegioNombre: colegioNombre ?? this.colegioNombre,
+      colegioRegion: colegioRegion ?? this.colegioRegion,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       approvedAt: approvedAt ?? this.approvedAt,

@@ -184,6 +184,11 @@ class ApiClient {
     required String token,
     required String linkedinUrl,
     required String tituloUrl,
+    required String colegiaturaNumero,
+    required String colegiaturaEstado,
+    required String colegiaturaComprobanteUrl,
+    required String colegioNombre,
+    required String colegioRegion,
   }) async {
     final uri = Uri.parse('$_baseUrl/lawyers/applications');
     final response = await http.post(
@@ -192,6 +197,11 @@ class ApiClient {
       body: jsonEncode({
         'linkedinUrl': linkedinUrl,
         'tituloUrl': tituloUrl,
+        'colegiaturaNumero': colegiaturaNumero,
+        'colegiaturaEstado': colegiaturaEstado,
+        'colegiaturaComprobanteUrl': colegiaturaComprobanteUrl,
+        'colegioNombre': colegioNombre,
+        'colegioRegion': colegioRegion,
       }),
     );
 

@@ -1,3 +1,7 @@
+import 'dart:io' as io;
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../constants/colors.dart';
@@ -16,12 +20,68 @@ class BecomeLawyerScreen extends StatefulWidget {
 class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   final TextEditingController _linkedinController = TextEditingController();
   final TextEditingController _degreeLinkController = TextEditingController();
+  final TextEditingController _colegiaturaNumeroController =
+      TextEditingController();
+  final TextEditingController _colegiaturaEstadoController =
+      TextEditingController();
+  final TextEditingController _comprobanteUrlController =
+      TextEditingController();
+  final TextEditingController _colegioNombreController =
+      TextEditingController();
+  final TextEditingController _colegioRegionController =
+      TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final GlobalKey<FormFieldState<PlatformFile?>> _comprobanteFieldKey =
+      GlobalKey<FormFieldState<PlatformFile?>>();
+
+  static const int _maxComprobanteSizeBytes = 5 * 1024 * 1024; // 5 MB
+  static const Map<String, String> _colegiaturaEstadoLabels = {
+    'VIGENTE': 'Vigente',
+    'SUSPENDIDA': 'Suspendida',
+    'CANCELADA': 'Cancelada',
+  };
+  static const List<String> _colegiaturaEstados = [
+    'VIGENTE',
+    'SUSPENDIDA',
+    'CANCELADA',
+  ];
+  static const List<String> _colegioRegiones = [
+    'Amazonas',
+    'Áncash',
+    'Apurímac',
+    'Arequipa',
+    'Ayacucho',
+    'Cajamarca',
+    'Callao',
+    'Cusco',
+    'Huancavelica',
+    'Huánuco',
+    'Ica',
+    'Junín',
+    'La Libertad',
+    'Lambayeque',
+    'Lima Metropolitana',
+    'Lima Provincias',
+    'Loreto',
+    'Madre de Dios',
+    'Moquegua',
+    'Pasco',
+    'Piura',
+    'Puno',
+    'San Martín',
+    'Tacna',
+    'Tumbes',
+    'Ucayali',
+  ];
 
   LawyerApplicationStatus _status = LawyerApplicationStatus.empty;
   bool _isLoading = true;
   bool _isSubmitting = false;
   UserSession? _session;
+  PlatformFile? _selectedComprobante;
+  String? _existingComprobanteUrl;
+  String? _selectedColegiaturaEstado;
+  String? _selectedColegioRegion;
 
   @override
   void initState() {
@@ -52,6 +112,11 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   void dispose() {
     _linkedinController.dispose();
     _degreeLinkController.dispose();
+    _colegiaturaNumeroController.dispose();
+    _colegiaturaEstadoController.dispose();
+    _comprobanteUrlController.dispose();
+    _colegioNombreController.dispose();
+    _colegioRegionController.dispose();
     super.dispose();
   }
 
@@ -62,6 +127,227 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         content: Text(message),
         backgroundColor: color,
       ),
+    );
+  }
+
+  void _populateFormFromStatus(LawyerApplicationStatus status) {
+    _linkedinController.text = status.linkedinUrl ?? '';
+    _degreeLinkController.text = status.tituloUrl ?? '';
+    _colegiaturaNumeroController.text = status.colegiaturaNumero ?? '';
+    _colegioNombreController.text = status.colegioNombre ?? '';
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      final estado = status.colegiaturaEstado;
+      final region = status.colegioRegion;
+      final comprobante = status.comprobanteUrl;
+
+      _selectedColegiaturaEstado =
+          (estado != null && estado.trim().isNotEmpty) ? estado : null;
+      _selectedColegioRegion =
+          (region != null && region.trim().isNotEmpty) ? region : null;
+      _colegiaturaEstadoController.text =
+          _selectedColegiaturaEstado ?? '';
+      _colegioRegionController.text = _selectedColegioRegion ?? '';
+
+      _existingComprobanteUrl =
+          (comprobante != null && comprobante.trim().isNotEmpty)
+              ? comprobante
+              : null;
+      _selectedComprobante = null;
+      _comprobanteUrlController.text = _existingComprobanteUrl != null
+          ? _extractFileName(_existingComprobanteUrl!)
+          : '';
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _comprobanteFieldKey.currentState?.didChange(_selectedComprobante);
+    });
+  }
+
+  String _estadoLabel(String value) {
+    final upper = value.toUpperCase();
+    return _colegiaturaEstadoLabels[upper] ?? value;
+  }
+
+  String _extractFileName(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    if (uri.pathSegments.isNotEmpty) {
+      return Uri.decodeComponent(uri.pathSegments.last);
+    }
+    return uri.path.isNotEmpty ? Uri.decodeComponent(uri.path) : url;
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    }
+    if (bytes >= 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '$bytes B';
+  }
+
+  Future<void> _pickComprobante(FormFieldState<PlatformFile?> field) async {
+    if (!(_status.canEdit) || _isSubmitting) {
+      return;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: kIsWeb,
+      );
+
+      if (!mounted || result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final PlatformFile file = result.files.single;
+      if (file.size > _maxComprobanteSizeBytes) {
+        _showSnack(
+          'El archivo supera el máximo permitido de ${_formatFileSize(_maxComprobanteSizeBytes)}.',
+        );
+        return;
+      }
+
+      if (file.bytes == null && (file.path == null || file.path!.isEmpty)) {
+        _showSnack('No se pudo leer el archivo seleccionado.');
+        return;
+      }
+
+      setState(() {
+        _selectedComprobante = file;
+        _existingComprobanteUrl = null;
+        _comprobanteUrlController.text = file.name;
+      });
+      field.didChange(file);
+    } catch (error) {
+      _showSnack('No se pudo seleccionar el archivo: $error');
+    }
+  }
+
+  void _clearSelectedComprobante(FormFieldState<PlatformFile?> field) {
+    setState(() {
+      _selectedComprobante = null;
+      _comprobanteUrlController.text = _existingComprobanteUrl != null
+          ? _extractFileName(_existingComprobanteUrl!)
+          : '';
+    });
+    field.didChange(null);
+  }
+
+  Future<List<int>> _readComprobanteBytes(PlatformFile file) async {
+    if (file.bytes != null) {
+      return file.bytes!;
+    }
+    if (!kIsWeb && file.path != null && file.path!.isNotEmpty) {
+      final io.File localFile = io.File(file.path!);
+      return localFile.readAsBytes();
+    }
+    throw Exception('No se pudo obtener el contenido del comprobante seleccionado.');
+  }
+
+  Widget _buildComprobantePicker(bool canInteract) {
+    return FormField<PlatformFile?>(
+      key: _comprobanteFieldKey,
+      enabled: canInteract,
+      validator: (value) {
+        final hasExisting = _existingComprobanteUrl?.isNotEmpty ?? false;
+        if (!hasExisting && value == null) {
+          return 'Adjunta el comprobante de tu colegiatura.';
+        }
+        return null;
+      },
+      builder: (field) {
+        final hasValue = _comprobanteUrlController.text.trim().isNotEmpty;
+        final String helperText = hasValue
+            ? _comprobanteUrlController.text.trim()
+            : 'Selecciona un archivo (PDF, JPG o PNG, máx. ${_formatFileSize(_maxComprobanteSizeBytes)})';
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'Comprobante de colegiatura',
+                labelStyle:
+                    const TextStyle(color: AppColors.textFormFieldLabelColor),
+                prefixIcon: const Icon(Icons.upload_file_rounded,
+                    color: AppColors.text2Color),
+                enabled: canInteract,
+                errorText: field.errorText,
+                suffixIcon: canInteract
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_selectedComprobante != null)
+                            IconButton(
+                              tooltip: 'Quitar archivo',
+                              icon: const Icon(Icons.close_rounded,
+                                  color: AppColors.text2Color),
+                              onPressed: () =>
+                                  _clearSelectedComprobante(field),
+                            ),
+                          IconButton(
+                            tooltip: 'Adjuntar archivo',
+                            icon: const Icon(Icons.attach_file_rounded,
+                                color: AppColors.text2Color),
+                            onPressed: () => _pickComprobante(field),
+                          ),
+                        ],
+                      )
+                    : null,
+              ),
+              child: GestureDetector(
+                onTap: canInteract ? () => _pickComprobante(field) : null,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6.0, horizontal: 4),
+                  child: Text(
+                    helperText,
+                    style: TextStyle(
+                      color: hasValue
+                          ? AppColors.text1Color
+                          : AppColors.text2Color,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_selectedComprobante != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Peso: ${_formatFileSize(_selectedComprobante!.size)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.text2Color,
+                  ),
+                ),
+              ),
+            if ((_existingComprobanteUrl?.isNotEmpty ?? false) &&
+                _selectedComprobante == null)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Se conservará el comprobante previamente registrado. '
+                  'Puedes adjuntar uno nuevo si necesitas actualizarlo.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.text2Color,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -78,13 +364,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         _status = status;
         _isLoading = false;
       });
-
-      if ((status.linkedinUrl?.isNotEmpty ?? false)) {
-        _linkedinController.text = status.linkedinUrl!;
-      }
-      if ((status.tituloUrl?.isNotEmpty ?? false)) {
-        _degreeLinkController.text = status.tituloUrl!;
-      }
+      _populateFormFromStatus(status);
     } catch (error) {
       setState(() => _isLoading = false);
       final message = error.toString().replaceFirst('Exception: ', '');
@@ -98,22 +378,64 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
 
   Future<void> _submitApplication() async {
     final session = _session;
-    if (session == null || !_formKey.currentState!.validate()) {
+    if (session == null) {
       return;
     }
+
+    final isValid = _formKey.currentState!.validate();
+    _comprobanteFieldKey.currentState?.validate();
+    if (!isValid) {
+      return;
+    }
+
+    final linkedin = _linkedinController.text.trim();
+    final degreeLink = _degreeLinkController.text.trim();
+    final colegiaturaNumero = _colegiaturaNumeroController.text.trim();
+    final colegiaturaEstado = (_colegiaturaEstadoController.text.isNotEmpty
+            ? _colegiaturaEstadoController.text
+            : _selectedColegiaturaEstado ?? '')
+        .toUpperCase();
+    final colegioNombre = _colegioNombreController.text.trim();
+    final colegioRegion = _colegioRegionController.text.trim().isNotEmpty
+        ? _colegioRegionController.text.trim()
+        : (_selectedColegioRegion ?? '');
+
+    final PlatformFile? comprobante = _selectedComprobante;
+    List<int>? comprobanteBytes;
+    String? comprobanteNombre;
+    if (comprobante != null) {
+      try {
+        comprobanteBytes = await _readComprobanteBytes(comprobante);
+        comprobanteNombre = comprobante.name;
+      } catch (error) {
+        _showSnack('No se pudo leer el comprobante seleccionado: $error');
+        return;
+      }
+    }
+
+    final String? comprobanteUrl =
+        comprobante == null ? _existingComprobanteUrl : null;
 
     setState(() => _isSubmitting = true);
     try {
       final status = await ApiClient.submitLawyerApplication(
         token: session.token,
-        linkedinUrl: _linkedinController.text.trim(),
-        tituloUrl: _degreeLinkController.text.trim(),
+        linkedinUrl: linkedin,
+        tituloUrl: degreeLink,
+        colegiaturaNumero: colegiaturaNumero,
+        colegiaturaEstado: colegiaturaEstado,
+        colegioNombre: colegioNombre,
+        colegioRegion: colegioRegion,
+        comprobanteUrl: comprobanteUrl,
+        comprobanteArchivoBytes: comprobanteBytes,
+        comprobanteArchivoNombre: comprobanteNombre,
       );
       SessionService.instance.updateApplication(status);
       setState(() {
         _status = status;
         _isSubmitting = false;
       });
+      _populateFormFromStatus(status);
 
       _showSnack(
         status.state == LawyerApplicationState.pendiente
@@ -132,7 +454,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     }
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgColor,
@@ -206,6 +528,21 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
 
   Widget _buildApplicationForm() {
     final bool isEditable = _status.canEdit;
+    final bool canInteract = isEditable && !_isSubmitting;
+
+    final List<String> regionOptions = List<String>.from(_colegioRegiones);
+    if (_selectedColegioRegion != null &&
+        _selectedColegioRegion!.isNotEmpty &&
+        !regionOptions.contains(_selectedColegioRegion)) {
+      regionOptions.add(_selectedColegioRegion!);
+    }
+
+    final List<String> estadoOptions = List<String>.from(_colegiaturaEstados);
+    if (_selectedColegiaturaEstado != null &&
+        _selectedColegiaturaEstado!.isNotEmpty &&
+        !estadoOptions.contains(_selectedColegiaturaEstado)) {
+      estadoOptions.add(_selectedColegiaturaEstado!);
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -219,7 +556,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         children: [
           TextFormField(
             controller: _linkedinController,
-            enabled: isEditable && !_isSubmitting,
+            enabled: canInteract,
             decoration: const InputDecoration(
               labelText: 'URL de tu perfil de LinkedIn',
               labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
@@ -249,7 +586,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _degreeLinkController,
-            enabled: isEditable && !_isSubmitting,
+            enabled: canInteract,
             decoration: const InputDecoration(
               labelText: 'Link a tu Título (Google Drive, etc.)',
               labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
@@ -276,11 +613,148 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               return null;
             },
           ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _colegioNombreController,
+            enabled: canInteract,
+            decoration: const InputDecoration(
+              labelText: 'Colegio de Abogados',
+              labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
+              prefixIcon:
+                  Icon(Icons.account_balance_rounded, color: AppColors.text2Color),
+              hintText: 'Ej. Ilustre Colegio de Abogados de Lima',
+              hintStyle: TextStyle(color: AppColors.text2Color),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.button2Color, width: 2),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              filled: true,
+              fillColor: AppColors.buttonTextColor,
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              if (trimmed.length < 3) {
+                return 'Ingresa el nombre del colegio profesional.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: (_selectedColegioRegion?.isNotEmpty ?? false)
+                ? _selectedColegioRegion
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Región del colegio',
+              labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
+              prefixIcon: Icon(Icons.map_rounded, color: AppColors.text2Color),
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            items: regionOptions
+                .map(
+                  (region) => DropdownMenuItem<String>(
+                    value: region,
+                    child: Text(region),
+                  ),
+                )
+                .toList(),
+            onChanged: canInteract
+                ? (value) {
+                    setState(() {
+                      _selectedColegioRegion = value;
+                      _colegioRegionController.text = value ?? '';
+                    });
+                  }
+                : null,
+            validator: (value) {
+              final text = (value ?? _colegioRegionController.text).trim();
+              if (text.isEmpty) {
+                return 'Selecciona la región del colegio.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _colegiaturaNumeroController,
+            enabled: canInteract,
+            decoration: const InputDecoration(
+              labelText: 'Número de colegiatura',
+              labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
+              prefixIcon: Icon(Icons.badge_rounded, color: AppColors.text2Color),
+              hintText: 'Ej. 12345',
+              hintStyle: TextStyle(color: AppColors.text2Color),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.button2Color, width: 2),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              filled: true,
+              fillColor: AppColors.buttonTextColor,
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              if (trimmed.isEmpty) {
+                return 'Ingresa tu número de colegiatura.';
+              }
+              if (trimmed.length < 4) {
+                return 'El número de colegiatura debe tener al menos 4 caracteres.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: (_selectedColegiaturaEstado?.isNotEmpty ?? false)
+                ? _selectedColegiaturaEstado
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Estado de la colegiatura',
+              labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
+              prefixIcon: Icon(Icons.verified_user_rounded,
+                  color: AppColors.text2Color),
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            items: estadoOptions
+                .map(
+                  (estado) => DropdownMenuItem<String>(
+                    value: estado,
+                    child: Text(_estadoLabel(estado)),
+                  ),
+                )
+                .toList(),
+            onChanged: canInteract
+                ? (value) {
+                    setState(() {
+                      _selectedColegiaturaEstado = value;
+                      _colegiaturaEstadoController.text = value ?? '';
+                    });
+                  }
+                : null,
+            validator: (value) {
+              final text = (value ?? _colegiaturaEstadoController.text).trim();
+              if (text.isEmpty) {
+                return 'Selecciona el estado de tu colegiatura.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildComprobantePicker(canInteract),
           const SizedBox(height: 22),
           SizedBox(
             height: 48,
             child: ElevatedButton(
-              onPressed: isEditable && !_isSubmitting ? _submitApplication : null,
+              onPressed: canInteract ? _submitApplication : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.buttonColor,
                 foregroundColor: AppColors.buttonTextColor,
@@ -306,122 +780,3 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       ),
     );
   }
-
-  Widget _buildStatusIndicator() {
-    final state = _status.state;
-    Color statusColor;
-    IconData icon;
-    String title;
-    String subtitle;
-
-    switch (state) {
-      case LawyerApplicationState.pendiente:
-        statusColor = AppColors.text3Color;
-        icon = Icons.hourglass_top_rounded;
-        title = 'Postulación pendiente';
-        subtitle = 'Hemos recibido tus datos y los revisaremos pronto.';
-        break;
-      case LawyerApplicationState.aprobada:
-        statusColor = AppColors.button2Color;
-        icon = Icons.check_circle_rounded;
-        title = '¡Postulación aprobada!';
-        subtitle =
-            'Tu perfil fue verificado. Cambia al panel de abogado para comenzar a trabajar.';
-        break;
-      case LawyerApplicationState.rechazada:
-        statusColor = AppColors.tabColor;
-        icon = Icons.cancel_rounded;
-        title = 'Postulación rechazada';
-        subtitle =
-            'No pudimos validar tu solicitud. Contacta a soporte para más información.';
-        break;
-      case LawyerApplicationState.observada:
-        statusColor = AppColors.buttonColor;
-        icon = Icons.info_rounded;
-        title = 'Postulación observada';
-        subtitle = 'Actualiza tu información para continuar con la revisión.';
-        break;
-      case LawyerApplicationState.none:
-      default:
-        return const SizedBox.shrink();
-    }
-
-    final String observation = _status.observation?.trim() ?? '';
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: AppColors.buttonTextColor,
-        border: Border.all(color: AppColors.strokeColor),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: statusColor.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: statusColor, width: 1.2),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, color: statusColor, size: 30),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.text2Color,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (observation.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 14.0, left: 4, right: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.report_gmailerrorred_rounded,
-                        color: AppColors.text3Color, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        observation,
-                        style: const TextStyle(
-                          color: AppColors.text1Color,
-                          fontStyle: FontStyle.italic,
-                          fontSize: 13,
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
