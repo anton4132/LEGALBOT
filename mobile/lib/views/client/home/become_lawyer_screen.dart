@@ -9,6 +9,8 @@ import '../../../models/lawyer_application.dart';
 import '../../../models/user_session.dart';
 import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
+import 'package:intl/intl.dart';
+
 
 class BecomeLawyerScreen extends StatefulWidget {
   const BecomeLawyerScreen({super.key});
@@ -22,19 +24,24 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   final TextEditingController _degreeLinkController = TextEditingController();
   final TextEditingController _colegiaturaNumeroController =
       TextEditingController();
-  final TextEditingController _colegiaturaEstadoController =
-      TextEditingController();
-  final TextEditingController _comprobanteUrlController =
-      TextEditingController();
   final TextEditingController _colegioNombreController =
       TextEditingController();
   final TextEditingController _colegioRegionController =
+      TextEditingController();
+  final TextEditingController _colegiaturaCarnetController =
+      TextEditingController();
+  final TextEditingController _colegiaturaFechaEmisionController =
+      TextEditingController();
+  final TextEditingController _colegiaturaFechaVigenciaHastaController =
+      TextEditingController();
+  final TextEditingController _colegiaturaCarnetNombreController =
       TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey<FormFieldState<PlatformFile?>> _comprobanteFieldKey =
       GlobalKey<FormFieldState<PlatformFile?>>();
 
   static const int _maxComprobanteSizeBytes = 5 * 1024 * 1024; // 5 MB
+  static final DateFormat _dateFormatter = DateFormat('dd/MM/yyyy');
   static const Map<String, String> _colegiaturaEstadoLabels = {
     'VIGENTE': 'Vigente',
     'SUSPENDIDA': 'Suspendida',
@@ -191,6 +198,108 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     }
     return '$bytes B';
   }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) {
+      return '';
+    }
+    return _dateFormatter.format(date);
+  }
+
+  DateTime? _parseFormDate(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+    try {
+      return _dateFormatter.parseStrict(text);
+    } catch (_) {
+      return DateTime.tryParse(text);
+    }
+  }
+
+  Future<void> _pickColegiaturaDate({
+    required TextEditingController controller,
+    required DateTime? currentValue,
+    required ValueSetter<DateTime?> onSelected,
+    DateTime? firstDate,
+    DateTime? lastDate,
+  }) async {
+    if (!_status.canEdit || _isSubmitting || !mounted) {
+      return;
+    }
+
+    FocusScope.of(context).requestFocus(FocusNode());
+
+    final DateTime now = DateTime.now();
+    DateTime minDate = firstDate ?? DateTime(now.year - 80, 1, 1);
+    DateTime maxDate = lastDate ?? DateTime(now.year + 10, 12, 31);
+
+    if (minDate.isAfter(maxDate)) {
+      maxDate = DateTime(minDate.year, minDate.month, minDate.day);
+    }
+
+    DateTime initialDate = currentValue ?? now;
+    if (initialDate.isBefore(minDate)) {
+      initialDate = minDate;
+    } else if (initialDate.isAfter(maxDate)) {
+      initialDate = maxDate;
+    }
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: minDate,
+      lastDate: maxDate,
+      helpText: 'Selecciona una fecha',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        onSelected(picked);
+        controller.text = _formatDate(picked);
+      });
+    }
+  }
+
+  Future<void> _selectFechaEmision() async {
+    await _pickColegiaturaDate(
+      controller: _colegiaturaFechaEmisionController,
+      currentValue: _colegiaturaFechaEmision,
+      firstDate: DateTime(DateTime.now().year - 80, 1, 1),
+      lastDate: DateTime(DateTime.now().year + 5, 12, 31),
+      onSelected: (picked) {
+        _colegiaturaFechaEmision = picked;
+        if (_colegiaturaFechaVigenciaHasta != null &&
+            picked != null &&
+            _colegiaturaFechaVigenciaHasta!.isBefore(picked)) {
+          _colegiaturaFechaVigenciaHasta = null;
+          _colegiaturaFechaVigenciaController.clear();
+        }
+      },
+    );
+  }
+
+  Future<void> _selectFechaVigencia() async {
+    final DateTime now = DateTime.now();
+    final DateTime first = _colegiaturaFechaEmision ?? DateTime(now.year - 80, 1, 1);
+    await _pickColegiaturaDate(
+      controller: _colegiaturaFechaVigenciaController,
+      currentValue: _colegiaturaFechaVigenciaHasta ??
+          (_colegiaturaFechaEmision != null
+              ? _colegiaturaFechaEmision!
+                  .add(const Duration(days: 1))
+              : now),
+      firstDate: first,
+      lastDate: DateTime(now.year + 10, 12, 31),
+      onSelected: (picked) {
+        _colegiaturaFechaVigenciaHasta = picked;
+      },
+    );
+  }
+
 
   Future<void> _pickComprobante(FormFieldState<PlatformFile?> field) async {
     if (!(_status.canEdit) || _isSubmitting) {
@@ -522,14 +631,32 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     final linkedin = _linkedinController.text.trim();
     final degreeLink = _degreeLinkController.text.trim();
     final colegiaturaNumero = _colegiaturaNumeroController.text.trim();
-    final colegiaturaEstado = (_colegiaturaEstadoController.text.isNotEmpty
-            ? _colegiaturaEstadoController.text
-            : _selectedColegiaturaEstado ?? '')
-        .toUpperCase();
+    final colegiaturaCarnet = _colegiaturaCarnetController.text.trim();
+    final colegiaturaFechaEmision = _colegiaturaFechaEmisionController.text.trim();
+    final colegiaturaFechaVigenciaHasta = _colegiaturaFechaVigenciaHastaController.text.trim();
+    final colegiaturaCarnetNombre = _colegiaturaCarnetNombreController.text.trim();
     final colegioNombre = _colegioNombreController.text.trim();
     final colegioRegion = _colegioRegionController.text.trim().isNotEmpty
         ? _colegioRegionController.text.trim()
         : (_selectedColegioRegion ?? '');
+
+     DateTime? fechaEmision = _colegiaturaFechaEmision;
+    fechaEmision ??=
+        _parseFormDate(_colegiaturaFechaEmisionController.text.trim());
+    DateTime? fechaVigencia = _colegiaturaFechaVigenciaHasta;
+    fechaVigencia ??=
+        _parseFormDate(_colegiaturaFechaVigenciaController.text.trim());
+
+    if (fechaEmision == null || fechaVigencia == null) {
+      _showSnack(
+          'Selecciona las fechas de emisión y vigencia de tu colegiatura.');
+      return;
+    }
+
+    if (fechaVigencia.isBefore(fechaEmision)) {
+      _showSnack('La fecha de vigencia no puede ser anterior a la de emisión.');
+      return;
+    }
 
     final PlatformFile? comprobante = _selectedComprobante;
     List<int>? comprobanteBytes;
@@ -554,10 +681,12 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         linkedinUrl: linkedin,
         tituloUrl: degreeLink,
         colegiaturaNumero: colegiaturaNumero,
-        colegiaturaEstado: colegiaturaEstado,
         colegioNombre: colegioNombre,
         colegioRegion: colegioRegion,
-        colegiaturaComprobanteUrl: colegiaturaComprobanteUrl,
+        colegiaturaCarnet: colegiaturaCarnet,
+        colegiaturaFechaEmision: fechaEmision,
+        colegiaturaFechaVigenciaHasta: fechaVigencia,
+        colegiaturaCarnetNombre: colegiaturaCarnetNombre,
         comprobanteArchivoBytes: comprobanteBytes,
         comprobanteArchivoNombre: comprobanteNombre,
       );
@@ -844,6 +973,133 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             },
           ),
           const SizedBox(height: 16),
+           TextFormField(
+            controller: _colegiaturaCarnetController,
+            enabled: canInteract,
+            decoration: const InputDecoration(
+              labelText: 'Número de carnet',
+              labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
+              prefixIcon:
+                  Icon(Icons.credit_card_rounded, color: AppColors.text2Color),
+              hintText: 'Identificador de tu carnet profesional',
+              hintStyle: TextStyle(color: AppColors.text2Color),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.button2Color, width: 2),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              filled: true,
+              fillColor: AppColors.buttonTextColor,
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              if (trimmed.isEmpty) {
+                return 'Ingresa el número de tu carnet profesional.';
+              }
+              if (trimmed.length < 3) {
+                return 'El número de carnet debe tener al menos 3 caracteres.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _colegiaturaFechaEmisionController,
+            readOnly: true,
+            enabled: canInteract,
+            decoration: InputDecoration(
+              labelText: 'Fecha de emisión del carnet',
+              labelStyle:
+                  const TextStyle(color: AppColors.textFormFieldLabelColor),
+              prefixIcon: const Icon(Icons.event_available_rounded,
+                  color: AppColors.text2Color),
+              hintText: 'Selecciona la fecha de emisión',
+              hintStyle: const TextStyle(color: AppColors.text2Color),
+              enabledBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.button2Color, width: 2),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              filled: true,
+              fillColor: AppColors.buttonTextColor,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.calendar_month_rounded,
+                    color: AppColors.text2Color),
+                onPressed: canInteract ? _selectFechaEmision : null,
+              ),
+            ),
+            onTap: canInteract ? _selectFechaEmision : null,
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              if (trimmed.isEmpty) {
+                return 'Selecciona la fecha de emisión.';
+              }
+              if (_parseFormDate(trimmed) == null) {
+                return 'Selecciona una fecha de emisión válida.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _colegiaturaFechaVigenciaController,
+            readOnly: true,
+            enabled: canInteract,
+            decoration: InputDecoration(
+              labelText: 'Vigencia del carnet (hasta)',
+              labelStyle:
+                  const TextStyle(color: AppColors.textFormFieldLabelColor),
+              prefixIcon: const Icon(Icons.event_available,
+                  color: AppColors.text2Color),
+              hintText: 'Selecciona la fecha de vigencia',
+              hintStyle: const TextStyle(color: AppColors.text2Color),
+              enabledBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: AppColors.button2Color, width: 2),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              filled: true,
+              fillColor: AppColors.buttonTextColor,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.calendar_today_rounded,
+                    color: AppColors.text2Color),
+                onPressed: canInteract ? _selectFechaVigencia : null,
+              ),
+            ),
+            onTap: canInteract ? _selectFechaVigencia : null,
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              if (trimmed.isEmpty) {
+                return 'Selecciona la fecha de vigencia.';
+              }
+              final parsed = _parseFormDate(trimmed);
+              if (parsed == null) {
+                return 'Selecciona una fecha de vigencia válida.';
+              }
+              final DateTime? emision =
+                  _parseFormDate(_colegiaturaFechaEmisionController.text);
+              if (emision != null && parsed.isBefore(emision)) {
+                return 'La vigencia debe ser posterior a la fecha de emisión.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          
           DropdownButtonFormField<String>(
             value: (_selectedColegiaturaEstado?.isNotEmpty ?? false)
                 ? _selectedColegiaturaEstado

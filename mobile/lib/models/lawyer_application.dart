@@ -29,8 +29,9 @@ class LawyerApplicationStatus {
   final String? linkedinUrl;
   final String? tituloUrl;
   final String? colegiaturaNumero;
-  final String? colegiaturaEstado;
-  final String? colegiaturaComprobanteUrl;
+  final String? colegiaturaCarnet;
+  final DateTime? colegiaturaFechaEmision;
+  final DateTime? colegiaturaFechaVigenciaHasta;
   final String? colegioNombre;
   final String? colegioRegion;
   final DateTime? createdAt;
@@ -44,8 +45,9 @@ class LawyerApplicationStatus {
     this.linkedinUrl,
     this.tituloUrl,
     this.colegiaturaNumero,
-    this.colegiaturaEstado,
-    this.colegiaturaComprobanteUrl,
+    this.colegiaturaCarnet,
+    this.colegiaturaFechaEmision,
+    this.colegiaturaFechaVigenciaHasta,
     this.colegioNombre,
     this.colegioRegion,
     this.createdAt,
@@ -70,6 +72,42 @@ class LawyerApplicationStatus {
     if (json == null) {
       return LawyerApplicationStatus.empty;
     }
+Map<String, dynamic>? _nestedMap(String key) {
+      final dynamic value = json[key];
+      if (value is Map<String, dynamic>) {
+        return value;
+      }
+      return null;
+    }
+
+    Map<String, dynamic>? colegiatura = _nestedMap('colegiatura');
+    colegiatura ??= _nestedMap('colegiaturaAbogado');
+
+    Map<String, dynamic>? colegio = _nestedMap('colegio');
+
+    String? _readString(Map<String, dynamic>? source, String camel, String snake) {
+      if (source == null) return null;
+      final dynamic camelValue = source[camel];
+      if (camelValue is String && camelValue.trim().isNotEmpty) {
+        return camelValue;
+      }
+      final dynamic snakeValue = source[snake];
+      if (snakeValue is String && snakeValue.trim().isNotEmpty) {
+        return snakeValue;
+      }
+      return null;
+    }
+
+    DateTime? _readDate(Map<String, dynamic>? source, String camel, String snake) {
+      if (source == null) return null;
+      final dynamic camelValue = source[camel];
+      final DateTime? camelDate = _parseDate(camelValue);
+      if (camelDate != null) {
+        return camelDate;
+      }
+      final dynamic snakeValue = source[snake];
+      return _parseDate(snakeValue);
+    }
 
     return LawyerApplicationStatus(
       id: json['id'] as int?,
@@ -81,20 +119,33 @@ class LawyerApplicationStatus {
       colegiaturaNumero: json['colegiaturaNumero'] as String?
           ?? json['colegiatura_numero'] as String?,
 
-      colegiaturaEstado: json['colegiaturaEstado'] as String?
-          ?? json['colegiatura_estado'] as String?,
+      
 
-      colegiaturaComprobanteUrl: json['colegiaturaComprobanteUrl'] as String?
-          ?? json['colegiatura_comprobante_url'] as String?,
+      colegiaturaCarnet: json['colegiaturaCarnet'] as String?
+              ?? json['colegiatura_carnet'] as String?
+              ?? _readString(colegiatura, 'carnet', 'carnet')
+              ?? _readString(json['colegiatura'] as Map<String, dynamic>?, 'carnet', 'carnet')
+              ?? _readString(json, 'carnet', 'carnet'),
+
+      colegiaturaFechaEmision: _parseDate(json['colegiaturaFechaEmision']) ??
+          _parseDate(json['colegiatura_fecha_emision']) ??
+          _readDate(colegiatura, 'fechaEmision', 'fecha_emision'),
+
+      colegiaturaFechaVigenciaHasta:
+          _parseDate(json['colegiaturaFechaVigenciaHasta']) ??
+              _parseDate(json['colegiatura_fecha_vigencia_hasta']) ??
+              _readDate(colegiatura, 'fechaVigenciaHasta', 'fecha_vigencia_hasta'),
 
       colegioNombre:
-          json['colegioNombre'] as String? ?? json['colegio_nombre'] as String?,
-      colegioRegion:
-      
-          json['colegioRegion'] as String? ?? json['colegio_region'] as String?,
+          json['colegioNombre'] as String?
+              ?? json['colegio_nombre'] as String?
+              ?? _readString(colegio, 'nombre', 'nombre'),
+      colegioRegion: json['colegioRegion'] as String?
+              ?? json['colegio_region'] as String?
+              ?? _readString(colegio, 'region', 'region'),
       createdAt: _parseDate(json['creadoEl'] ?? json['creado_el']),
-      updatedAt: _parseDate(json['actualizadoEl'] ?? json['actualizado_el']),
       approvedAt: _parseDate(json['aprobadoEl'] ?? json['aprobado_el']),
+      updatedAt: _parseDate(json['actualizadoEl'] ?? json['actualizado_el']),
     );
   }
 
@@ -105,8 +156,9 @@ class LawyerApplicationStatus {
     String? linkedinUrl,
     String? tituloUrl,
     String? colegiaturaNumero,
-    String? colegiaturaEstado,
-    String? colegiaturaComprobanteUrl,
+     String? colegiaturaCarnet,
+    DateTime? colegiaturaFechaEmision,
+    DateTime? colegiaturaFechaVigenciaHasta,
     String? colegioNombre,
     String? colegioRegion,
     DateTime? createdAt,
@@ -120,9 +172,9 @@ class LawyerApplicationStatus {
       linkedinUrl: linkedinUrl ?? this.linkedinUrl,
       tituloUrl: tituloUrl ?? this.tituloUrl,
       colegiaturaNumero: colegiaturaNumero ?? this.colegiaturaNumero,
-      colegiaturaEstado: colegiaturaEstado ?? this.colegiaturaEstado,
-      colegiaturaComprobanteUrl:
-          colegiaturaComprobanteUrl ?? this.colegiaturaComprobanteUrl,
+      colegiaturaCarnet: colegiaturaCarnet ?? this.colegiaturaCarnet,
+      colegiaturaFechaEmision: colegiaturaFechaEmision ?? this.colegiaturaFechaEmision,
+      colegiaturaFechaVigenciaHasta: colegiaturaFechaVigenciaHasta ?? this.colegiaturaFechaVigenciaHasta,
       colegioNombre: colegioNombre ?? this.colegioNombre,
       colegioRegion: colegioRegion ?? this.colegioRegion,
       createdAt: createdAt ?? this.createdAt,

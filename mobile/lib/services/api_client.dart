@@ -188,35 +188,46 @@ class ApiClient {
     required String colegiaturaEstado,
     required String colegioNombre,
     required String colegioRegion,
-    String? colegiaturaComprobanteUrl,
-    List<int>? comprobanteArchivoBytes,
-    String? comprobanteArchivoNombre,
+     String? colegiaturaCarnet,
+    String? colegiaturaFechaEmision,
+    String? colegiaturaFechaVigenciaHasta,
+    List<int>? colegiaturaCarnetBytes,
+    String? colegiaturaCarnetNombre,
   }) async {
     final uri = Uri.parse('$_baseUrl/lawyers/applications');
     final Map<String, dynamic> payload = {
       'linkedinUrl': linkedinUrl,
       'tituloUrl': tituloUrl,
       'colegiaturaNumero': colegiaturaNumero,
-      'colegiaturaEstado': colegiaturaEstado,
       'colegioNombre': colegioNombre,
       'colegioRegion': colegioRegion,
     };
 
-    if (colegiaturaComprobanteUrl != null &&
-        colegiaturaComprobanteUrl.trim().isNotEmpty) {
-      payload['colegiaturaComprobanteUrl'] = colegiaturaComprobanteUrl;
+    if (colegiaturaCarnet != null && colegiaturaCarnet.trim().isNotEmpty) {
+      payload['colegiaturaCarnet'] = colegiaturaCarnet.trim();
     }
 
-    if (comprobanteArchivoBytes != null && comprobanteArchivoBytes.isNotEmpty) {
-      payload['comprobanteArchivoBytes'] =
-          base64Encode(comprobanteArchivoBytes);
-      if (comprobanteArchivoNombre != null &&
-          comprobanteArchivoNombre.trim().isNotEmpty) {
-        payload['comprobanteArchivoNombre'] = comprobanteArchivoNombre;
+    if (colegiaturaFechaEmision != null &&
+        colegiaturaFechaEmision.trim().isNotEmpty) {
+      payload['colegiaturaFechaEmision'] = colegiaturaFechaEmision.trim();
+    }
+
+    if (colegiaturaFechaVigenciaHasta != null &&
+        colegiaturaFechaVigenciaHasta.trim().isNotEmpty) {
+      payload['colegiaturaFechaVigenciaHasta'] =
+          colegiaturaFechaVigenciaHasta.trim();
+    }
+
+    if (colegiaturaCarnetBytes != null && colegiaturaCarnetBytes.isNotEmpty) {
+      payload['colegiaturaCarnetBytes'] =
+          base64Encode(colegiaturaCarnetBytes);
+      if (colegiaturaCarnetNombre != null &&
+          colegiaturaCarnetNombre.trim().isNotEmpty) {
+        payload['colegiaturaCarnetNombre'] = colegiaturaCarnetNombre;
       }
-    } else if (comprobanteArchivoNombre != null &&
-        comprobanteArchivoNombre.trim().isNotEmpty) {
-      payload['comprobanteArchivoNombre'] = comprobanteArchivoNombre;
+    } else if (colegiaturaCarnetNombre != null &&
+        colegiaturaCarnetNombre.trim().isNotEmpty) {
+      payload['colegiaturaCarnetNombre'] = colegiaturaCarnetNombre;
     }
 
     final response = await http.post(
