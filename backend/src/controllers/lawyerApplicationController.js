@@ -1,25 +1,41 @@
+// controllers/lawyerVerification.controller.js
 const { EstadoVerificacion } = require('@prisma/client');
 const { prisma } = require('../config/database');
 
+// ---------- helpers ----------
+const sanitizeString = (v) => (typeof v === 'string' ? v.trim() : '');
 
-//limpia strings (trim). Si no es string, devuelve ''.
-const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
-
-
-//verifica que la URL sea http/https usando new URL(...).
 const isValidUrl = (value) => {
   if (!value) return false;
   try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch (error) {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
     return false;
   }
 };
 
-//mapApplication(row): normaliza el objeto verificacionabogado a un JSON limpio para responder.
+// Permite ISO (recomendado) y, si quieres, dd/MM/yyyy (opcional).
+const parseDate = (v) => {
+  if (!v || typeof v !== 'string') return null;
+  // ISO primero
+  const iso = new Date(v);
+  if (!Number.isNaN(iso.getTime())) return iso;
+  // dd/MM/yyyy (simple)
+  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) {
+    const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+};
+
+// Mapea la solicitud incluyendo colegiatura y colegio
 const mapApplication = (row) => {
   if (!row) return null;
+  const c = row.colegiatura || null;
+  const col = c?.colegio || null;
+
   return {
     id: row.id,
     personaId: row.persona_id,
@@ -30,10 +46,29 @@ const mapApplication = (row) => {
     aprobadoEl: row.aprobado_el,
     creadoEl: row.creado_el,
     actualizadoEl: row.actualizado_el,
+
+    // anidado para el front
+    colegiatura: c
+      ? {
+          id: c.id,
+          personaId: c.persona_id,
+          colegioId: c.colegio_id,
+          numero: c.numero,
+          carnet: c.carnet ?? null,
+          fechaEmision: c.fecha_emision,
+          fechaVigenciaHasta: c.fecha_vigencia_hasta,
+          colegio: col
+            ? {
+                id: col.id,
+                nombre: col.nombre,
+                region: col.region,
+              }
+            : null,
+        }
+      : null,
   };
 };
 
-//ensureAdmin(rolId): verifica si el rol es admin o superadmin.
 const ensureAdmin = async (rolId) => {
   if (!rolId) return false;
   const role = await prisma.role.findUnique({ where: { id: rolId } });
@@ -41,12 +76,9 @@ const ensureAdmin = async (rolId) => {
   return code === 'admin' || code === 'superadmin';
 };
 
-//ensureLawyerAccount(tx, personaId): verifica si la persona tiene una cuenta de abogado activa.
 const ensureLawyerAccount = async (tx, personaId) => {
   const role = await tx.role.findFirst({ where: { codigo: 'abogado' } });
-  if (!role) {
-    return null;
-  }
+  if (!role) return null;
 
   let lawyerAccount = await tx.usuario.findFirst({
     where: { persona_id: personaId, rol_id: role.id },
@@ -68,10 +100,12 @@ const ensureLawyerAccount = async (tx, personaId) => {
   });
 
   if (!baseAccount) {
-    throw new Error('La persona no cuenta con una cuenta base para generar el rol de abogado');
+    throw new Error(
+      'La persona no cuenta con una cuenta base para generar el rol de abogado',
+    );
   }
 
-  lawyerAccount = await tx.usuario.create({
+  return tx.usuario.create({
     data: {
       persona_id: personaId,
       rol_id: role.id,
@@ -79,10 +113,9 @@ const ensureLawyerAccount = async (tx, personaId) => {
       activo: true,
     },
   });
-
-  return lawyerAccount;
 };
 
+// ---------- controladores ----------
 const getOwnApplication = async (req, res) => {
   try {
     const personaId = req.ctx?.personaId;
@@ -92,12 +125,19 @@ const getOwnApplication = async (req, res) => {
 
     const application = await prisma.verificacionabogado.findUnique({
       where: { persona_id: personaId },
+      include: {
+        colegiatura: {
+          include: { colegio: true },
+        },
+      },
     });
 
     return res.json({ success: true, application: mapApplication(application) });
   } catch (error) {
     console.error('Error obteniendo verificación de abogado:', error);
-    return res.status(500).json({ success: false, message: 'Error obteniendo verificación' });
+    return res
+      .status(500)
+      .json({ success: false, message: 'Error obteniendo verificación' });
   }
 };
 
@@ -108,97 +148,221 @@ const submitApplication = async (req, res) => {
       return res.status(401).json({ success: false, message: 'No autenticado' });
     }
 
+    // ----- datos que llegan del app -----
     const linkedinUrl = sanitizeString(req.body?.linkedinUrl);
     const tituloUrl = sanitizeString(req.body?.tituloUrl);
 
+    const colegiaturaNumero = sanitizeString(req.body?.colegiaturaNumero);
+    const colegiaturaCarnet = sanitizeString(req.body?.colegiaturaCarnet); // puede venir vacío
+    const colegioNombre = sanitizeString(req.body?.colegioNombre);
+    const colegioRegion = sanitizeString(req.body?.colegioRegion);
+
+    const fechaEmision = parseDate(req.body?.colegiaturaFechaEmision);
+    const fechaVigencia = parseDate(req.body?.colegiaturaFechaVigenciaHasta);
+
+    // Validaciones básicas
     if (!isValidUrl(linkedinUrl) || !isValidUrl(tituloUrl)) {
       return res.status(400).json({
         success: false,
         message: 'linkedinUrl y tituloUrl deben ser URLs válidas (http/https)',
       });
     }
+    if (!colegiaturaNumero) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'colegiaturaNumero es requerido' });
+    }
+    if (!colegioNombre) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'colegioNombre es requerido' });
+    }
+    if (fechaEmision && fechaVigencia && fechaVigencia < fechaEmision) {
+      return res.status(400).json({
+        success: false,
+        message: 'La fecha de vigencia no puede ser anterior a la de emisión',
+      });
+    }
 
+    // Persona + roles
     const persona = await prisma.persona.findUnique({
       where: { id: personaId },
-      include: {
-        usuario: {
-          include: { role: true },
-        },
-      },
+      include: { usuario: { include: { role: true } } },
     });
-
     if (!persona) {
       return res.status(404).json({ success: false, message: 'Persona no encontrada' });
     }
-
     const hasActiveLawyerRole = (persona.usuario || []).some(
       (u) => (u.role?.codigo || '').toLowerCase() === 'abogado' && u.activo,
     );
-
     if (hasActiveLawyerRole) {
-      return res.status(409).json({
-        success: false,
-        message: 'Ya cuentas con un perfil de abogado activo',
-      });
+      return res
+        .status(409)
+        .json({ success: false, message: 'Ya cuentas con un perfil de abogado activo' });
     }
 
-    const existing = await prisma.verificacionabogado.findUnique({
-      where: { persona_id: personaId },
-    });
+    // Transacción: upsert de verificación, colegio y colegiatura
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Upsert de verificación (solo setear linkedin/título si aún no existen)
+      let verification = await tx.verificacionabogado.findUnique({
+        where: { persona_id: personaId },
+      });
 
-    if (!existing) {
-      const created = await prisma.verificacionabogado.create({
-        data: {
-          persona_id: personaId,
-          linkedin_url: linkedinUrl,
-          titulo_url: tituloUrl,
-          estado: EstadoVerificacion.PENDIENTE,
-          observaciones: null,
-          aprobado_el: null,
+      if (!verification) {
+        verification = await tx.verificacionabogado.create({
+          data: {
+            persona_id: personaId,
+            linkedin_url: linkedinUrl,
+            titulo_url: tituloUrl,
+            estado: EstadoVerificacion.PENDIENTE,
+            observaciones: null,
+            aprobado_el: null,
+          },
+        });
+      } else {
+        // reglas de negocio previas
+        if (verification.estado === EstadoVerificacion.PENDIENTE) {
+          throw new Error('PENDING_ALREADY');
+        }
+        if (verification.estado === EstadoVerificacion.APROBADA) {
+          throw new Error('APPROVED_ALREADY');
+        }
+        if (verification.estado === EstadoVerificacion.RECHAZADA) {
+          throw new Error('REJECTED_ALREADY');
+        }
+
+        // OBSERVADA u otros → resetea estado a PENDIENTE y deja observaciones en null
+        verification = await tx.verificacionabogado.update({
+          where: { persona_id: personaId },
+          data: {
+            // solo seteo si no había
+            linkedin_url: verification.linkedin_url || linkedinUrl,
+            titulo_url: verification.titulo_url || tituloUrl,
+            estado: EstadoVerificacion.PENDIENTE,
+            observaciones: null,
+            aprobado_el: null,
+          },
+        });
+      }
+
+      // 2) Colegio: buscar por (nombre, region) y crear si no existe
+      const colegio = await tx.colegioabogado.findFirst({
+        where: {
+          nombre: { equals: colegioNombre, mode: 'insensitive' },
+          OR: [
+            { region: colegioRegion ? { equals: colegioRegion, mode: 'insensitive' } : null },
+            { region: null },
+          ].filter(Boolean),
         },
+      }) || await tx.colegioabogado.create({
+        data: { nombre: colegioNombre, region: colegioRegion || null },
+      });
+      
+      // 3) Colegiatura de la persona (upsert por persona_id)
+      let colegiatura = await tx.colegiaturaabogado.findUnique({
+        where: { persona_id: personaId },
       });
 
-      return res.status(201).json({ success: true, application: mapApplication(created) });
-    }
+      if (!colegiatura) {
+        colegiatura = await tx.colegiaturaabogado.create({
+          data: {
+            persona_id: personaId,
+            colegio_id: colegio.id,
+            numero: colegiaturaNumero,
+            carnet: colegiaturaCarnet || null,
+            fecha_emision: fechaEmision || null,
+            fecha_vigencia_hasta: fechaVigencia || null,
+          },
+        });
+      } else {
+        // Antes de actualizar, cuidemos la unicidad (colegio_id, numero)
+        // Si el número cambia o el colegio cambia, validamos que no exista el mismo par
+        if (
+          colegiatura.numero !== colegiaturaNumero ||
+          colegiatura.colegio_id !== colegio.id
+        ) {
+          const dup = await tx.colegiaturaabogado.findFirst({
+            where: {
+              colegio_id: colegio.id,
+              numero: colegiaturaNumero,
+              NOT: { id: colegiatura.id },
+            },
+          });
+          if (dup) {
+            throw new Error('DUP_COLE_NUM');
+          }
+        }
 
-    if (existing.estado === EstadoVerificacion.PENDIENTE) {
-      return res.status(409).json({
-        success: false,
-        message: 'Tu solicitud ya está en revisión',
+        colegiatura = await tx.colegiaturaabogado.update({
+          where: { id: colegiatura.id },
+          data: {
+            colegio_id: colegio.id,
+            numero: colegiaturaNumero,
+            carnet: colegiaturaCarnet || null,
+            fecha_emision: fechaEmision || null,
+            fecha_vigencia_hasta: fechaVigencia || null,
+          },
+        });
+      }
+
+      // 4) Vincular verificación con la colegiatura si aún no está enlazada
+      if (verification.colegiatura_id !== colegiatura.id) {
+        verification = await tx.verificacionabogado.update({
+          where: { persona_id: personaId },
+          data: { colegiatura_id: colegiatura.id },
+        });
+      }
+
+      // devolver con include
+      const full = await tx.verificacionabogado.findUnique({
+        where: { persona_id: personaId },
+        include: { colegiatura: { include: { colegio: true } } },
       });
-    }
-
-    if (existing.estado === EstadoVerificacion.APROBADA) {
-      return res.status(409).json({
-        success: false,
-        message: 'Tu solicitud ya fue aprobada',
-      });
-    }
-
-    if (existing.estado === EstadoVerificacion.RECHAZADA) {
-      return res.status(409).json({
-        success: false,
-        message: 'Tu solicitud fue rechazada. Comunícate con soporte para más información',
-      });
-    }
-
-    const updated = await prisma.verificacionabogado.update({
-      where: { persona_id: personaId },
-      data: {
-        linkedin_url: linkedinUrl,
-        titulo_url: tituloUrl,
-        estado: EstadoVerificacion.PENDIENTE,
-        observaciones: null,
-        aprobado_el: null,
-      },
+      return full;
     });
 
-    return res.json({ success: true, application: mapApplication(updated) });
+    return res.status(verificationWasCreated(result) ? 201 : 200).json({
+      success: true,
+      application: mapApplication(result),
+    });
   } catch (error) {
+    // traducir algunos mensajes “controlados”
+    if (error.message === 'PENDING_ALREADY') {
+      return res
+        .status(409)
+        .json({ success: false, message: 'Tu solicitud ya está en revisión' });
+    }
+    if (error.message === 'APPROVED_ALREADY') {
+      return res
+        .status(409)
+        .json({ success: false, message: 'Tu solicitud ya fue aprobada' });
+    }
+    if (error.message === 'REJECTED_ALREADY') {
+      return res.status(409).json({
+        success: false,
+        message:
+          'Tu solicitud fue rechazada. Comunícate con soporte para más información',
+      });
+    }
+    if (error.message === 'DUP_COLE_NUM') {
+      return res.status(409).json({
+        success: false,
+        message:
+          'Ya existe una colegiatura registrada con ese número en el mismo colegio',
+      });
+    }
+
     console.error('Error enviando solicitud de abogado:', error);
-    return res.status(500).json({ success: false, message: 'Error enviando solicitud' });
+    return res
+      .status(500)
+      .json({ success: false, message: 'Error enviando solicitud' });
   }
 };
+
+// para decidir 201/200 arriba
+function verificationWasCreated(v) {
+  return !v?.creado_el || (v.creado_el && v.creado_el.getTime() === v.actualizado_el?.getTime());
+}
 
 const reviewApplication = async (req, res) => {
   try {
@@ -219,15 +383,15 @@ const reviewApplication = async (req, res) => {
     if (!estado) {
       return res.status(400).json({ success: false, message: 'estado es requerido' });
     }
-
     if (!Object.values(EstadoVerificacion).includes(estado)) {
-      return res.status(400).json({ success: false, message: 'Estado de verificación inválido' });
+      return res
+        .status(400)
+        .json({ success: false, message: 'Estado de verificación inválido' });
     }
 
     const application = await prisma.verificacionabogado.findUnique({
       where: { persona_id: personaId },
     });
-
     if (!application) {
       return res.status(404).json({ success: false, message: 'Solicitud no encontrada' });
     }
@@ -244,8 +408,14 @@ const reviewApplication = async (req, res) => {
         EstadoVerificacion.APROBADA,
         EstadoVerificacion.RECHAZADA,
       ],
-      [EstadoVerificacion.RECHAZADA]: [EstadoVerificacion.PENDIENTE, EstadoVerificacion.OBSERVADA],
-      [EstadoVerificacion.APROBADA]: [EstadoVerificacion.PENDIENTE, EstadoVerificacion.OBSERVADA],
+      [EstadoVerificacion.RECHAZADA]: [
+        EstadoVerificacion.PENDIENTE,
+        EstadoVerificacion.OBSERVADA,
+      ],
+      [EstadoVerificacion.APROBADA]: [
+        EstadoVerificacion.PENDIENTE,
+        EstadoVerificacion.OBSERVADA,
+      ],
     };
 
     if (!allowedTransitions[current] || !allowedTransitions[current].includes(estado)) {
@@ -253,7 +423,8 @@ const reviewApplication = async (req, res) => {
     }
 
     if (
-      (current === EstadoVerificacion.RECHAZADA || current === EstadoVerificacion.APROBADA) &&
+      (current === EstadoVerificacion.RECHAZADA ||
+        current === EstadoVerificacion.APROBADA) &&
       !force
     ) {
       return res.status(409).json({
@@ -282,6 +453,7 @@ const reviewApplication = async (req, res) => {
               : null,
           aprobado_el: estado === EstadoVerificacion.APROBADA ? new Date() : null,
         },
+        include: { colegiatura: { include: { colegio: true } } },
       });
 
       if (estado === EstadoVerificacion.APROBADA) {
@@ -294,7 +466,9 @@ const reviewApplication = async (req, res) => {
     return res.json({ success: true, application: mapApplication(updated) });
   } catch (error) {
     console.error('Error revisando solicitud de abogado:', error);
-    return res.status(500).json({ success: false, message: 'Error actualizando solicitud' });
+    return res
+      .status(500)
+      .json({ success: false, message: 'Error actualizando solicitud' });
   }
 };
 

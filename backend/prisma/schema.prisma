@@ -456,33 +456,25 @@ model colegioabogado {
   id             Int      @id @default(autoincrement())
   region         String? // p.ej. "Tacna", "Lima"
   nombre         String
-  activo         Boolean  @default(true)
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
   colegiaturas colegiaturaabogado[]
-
-  @@index([activo])
+  
+  @@unique([nombre, region])
   @@index([region])
 }
 
-enum EstadoColegiatura {
-  VIGENTE
-  SUSPENDIDA
-  CANCELADA
-}
-
 model colegiaturaabogado {
-  id                   Int               @id @default(autoincrement())
-  persona_id           Int               @unique
+  id                   Int       @id @default(autoincrement())
+  persona_id           Int       @unique
   colegio_id           Int
-  numero               String            @db.VarChar(30)
-  estado               EstadoColegiatura @default(VIGENTE)
+  numero               String    @db.VarChar(30)
   carnet               String?
-  fecha_emision        DateTime?         @db.Timestamptz(6)
-  fecha_vigencia_hasta DateTime?         @db.Timestamptz(6)
-  creado_el            DateTime          @default(now()) @db.Timestamptz(6)
-  actualizado_el       DateTime          @updatedAt @db.Timestamptz(6)
+  fecha_emision        DateTime? @db.Timestamptz(6)
+  fecha_vigencia_hasta DateTime? @db.Timestamptz(6)
+  creado_el            DateTime  @default(now()) @db.Timestamptz(6)
+  actualizado_el       DateTime  @updatedAt @db.Timestamptz(6)
 
   persona             persona               @relation(fields: [persona_id], references: [id], onDelete: Cascade)
   colegio             colegioabogado        @relation(fields: [colegio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -491,7 +483,6 @@ model colegiaturaabogado {
   @@unique([colegio_id, numero]) // el mismo número no se repite dentro del mismo colegio
   @@unique([id, persona_id])
   @@index([colegio_id])
-  @@index([estado])
 }
 
 model persona {
