@@ -33,12 +33,9 @@ class _LawyerHomeState extends State<LawyerHome> {
   }
 
   void _showSnack(String message, {Color color = Colors.red}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   void _handleSendConsultation() {
@@ -87,9 +84,7 @@ class _LawyerHomeState extends State<LawyerHome> {
     } catch (error) {
       final message = error.toString().replaceFirst('Exception: ', '');
       _showSnack(
-        message.isEmpty
-            ? 'No se pudo cambiar a la cuenta de cliente'
-            : message,
+        message.isEmpty ? 'No se pudo cambiar a la cuenta de cliente' : message,
       );
     } finally {
       if (mounted) {
@@ -101,24 +96,25 @@ class _LawyerHomeState extends State<LawyerHome> {
   Future<void> _handleLogout() async {
     final bool? shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Deseas cerrar sesión?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Cerrar sesión'),
+            content: const Text('¿Deseas cerrar sesión?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.buttonColor,
+                  foregroundColor: AppColors.buttonTextColor,
+                ),
+                child: const Text('Cerrar sesión'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.buttonColor,
-              foregroundColor: AppColors.buttonTextColor,
-            ),
-            child: const Text('Cerrar sesión'),
-          ),
-        ],
-      ),
     );
 
     if (!(shouldLogout ?? false) || !mounted) return;
@@ -141,19 +137,14 @@ class _LawyerHomeState extends State<LawyerHome> {
                 : 'Abogado';
 
         return Scaffold(
-          appBar: const CustomAppBar(
-            title: 'LegalBot - Abogado',
-          ),
+          appBar: const CustomAppBar(title: 'LegalBot - Abogado'),
           drawer: CustomDrawer(
             userType: 'Abogado',
             userIcon: Icons.gavel,
             userName: displayName,
             subtitle: 'Panel de Control',
             items: [
-              const DrawerItem(
-                icon: Icons.home,
-                title: 'Inicio',
-              ),
+              const DrawerItem(icon: Icons.home, title: 'Inicio'),
               DrawerItem(
                 icon: Icons.info,
                 title: 'Información Legal',
@@ -199,9 +190,10 @@ class _LawyerHomeState extends State<LawyerHome> {
               DrawerItem(
                 icon: Icons.person,
                 title: 'Panel Cliente',
-                onTap: session == null
-                    ? null
-                    : () => _switchToClientAccount(session),
+                onTap:
+                    session == null
+                        ? null
+                        : () => _switchToClientAccount(session),
               ),
             ],
             onLogout: _handleLogout,
@@ -217,8 +209,11 @@ class _LawyerHomeState extends State<LawyerHome> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.gavel,
-                              color: AppColors.buttonColor, size: 24),
+                          Icon(
+                            Icons.gavel,
+                            color: AppColors.buttonColor,
+                            size: 24,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             '¡Bienvenido, $displayName!',
@@ -233,10 +228,7 @@ class _LawyerHomeState extends State<LawyerHome> {
                       const SizedBox(height: 5),
                       const Text(
                         'Gestiona tus casos y clientes de manera eficiente.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -249,8 +241,11 @@ class _LawyerHomeState extends State<LawyerHome> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.chat_bubble_outline,
-                              color: AppColors.buttonColor, size: 20),
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            color: AppColors.buttonColor,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           const Text(
                             'Consulta Rápida',
@@ -265,10 +260,7 @@ class _LawyerHomeState extends State<LawyerHome> {
                       const SizedBox(height: 8),
                       const Text(
                         'Escribe tu consulta legal o usa el micrófono para dictar',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 10),
                       ConsultationInput(

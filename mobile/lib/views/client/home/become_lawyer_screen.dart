@@ -11,7 +11,6 @@ import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
 import 'package:intl/intl.dart';
 
-
 class BecomeLawyerScreen extends StatefulWidget {
   const BecomeLawyerScreen({super.key});
 
@@ -28,14 +27,11 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       TextEditingController();
   final TextEditingController _colegioRegionController =
       TextEditingController();
-  final TextEditingController _colegiaturaCarnetController =
-      TextEditingController();
   final TextEditingController _colegiaturaFechaEmisionController =
       TextEditingController();
   final TextEditingController _colegiaturaFechaVigenciaHastaController =
       TextEditingController();
-  final TextEditingController _colegiaturaCarnetNombreController =
-      TextEditingController();
+
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey<FormFieldState<PlatformFile?>> _carnetFileFieldKey =
       GlobalKey<FormFieldState<PlatformFile?>>();
@@ -76,7 +72,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   bool _isSubmitting = false;
   UserSession? _session;
   PlatformFile? _selectedCarnetFile;
-  String? _existingCarnetFileName;
   DateTime? _colegiaturaFechaEmision;
   DateTime? _colegiaturaFechaVigenciaHasta;
   String? _selectedColegioRegion;
@@ -113,10 +108,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     _colegiaturaNumeroController.dispose();
     _colegioNombreController.dispose();
     _colegioRegionController.dispose();
-    _colegiaturaCarnetController.dispose();
     _colegiaturaFechaEmisionController.dispose();
     _colegiaturaFechaVigenciaHastaController.dispose();
-    _colegiaturaCarnetNombreController.dispose();
     super.dispose();
   }
 
@@ -134,7 +127,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     _linkedinController.text = status.linkedinUrl ?? '';
     _degreeLinkController.text = status.tituloUrl ?? '';
     _colegiaturaNumeroController.text = status.colegiaturaNumero ?? '';
-    _colegiaturaCarnetController.text = status.colegiaturaCarnet ?? '';
     _colegioNombreController.text = status.colegioNombre ?? '';
 
     _colegiaturaFechaEmision = status.colegiaturaFechaEmision;
@@ -143,13 +135,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         _formatDate(_colegiaturaFechaEmision);
     _colegiaturaFechaVigenciaHastaController.text =
         _formatDate(_colegiaturaFechaVigenciaHasta);
-
-    final carnetArchivoNombre = status.colegiaturaCarnetNombre?.trim();
-    final carnetNombreDisplay = (carnetArchivoNombre != null &&
-            carnetArchivoNombre.isNotEmpty)
-        ? _extractFileName(carnetArchivoNombre)
-        : '';
-    _colegiaturaCarnetNombreController.text = carnetNombreDisplay;
 
     if (!mounted) {
       return;
@@ -161,26 +146,12 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
           (region != null && region.trim().isNotEmpty) ? region : null;
       _colegioRegionController.text = _selectedColegioRegion ?? '';
 
-      final trimmedCarnetNombre = carnetArchivoNombre;
-      _existingCarnetFileName = (trimmedCarnetNombre != null &&
-              trimmedCarnetNombre.isNotEmpty)
-          ? trimmedCarnetNombre
-          : null;
       _selectedCarnetFile = null;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _carnetFileFieldKey.currentState?.didChange(_selectedCarnetFile);
     });
-  }
-
-  String _extractFileName(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return url;
-    if (uri.pathSegments.isNotEmpty) {
-      return Uri.decodeComponent(uri.pathSegments.last);
-    }
-    return uri.path.isNotEmpty ? Uri.decodeComponent(uri.path) : url;
   }
 
   String _formatFileSize(int bytes) {
@@ -278,13 +249,13 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
 
   Future<void> _selectFechaVigencia() async {
     final DateTime now = DateTime.now();
-    final DateTime first = _colegiaturaFechaEmision ?? DateTime(now.year - 80, 1, 1);
+    final DateTime first =
+        _colegiaturaFechaEmision ?? DateTime(now.year - 80, 1, 1);
     await _pickColegiaturaDate(
       controller: _colegiaturaFechaVigenciaHastaController,
       currentValue: _colegiaturaFechaVigenciaHasta ??
           (_colegiaturaFechaEmision != null
-              ? _colegiaturaFechaEmision!
-                  .add(const Duration(days: 1))
+              ? _colegiaturaFechaEmision!.add(const Duration(days: 1))
               : now),
       firstDate: first,
       lastDate: DateTime(now.year + 10, 12, 31),
@@ -293,7 +264,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       },
     );
   }
-
 
   Future<void> _pickCarnetFile(FormFieldState<PlatformFile?> field) async {
     if (!(_status.canEdit) || _isSubmitting) {
@@ -326,8 +296,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
 
       setState(() {
         _selectedCarnetFile = file;
-        _existingCarnetFileName = null;
-        _colegiaturaCarnetNombreController.text = file.name;
       });
       field.didChange(file);
     } catch (error) {
@@ -338,9 +306,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   void _clearSelectedCarnetFile(FormFieldState<PlatformFile?> field) {
     setState(() {
       _selectedCarnetFile = null;
-      _colegiaturaCarnetNombreController.text = _existingCarnetFileName != null
-          ? _extractFileName(_existingCarnetFileName!)
-          : '';
     });
     field.didChange(null);
   }
@@ -361,18 +326,15 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       key: _carnetFileFieldKey,
       enabled: canInteract,
       validator: (value) {
-        final hasExisting = _existingCarnetFileName?.isNotEmpty ?? false;
-        final hasNew = value != null ||
-            _colegiaturaCarnetNombreController.text.trim().isNotEmpty;
-        if (!hasExisting && !hasNew) {
+        if (value == null) {
           return 'Adjunta el archivo digital de tu carnet.';
         }
         return null;
       },
       builder: (field) {
-        final hasValue = _colegiaturaCarnetNombreController.text.trim().isNotEmpty;
+        final hasValue = _selectedCarnetFile != null;
         final String helperText = hasValue
-            ? _colegiaturaCarnetNombreController.text.trim()
+            ? _selectedCarnetFile!.name
             : 'Selecciona un archivo (PDF, JPG o PNG, máx. ${_formatFileSize(_maxCarnetFileSizeBytes)})';
 
         return Column(
@@ -436,20 +398,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
                   ),
                 ),
               ),
-            if ((_existingCarnetFileName?.isNotEmpty ?? false) &&
-                _selectedCarnetFile == null)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  'Se conservará el carnet digital previamente registrado. '
-                  'Puedes adjuntar uno nuevo si necesitas actualizarlo.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.text2Color,
-                    height: 1.3,
-                  ),
-                ),
-              ),
           ],
         );
       },
@@ -494,7 +442,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             'Tu postulación no fue aprobada. Puedes comunicarte con soporte para más detalles.';
         break;
       case LawyerApplicationState.none:
-      
         icon = Icons.info_outline_rounded;
         color = AppColors.text2Color;
         title = 'Sin estado disponible';
@@ -628,13 +575,12 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     final linkedin = _linkedinController.text.trim();
     final degreeLink = _degreeLinkController.text.trim();
     final colegiaturaNumero = _colegiaturaNumeroController.text.trim();
-    final colegiaturaCarnet = _colegiaturaCarnetController.text.trim();
     final colegioNombre = _colegioNombreController.text.trim();
     final colegioRegion = _colegioRegionController.text.trim().isNotEmpty
         ? _colegioRegionController.text.trim()
         : (_selectedColegioRegion ?? '');
 
-     DateTime? fechaEmision = _colegiaturaFechaEmision;
+    DateTime? fechaEmision = _colegiaturaFechaEmision;
     fechaEmision ??=
         _parseFormDate(_colegiaturaFechaEmisionController.text.trim());
     DateTime? fechaVigencia = _colegiaturaFechaVigenciaHasta;
@@ -642,8 +588,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         _parseFormDate(_colegiaturaFechaVigenciaHastaController.text.trim());
 
     if (fechaEmision == null || fechaVigencia == null) {
-      _showSnack(
-          'Selecciona las fechas de emisión y vigencia de tu carnet.');
+      _showSnack('Selecciona las fechas de emisión y vigencia de tu carnet.');
       return;
     }
 
@@ -654,24 +599,14 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
 
     final PlatformFile? carnetArchivo = _selectedCarnetFile;
     List<int>? carnetArchivoBytes;
-    String? carnetArchivoNombre =
-        _colegiaturaCarnetNombreController.text.trim();
 
     if (carnetArchivo != null) {
       try {
         carnetArchivoBytes = await _readCarnetFileBytes(carnetArchivo);
-        carnetArchivoNombre = carnetArchivo.name;
       } catch (error) {
         _showSnack('No se pudo leer el archivo del carnet seleccionado: $error');
         return;
       }
-    } else if (_existingCarnetFileName != null &&
-        _existingCarnetFileName!.trim().isNotEmpty) {
-      carnetArchivoNombre = _existingCarnetFileName!;
-    }
-
-    if (carnetArchivoNombre != null && carnetArchivoNombre.trim().isEmpty) {
-      carnetArchivoNombre = null;
     }
 
     final String colegiaturaFechaEmision = fechaEmision.toIso8601String();
@@ -687,10 +622,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         colegiaturaNumero: colegiaturaNumero,
         colegioNombre: colegioNombre,
         colegioRegion: colegioRegion,
-        colegiaturaCarnet: colegiaturaCarnet,
         colegiaturaFechaEmision: colegiaturaFechaEmision,
         colegiaturaFechaVigenciaHasta: colegiaturaFechaVigenciaHasta,
-        colegiaturaCarnetNombre: carnetArchivoNombre,
         colegiaturaCarnetArchivoBytes: carnetArchivoBytes,
       );
       SessionService.instance.updateApplication(status);
@@ -710,14 +643,12 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       setState(() => _isSubmitting = false);
       final message = error.toString().replaceFirst('Exception: ', '');
       _showSnack(
-        message.isEmpty
-            ? 'No se pudo enviar la solicitud'
-            : message,
+        message.isEmpty ? 'No se pudo enviar la solicitud' : message,
       );
     }
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgColor,
@@ -800,7 +731,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       regionOptions.add(_selectedColegioRegion!);
     }
 
-
     return Container(
       decoration: BoxDecoration(
         color: AppColors.buttonTextColor,
@@ -821,7 +751,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               hintText: 'https://www.linkedin.com/in/usuario',
               hintStyle: TextStyle(color: AppColors.text2Color),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderSide:
+                    BorderSide(color: AppColors.textFormFieldBorderColor),
                 borderRadius: BorderRadius.all(Radius.circular(14)),
               ),
               focusedBorder: OutlineInputBorder(
@@ -830,7 +761,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               ),
               filled: true,
               fillColor: AppColors.buttonTextColor,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             validator: (value) {
               final trimmed = value?.trim() ?? '';
@@ -847,11 +779,13 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             decoration: const InputDecoration(
               labelText: 'Link a tu Título (Google Drive, etc.)',
               labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
-              prefixIcon: Icon(Icons.school_rounded, color: AppColors.text2Color),
+              prefixIcon:
+                  Icon(Icons.school_rounded, color: AppColors.text2Color),
               hintText: 'Asegúrate de que sea un enlace público',
               hintStyle: TextStyle(color: AppColors.text2Color),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderSide:
+                    BorderSide(color: AppColors.textFormFieldBorderColor),
                 borderRadius: BorderRadius.all(Radius.circular(14)),
               ),
               focusedBorder: OutlineInputBorder(
@@ -860,7 +794,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               ),
               filled: true,
               fillColor: AppColors.buttonTextColor,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             validator: (value) {
               final trimmed = value?.trim() ?? '';
@@ -877,12 +812,13 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             decoration: const InputDecoration(
               labelText: 'Colegio de Abogados',
               labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
-              prefixIcon:
-                  Icon(Icons.account_balance_rounded, color: AppColors.text2Color),
+              prefixIcon: Icon(Icons.account_balance_rounded,
+                  color: AppColors.text2Color),
               hintText: 'Ej. Ilustre Colegio de Abogados de Lima',
               hintStyle: TextStyle(color: AppColors.text2Color),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderSide:
+                    BorderSide(color: AppColors.textFormFieldBorderColor),
                 borderRadius: BorderRadius.all(Radius.circular(14)),
               ),
               focusedBorder: OutlineInputBorder(
@@ -891,7 +827,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               ),
               filled: true,
               fillColor: AppColors.buttonTextColor,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             validator: (value) {
               final trimmed = value?.trim() ?? '';
@@ -909,8 +846,10 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             decoration: const InputDecoration(
               labelText: 'Región del colegio',
               labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
-              prefixIcon: Icon(Icons.map_rounded, color: AppColors.text2Color),
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              prefixIcon:
+                  Icon(Icons.map_rounded, color: AppColors.text2Color),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             items: regionOptions
                 .map(
@@ -943,11 +882,13 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             decoration: const InputDecoration(
               labelText: 'Número de colegiatura',
               labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
-              prefixIcon: Icon(Icons.badge_rounded, color: AppColors.text2Color),
+              prefixIcon:
+                  Icon(Icons.badge_rounded, color: AppColors.text2Color),
               hintText: 'Ej. 12345',
               hintStyle: TextStyle(color: AppColors.text2Color),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderSide:
+                    BorderSide(color: AppColors.textFormFieldBorderColor),
                 borderRadius: BorderRadius.all(Radius.circular(14)),
               ),
               focusedBorder: OutlineInputBorder(
@@ -956,7 +897,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               ),
               filled: true,
               fillColor: AppColors.buttonTextColor,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             validator: (value) {
               final trimmed = value?.trim() ?? '';
@@ -965,40 +907,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               }
               if (trimmed.length < 4) {
                 return 'El número de colegiatura debe tener al menos 4 caracteres.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-           TextFormField(
-            controller: _colegiaturaCarnetController,
-            enabled: canInteract,
-            decoration: const InputDecoration(
-              labelText: 'Número de carnet',
-              labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
-              prefixIcon:
-                  Icon(Icons.credit_card_rounded, color: AppColors.text2Color),
-              hintText: 'Identificador de tu carnet profesional',
-              hintStyle: TextStyle(color: AppColors.text2Color),
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
-                borderRadius: BorderRadius.all(Radius.circular(14)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.button2Color, width: 2),
-                borderRadius: BorderRadius.all(Radius.circular(14)),
-              ),
-              filled: true,
-              fillColor: AppColors.buttonTextColor,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-            validator: (value) {
-              final trimmed = value?.trim() ?? '';
-              if (trimmed.isEmpty) {
-                return 'Ingresa el número de tu carnet profesional.';
-              }
-              if (trimmed.length < 3) {
-                return 'El número de carnet debe tener al menos 3 caracteres.';
               }
               return null;
             },
@@ -1017,7 +925,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               hintText: 'Selecciona la fecha de emisión',
               hintStyle: const TextStyle(color: AppColors.text2Color),
               enabledBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderSide:
+                    BorderSide(color: AppColors.textFormFieldBorderColor),
                 borderRadius: BorderRadius.all(Radius.circular(14)),
               ),
               focusedBorder: const OutlineInputBorder(
@@ -1055,12 +964,13 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
               labelText: 'Vigencia del carnet (hasta)',
               labelStyle:
                   const TextStyle(color: AppColors.textFormFieldLabelColor),
-              prefixIcon: const Icon(Icons.event_available,
-                  color: AppColors.text2Color),
+              prefixIcon:
+                  const Icon(Icons.event_available, color: AppColors.text2Color),
               hintText: 'Selecciona la fecha de vigencia',
               hintStyle: const TextStyle(color: AppColors.text2Color),
               enabledBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textFormFieldBorderColor),
+                borderSide:
+                    BorderSide(color: AppColors.textFormFieldBorderColor),
                 borderRadius: BorderRadius.all(Radius.circular(14)),
               ),
               focusedBorder: const OutlineInputBorder(

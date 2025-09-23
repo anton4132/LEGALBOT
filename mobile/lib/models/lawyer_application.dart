@@ -1,5 +1,7 @@
 enum LawyerApplicationState { none, pendiente, observada, aprobada, rechazada }
 
+
+//agarra un texto que viene del backend (por ejemplo “PENDIENTE”) y lo convierte a una de esas etiquetas de arriba.
 LawyerApplicationState parseLawyerApplicationState(String? value) {
   switch (value?.toUpperCase()) {
     case 'PENDIENTE':
@@ -15,12 +17,17 @@ LawyerApplicationState parseLawyerApplicationState(String? value) {
   }
 }
 
+
+//intenta transformar un texto de fecha (“2025-01-01…”) en un objeto DateTime.Si no puede, devuelve null. Así no se rompe nada.
+
 DateTime? _parseDate(dynamic value) {
   if (value is String && value.isNotEmpty) {
     return DateTime.tryParse(value);
   }
   return null;
 }
+
+//es todo los datos importantes para postulacion 
 
 class LawyerApplicationStatus {
   final int? id;
@@ -30,7 +37,6 @@ class LawyerApplicationStatus {
   final String? tituloUrl;
   final String? colegiaturaNumero;
   final String? colegiaturaCarnet;
-  final String? colegiaturaCarnetNombre;
   final DateTime? colegiaturaFechaEmision;
   final DateTime? colegiaturaFechaVigenciaHasta;
   final String? colegioNombre;
@@ -48,7 +54,6 @@ class LawyerApplicationStatus {
     this.tituloUrl,
     this.colegiaturaNumero,
     this.colegiaturaCarnet,
-    this.colegiaturaCarnetNombre,
     this.colegiaturaFechaEmision,
     this.colegiaturaFechaVigenciaHasta,
     this.colegioNombre,
@@ -72,10 +77,13 @@ class LawyerApplicationStatus {
 
   bool get isPending => state == LawyerApplicationState.pendiente;
 
+  //construye el objeto de datos leyendo la respuesta del servidor. Lo hace a prueba de balas:
+
   factory LawyerApplicationStatus.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return LawyerApplicationStatus.empty;
     }
+
 Map<String, dynamic>? _nestedMap(String key) {
       final dynamic value = json[key];
       if (value is Map<String, dynamic>) {
@@ -131,16 +139,7 @@ Map<String, dynamic>? _nestedMap(String key) {
               ?? _readString(json['colegiatura'] as Map<String, dynamic>?, 'carnet', 'carnet')
               ?? _readString(json, 'carnet', 'carnet'),
 
-      colegiaturaCarnetNombre:
-          json['colegiaturaCarnetNombre'] as String?
-              ?? json['colegiatura_carnet_nombre'] as String?
-              ?? json['colegiaturaCarnetArchivoNombre'] as String?
-              ?? json['colegiatura_carnet_archivo_nombre'] as String?
-              ?? json['carnetArchivoNombre'] as String?
-              ?? json['carnet_archivo_nombre'] as String?
-              ?? _readString(colegiatura, 'carnetArchivoNombre', 'carnet_archivo_nombre')
-              ?? _readString(colegiatura, 'carnetNombre', 'carnet_nombre')
-              ?? _readString(json, 'carnetArchivoNombre', 'carnet_archivo_nombre'),
+      
 
       colegiaturaFechaEmision: _parseDate(json['colegiaturaFechaEmision']) ??
           _parseDate(json['colegiatura_fecha_emision']) ??
@@ -172,7 +171,6 @@ Map<String, dynamic>? _nestedMap(String key) {
     String? tituloUrl,
     String? colegiaturaNumero,
     String? colegiaturaCarnet,
-    String? colegiaturaCarnetNombre,
     DateTime? colegiaturaFechaEmision,
     DateTime? colegiaturaFechaVigenciaHasta,
     String? colegioNombre,
@@ -189,8 +187,6 @@ Map<String, dynamic>? _nestedMap(String key) {
       tituloUrl: tituloUrl ?? this.tituloUrl,
       colegiaturaNumero: colegiaturaNumero ?? this.colegiaturaNumero,
       colegiaturaCarnet: colegiaturaCarnet ?? this.colegiaturaCarnet,
-      colegiaturaCarnetNombre:
-          colegiaturaCarnetNombre ?? this.colegiaturaCarnetNombre,
       colegiaturaFechaEmision: colegiaturaFechaEmision ?? this.colegiaturaFechaEmision,
       colegiaturaFechaVigenciaHasta: colegiaturaFechaVigenciaHasta ?? this.colegiaturaFechaVigenciaHasta,
       colegioNombre: colegioNombre ?? this.colegioNombre,

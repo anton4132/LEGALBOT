@@ -32,7 +32,9 @@ class _ClientHomeState extends State<ClientHome> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshApplicationStatus());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _refreshApplicationStatus(),
+    );
   }
 
   @override
@@ -46,8 +48,9 @@ class _ClientHomeState extends State<ClientHome> {
     if (session == null) return;
 
     try {
-      final status =
-          await ApiClient.fetchLawyerApplicationStatus(token: session.token);
+      final status = await ApiClient.fetchLawyerApplicationStatus(
+        token: session.token,
+      );
       SessionService.instance.updateApplication(status);
     } catch (_) {
       // Ignorar fallos silenciosamente; el usuario puede actualizar manualmente en la pantalla de postulación
@@ -65,12 +68,9 @@ class _ClientHomeState extends State<ClientHome> {
   }
 
   void _showSnackBar(String message, {Color color = Colors.red}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   Future<void> _switchToLawyerAccount(UserSession session) async {
@@ -103,9 +103,7 @@ class _ClientHomeState extends State<ClientHome> {
       if (!mounted) return;
       final message = error.toString().replaceFirst('Exception: ', '');
       _showSnackBar(
-        message.isEmpty
-            ? 'No se pudo cambiar a la cuenta de abogado'
-            : message,
+        message.isEmpty ? 'No se pudo cambiar a la cuenta de abogado' : message,
       );
     } finally {
       if (mounted) {
@@ -124,24 +122,25 @@ class _ClientHomeState extends State<ClientHome> {
   void _handleLogout() async {
     final bool? shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Cerrar sesión'),
+            content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.buttonColor,
+                  foregroundColor: AppColors.buttonTextColor,
+                ),
+                child: const Text('Cerrar sesión'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.buttonColor,
-              foregroundColor: AppColors.buttonTextColor,
-            ),
-            child: const Text('Cerrar sesión'),
-          ),
-        ],
-      ),
     );
 
     if (!(shouldLogout ?? false) || !mounted) return;
@@ -173,7 +172,9 @@ class _ClientHomeState extends State<ClientHome> {
     if (_isSwitchingAccount) return;
 
     if (session == null) {
-      _showSnackBar('Inicia sesión nuevamente para acceder al panel de abogado');
+      _showSnackBar(
+        'Inicia sesión nuevamente para acceder al panel de abogado',
+      );
       return;
     }
 
@@ -200,9 +201,10 @@ class _ClientHomeState extends State<ClientHome> {
             (session?.nombreCompleto?.trim().isNotEmpty ?? false)
                 ? session!.nombreCompleto!.trim()
                 : 'Cliente';
-        final String drawerSubtitle = hasLawyerAccount
-            ? 'Gestiona tus roles desde LegalBot'
-            : 'Bienvenido a LegalBot';
+        final String drawerSubtitle =
+            hasLawyerAccount
+                ? 'Gestiona tus roles desde LegalBot'
+                : 'Bienvenido a LegalBot';
 
         return Scaffold(
           appBar: const CustomAppBar(title: 'LegalBot - Cliente'),
@@ -212,10 +214,7 @@ class _ClientHomeState extends State<ClientHome> {
             userName: displayName,
             subtitle: drawerSubtitle,
             items: [
-              const DrawerItem(
-                icon: Icons.home,
-                title: 'Inicio',
-              ),
+              const DrawerItem(icon: Icons.home, title: 'Inicio'),
               DrawerItem(
                 icon: Icons.search,
                 title: 'Buscar Abogados',
@@ -247,9 +246,10 @@ class _ClientHomeState extends State<ClientHome> {
               DrawerItem(
                 icon: Icons.workspace_premium_rounded,
                 title: 'Panel Abogado',
-                onTap: _isSwitchingAccount
-                    ? null
-                    : () => _navigateToLawyerPanel(session),
+                onTap:
+                    _isSwitchingAccount
+                        ? null
+                        : () => _navigateToLawyerPanel(session),
               ),
               DrawerItem(
                 icon: Icons.settings,
@@ -274,8 +274,11 @@ class _ClientHomeState extends State<ClientHome> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.waving_hand,
-                                color: AppColors.buttonColor, size: 24),
+                            const Icon(
+                              Icons.waving_hand,
+                              color: AppColors.buttonColor,
+                              size: 24,
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               '¡Hola, $displayName!',
@@ -308,8 +311,11 @@ class _ClientHomeState extends State<ClientHome> {
                       children: [
                         Row(
                           children: const [
-                            Icon(Icons.chat_bubble_outline,
-                                color: AppColors.buttonColor, size: 20),
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              color: AppColors.buttonColor,
+                              size: 20,
+                            ),
                             SizedBox(width: 8),
                             Text(
                               'Consulta Rápida',
@@ -324,8 +330,10 @@ class _ClientHomeState extends State<ClientHome> {
                         const SizedBox(height: 8),
                         const Text(
                           'Escribe tu consulta legal o usa el micrófono para dictar',
-                          style:
-                              TextStyle(fontSize: 12, color: AppColors.text2Color),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.text2Color,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         ConsultationInput(
@@ -396,8 +404,11 @@ class _ClientHomeState extends State<ClientHome> {
                       children: [
                         Row(
                           children: const [
-                            Icon(Icons.help_outline,
-                                color: AppColors.buttonColor, size: 20),
+                            Icon(
+                              Icons.help_outline,
+                              color: AppColors.buttonColor,
+                              size: 20,
+                            ),
                             SizedBox(width: 8),
                             Text(
                               '¿Necesitas ayuda?',
@@ -412,7 +423,10 @@ class _ClientHomeState extends State<ClientHome> {
                         const SizedBox(height: 8),
                         const Text(
                           'Nuestro equipo legal está disponible 24/7 para ayudarte con cualquier consulta.',
-                          style: TextStyle(fontSize: 12, color: AppColors.text2Color),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.text2Color,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         SizedBox(
@@ -445,7 +459,10 @@ class _ClientHomeState extends State<ClientHome> {
     LawyerApplicationStatus application,
   ) {
     final bool hasLawyerAccount = session?.hasLawyerAccount ?? false;
-    final _StatusDisplay display = _statusDisplayFor(application, hasLawyerAccount);
+    final _StatusDisplay display = _statusDisplayFor(
+      application,
+      hasLawyerAccount,
+    );
 
     final Gradient gradient = LinearGradient(
       begin: Alignment.topLeft,
@@ -456,11 +473,12 @@ class _ClientHomeState extends State<ClientHome> {
       ],
     );
 
-    final String actionText = hasLawyerAccount
-        ? 'Ir al panel de abogado'
-        : (application.state == LawyerApplicationState.none
-            ? 'Postular ahora'
-            : 'Ver detalles');
+    final String actionText =
+        hasLawyerAccount
+            ? 'Ir al panel de abogado'
+            : (application.state == LawyerApplicationState.none
+                ? 'Postular ahora'
+                : 'Ver detalles');
 
     return Container(
       decoration: BoxDecoration(
@@ -478,15 +496,16 @@ class _ClientHomeState extends State<ClientHome> {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
-          onTap: _isSwitchingAccount
-              ? null
-              : () {
-                  if (hasLawyerAccount && session != null) {
-                    _switchToLawyerAccount(session);
-                  } else {
-                    _navigateToBecomeLawyer(session);
-                  }
-                },
+          onTap:
+              _isSwitchingAccount
+                  ? null
+                  : () {
+                    if (hasLawyerAccount && session != null) {
+                      _switchToLawyerAccount(session);
+                    } else {
+                      _navigateToBecomeLawyer(session);
+                    }
+                  },
           borderRadius: BorderRadius.circular(20),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
@@ -496,8 +515,11 @@ class _ClientHomeState extends State<ClientHome> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(display.icon,
-                        color: AppColors.buttonTextColor, size: 40),
+                    Icon(
+                      display.icon,
+                      color: AppColors.buttonTextColor,
+                      size: 40,
+                    ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
@@ -530,15 +552,16 @@ class _ClientHomeState extends State<ClientHome> {
                   width: double.infinity,
                   child: CustomButton(
                     text: _isSwitchingAccount ? 'Procesando...' : actionText,
-                    onTap: _isSwitchingAccount
-                        ? null
-                        : () {
-                            if (hasLawyerAccount && session != null) {
-                              _switchToLawyerAccount(session);
-                            } else {
-                              _navigateToBecomeLawyer(session);
-                            }
-                          },
+                    onTap:
+                        _isSwitchingAccount
+                            ? null
+                            : () {
+                              if (hasLawyerAccount && session != null) {
+                                _switchToLawyerAccount(session);
+                              } else {
+                                _navigateToBecomeLawyer(session);
+                              }
+                            },
                     color: display.color,
                   ),
                 ),
@@ -563,9 +586,10 @@ class _ClientHomeState extends State<ClientHome> {
           icon: Icons.hourglass_top_rounded,
         );
       case LawyerApplicationState.observada:
-        final String detail = (status.observation?.trim().isNotEmpty ?? false)
-            ? status.observation!.trim()
-            : 'Actualiza la evidencia solicitada y vuelve a enviar tu solicitud.';
+        final String detail =
+            (status.observation?.trim().isNotEmpty ?? false)
+                ? status.observation!.trim()
+                : 'Actualiza la evidencia solicitada y vuelve a enviar tu solicitud.';
         return _StatusDisplay(
           title: 'Solicitud observada',
           description: detail,
@@ -581,9 +605,10 @@ class _ClientHomeState extends State<ClientHome> {
           icon: Icons.verified_user,
         );
       case LawyerApplicationState.rechazada:
-        final String detail = (status.observation?.trim().isNotEmpty ?? false)
-            ? status.observation!.trim()
-            : 'No pudimos validar la solicitud. Contáctanos para mayor detalle.';
+        final String detail =
+            (status.observation?.trim().isNotEmpty ?? false)
+                ? status.observation!.trim()
+                : 'No pudimos validar la solicitud. Contáctanos para mayor detalle.';
         return _StatusDisplay(
           title: 'Solicitud rechazada',
           description: detail,
