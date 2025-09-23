@@ -6,6 +6,7 @@ LawyerApplicationState parseLawyerApplicationState(String? value) {
       return LawyerApplicationState.pendiente;
     case 'OBSERVADA':
       return LawyerApplicationState.observada;
+    return LawyerApplicationState.observada;
     case 'APROBADA':
       return LawyerApplicationState.aprobada;
     case 'RECHAZADA':
@@ -30,6 +31,7 @@ class LawyerApplicationStatus {
   final String? tituloUrl;
   final String? colegiaturaNumero;
   final String? colegiaturaCarnet;
+  final String? colegiaturaCarnetNombre;
   final DateTime? colegiaturaFechaEmision;
   final DateTime? colegiaturaFechaVigenciaHasta;
   final String? colegioNombre;
@@ -46,6 +48,7 @@ class LawyerApplicationStatus {
     this.tituloUrl,
     this.colegiaturaNumero,
     this.colegiaturaCarnet,
+    this.colegiaturaCarnetNombre,
     this.colegiaturaFechaEmision,
     this.colegiaturaFechaVigenciaHasta,
     this.colegioNombre,
@@ -71,37 +74,7 @@ class LawyerApplicationStatus {
   factory LawyerApplicationStatus.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return LawyerApplicationStatus.empty;
-    }
-Map<String, dynamic>? _nestedMap(String key) {
-      final dynamic value = json[key];
-      if (value is Map<String, dynamic>) {
-        return value;
-      }
-      return null;
-    }
-
-    Map<String, dynamic>? colegiatura = _nestedMap('colegiatura');
-    colegiatura ??= _nestedMap('colegiaturaAbogado');
-
-    Map<String, dynamic>? colegio = _nestedMap('colegio');
-
-    String? _readString(Map<String, dynamic>? source, String camel, String snake) {
-      if (source == null) return null;
-      final dynamic camelValue = source[camel];
-      if (camelValue is String && camelValue.trim().isNotEmpty) {
-        return camelValue;
-      }
-      final dynamic snakeValue = source[snake];
-      if (snakeValue is String && snakeValue.trim().isNotEmpty) {
-        return snakeValue;
-      }
-      return null;
-    }
-
-    DateTime? _readDate(Map<String, dynamic>? source, String camel, String snake) {
-      if (source == null) return null;
-      final dynamic camelValue = source[camel];
-      final DateTime? camelDate = _parseDate(camelValue);
+@@ -105,81 +107,95 @@ Map<String, dynamic>? _nestedMap(String key) {
       if (camelDate != null) {
         return camelDate;
       }
@@ -126,6 +99,17 @@ Map<String, dynamic>? _nestedMap(String key) {
               ?? _readString(colegiatura, 'carnet', 'carnet')
               ?? _readString(json['colegiatura'] as Map<String, dynamic>?, 'carnet', 'carnet')
               ?? _readString(json, 'carnet', 'carnet'),
+
+      colegiaturaCarnetNombre:
+          json['colegiaturaCarnetNombre'] as String?
+              ?? json['colegiatura_carnet_nombre'] as String?
+              ?? json['colegiaturaCarnetArchivoNombre'] as String?
+              ?? json['colegiatura_carnet_archivo_nombre'] as String?
+              ?? json['carnetArchivoNombre'] as String?
+              ?? json['carnet_archivo_nombre'] as String?
+              ?? _readString(colegiatura, 'carnetArchivoNombre', 'carnet_archivo_nombre')
+              ?? _readString(colegiatura, 'carnetNombre', 'carnet_nombre')
+              ?? _readString(json, 'carnetArchivoNombre', 'carnet_archivo_nombre'),
 
       colegiaturaFechaEmision: _parseDate(json['colegiaturaFechaEmision']) ??
           _parseDate(json['colegiatura_fecha_emision']) ??
@@ -156,7 +140,8 @@ Map<String, dynamic>? _nestedMap(String key) {
     String? linkedinUrl,
     String? tituloUrl,
     String? colegiaturaNumero,
-     String? colegiaturaCarnet,
+    String? colegiaturaCarnet,
+    String? colegiaturaCarnetNombre,
     DateTime? colegiaturaFechaEmision,
     DateTime? colegiaturaFechaVigenciaHasta,
     String? colegioNombre,
@@ -173,6 +158,8 @@ Map<String, dynamic>? _nestedMap(String key) {
       tituloUrl: tituloUrl ?? this.tituloUrl,
       colegiaturaNumero: colegiaturaNumero ?? this.colegiaturaNumero,
       colegiaturaCarnet: colegiaturaCarnet ?? this.colegiaturaCarnet,
+      colegiaturaCarnetNombre:
+          colegiaturaCarnetNombre ?? this.colegiaturaCarnetNombre,
       colegiaturaFechaEmision: colegiaturaFechaEmision ?? this.colegiaturaFechaEmision,
       colegiaturaFechaVigenciaHasta: colegiaturaFechaVigenciaHasta ?? this.colegiaturaFechaVigenciaHasta,
       colegioNombre: colegioNombre ?? this.colegioNombre,
