@@ -494,7 +494,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             'Tu postulación no fue aprobada. Puedes comunicarte con soporte para más detalles.';
         break;
       case LawyerApplicationState.none:
-      default:
+      
         icon = Icons.info_outline_rounded;
         color = AppColors.text2Color;
         title = 'Sin estado disponible';

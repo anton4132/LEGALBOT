@@ -6,7 +6,6 @@ LawyerApplicationState parseLawyerApplicationState(String? value) {
       return LawyerApplicationState.pendiente;
     case 'OBSERVADA':
       return LawyerApplicationState.observada;
-    return LawyerApplicationState.observada;
     case 'APROBADA':
       return LawyerApplicationState.aprobada;
     case 'RECHAZADA':
@@ -40,6 +39,7 @@ class LawyerApplicationStatus {
   final DateTime? updatedAt;
   final DateTime? approvedAt;
 
+  
   const LawyerApplicationStatus({
     this.id,
     required this.state,
@@ -56,6 +56,7 @@ class LawyerApplicationStatus {
     this.createdAt,
     this.updatedAt,
     this.approvedAt,
+    
   });
 
   static const LawyerApplicationStatus empty =
@@ -74,7 +75,37 @@ class LawyerApplicationStatus {
   factory LawyerApplicationStatus.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return LawyerApplicationStatus.empty;
-@@ -105,81 +107,95 @@ Map<String, dynamic>? _nestedMap(String key) {
+    }
+Map<String, dynamic>? _nestedMap(String key) {
+      final dynamic value = json[key];
+      if (value is Map<String, dynamic>) {
+        return value;
+      }
+      return null;
+    }
+
+    Map<String, dynamic>? colegiatura = _nestedMap('colegiatura');
+    colegiatura ??= _nestedMap('colegiaturaAbogado');
+
+    Map<String, dynamic>? colegio = _nestedMap('colegio');
+
+    String? _readString(Map<String, dynamic>? source, String camel, String snake) {
+      if (source == null) return null;
+      final dynamic camelValue = source[camel];
+      if (camelValue is String && camelValue.trim().isNotEmpty) {
+        return camelValue;
+      }
+      final dynamic snakeValue = source[snake];
+      if (snakeValue is String && snakeValue.trim().isNotEmpty) {
+        return snakeValue;
+      }
+      return null;
+    }
+
+    DateTime? _readDate(Map<String, dynamic>? source, String camel, String snake) {
+      if (source == null) return null;
+      final dynamic camelValue = source[camel];
+      final DateTime? camelDate = _parseDate(camelValue);
       if (camelDate != null) {
         return camelDate;
       }

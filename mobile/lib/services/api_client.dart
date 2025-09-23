@@ -162,4 +162,87 @@ class ApiClient {
         : 'No se pudo cambiar de cuenta';
     throw Exception(message);
   }
-throw Exception(message);
+static Future<LawyerApplicationStatus> fetchLawyerApplicationStatus(
+      {required String token}) async {
+    final uri = Uri.parse('$_baseUrl/lawyers/applications/me');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 200) {
+      return LawyerApplicationStatus.fromJson(
+          data?['application'] as Map<String, dynamic>?);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo obtener el estado de la solicitud';
+    throw Exception(message);
+  }
+
+  static Future<LawyerApplicationStatus> submitLawyerApplication({
+    required String token,
+    required String linkedinUrl,
+    required String tituloUrl,
+    required String colegiaturaNumero,
+    required String colegiaturaCarnet,
+    required String colegioNombre,
+    required String colegioRegion,
+    String? colegiaturaFechaEmision,
+    String? colegiaturaFechaVigenciaHasta,
+    List<int>? colegiaturaCarnetArchivoBytes,
+    String? colegiaturaCarnetNombre,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/lawyers/applications');
+    final Map<String, dynamic> payload = {
+      'linkedinUrl': linkedinUrl,
+      'tituloUrl': tituloUrl,
+      'colegiaturaNumero': colegiaturaNumero,
+      'colegiaturaCarnet': colegiaturaCarnet.trim(),
+      'colegioNombre': colegioNombre,
+      'colegioRegion': colegioRegion,
+    };
+
+    if (colegiaturaFechaEmision != null &&
+        colegiaturaFechaEmision.trim().isNotEmpty) {
+      payload['colegiaturaFechaEmision'] = colegiaturaFechaEmision.trim();
+    }
+
+    if (colegiaturaFechaVigenciaHasta != null &&
+        colegiaturaFechaVigenciaHasta.trim().isNotEmpty) {
+      payload['colegiaturaFechaVigenciaHasta'] =
+          colegiaturaFechaVigenciaHasta.trim();
+    }
+
+    if (colegiaturaCarnetArchivoBytes != null &&
+        colegiaturaCarnetArchivoBytes.isNotEmpty) {
+      payload['colegiaturaCarnetBytes'] =
+          base64Encode(colegiaturaCarnetArchivoBytes);
+      if (colegiaturaCarnetNombre != null &&
+          colegiaturaCarnetNombre.trim().isNotEmpty) {
+        payload['colegiaturaCarnetNombre'] =
+            colegiaturaCarnetNombre.trim();
+      }
+    } else if (colegiaturaCarnetNombre != null &&
+        colegiaturaCarnetNombre.trim().isNotEmpty) {
+      payload['colegiaturaCarnetNombre'] =
+          colegiaturaCarnetNombre.trim();
+    }
+
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode(payload),
+    );
+
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return LawyerApplicationStatus.fromJson(
+          data?['application'] as Map<String, dynamic>?);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo enviar la solicitud';
+    throw Exception(message);
+  }
+}
