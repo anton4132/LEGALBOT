@@ -62,12 +62,13 @@ const { authenticate } = require('../middleware/auth');
  *           type: string
  *           example: Credenciales incorrectas
  */
-router.post('/login', authController.login);
+
+
 /**
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Login directo con email y contraseña
+ *     summary: Login directo con email y contraseña (devuelve JWT)
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -78,14 +79,79 @@ router.post('/login', authController.login);
  *     responses:
  *       200:
  *         description: Autenticación exitosa
- *       400:
- *         description: Faltan credenciales
- *       401:
- *         description: Credenciales incorrectas
- *       500:
- *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 token:   { type: string, example: "eyJhbGciOi..." }
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:        { type: integer, example: 12 }
+ *                     email:     { type: string, example: "admin@acme.com" }
+ *                     nombre:    { type: string,  example: "Admin Root" }
+ *                     rolCodigo: { type: string,  example: "admin" }
+ *                     rolNombre: { type: string,  example: "Administrador" }
+ *                     activo:    { type: boolean, example: true }
+ *       400: { description: Faltan credenciales }
+ *       401: { description: Credenciales incorrectas }
+ *       500: { description: Error interno }
  */
 
+router.post('/login', authController.login);
+
+/**
+ * @swagger
+ * /auth/mobile-login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Login móvil (DNI + teléfono + password)
+ *     description: >
+ *       Inicia sesión para la app móvil validando **DNI**, **teléfono** y **password**.  
+ *       Devuelve un **JWT** (1h), la **cuenta preferida** (prioriza rol cliente),  
+ *       la lista de **cuentas coincidentes** por contraseña (para alternar rol) y el
+ *       **estado de verificación** de abogado.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/MobileLoginRequest'
+ *           examples:
+ *             ejemplo:
+ *               summary: Ejemplo válido
+ *               value:
+ *                 telefono: "916036345"
+ *                 dni: "75820859"
+ *                 password: "123456"
+ *     responses:
+ *       200:
+ *         description: Login exitoso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MobileLoginResponse'
+ *       400:
+ *         description: Petición inválida (faltan campos o formato incorrecto)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MobileErrorResponse'
+ *       401:
+ *         description: Credenciales incorrectas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MobileErrorResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MobileErrorResponse'
+ */
 router.post('/mobile-login', mobileAuthController.loginFlutter);
 
 

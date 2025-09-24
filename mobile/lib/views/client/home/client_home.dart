@@ -52,6 +52,8 @@ class _ClientHomeState extends State<ClientHome> {
         token: session.token,
       );
       SessionService.instance.updateApplication(status);
+       } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
     } catch (_) {
       // Ignorar fallos silenciosamente; el usuario puede actualizar manualmente en la pantalla de postulación
     }
@@ -71,6 +73,41 @@ class _ClientHomeState extends State<ClientHome> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
+  }
+
+  void _handleUnauthorized(String? message) {
+    SessionService.instance.clear();
+
+    if (!mounted) {
+      return;
+    }
+
+    final resolvedMessage = (() {
+      final trimmed = message?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        return trimmed;
+      }
+      return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+    })();
+
+    setState(() {
+      _isRecording = false;
+      _isSwitchingAccount = false;
+      _consultationController.clear();
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(resolvedMessage),
+        backgroundColor: Colors.red,
+      ),
+    );
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _switchToLawyerAccount(UserSession session) async {
@@ -99,6 +136,8 @@ class _ClientHomeState extends State<ClientHome> {
         context,
         MaterialPageRoute(builder: (_) => const LawyerHome()),
       );
+      } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
     } catch (error) {
       if (!mounted) return;
       final message = error.toString().replaceFirst('Exception: ', '');

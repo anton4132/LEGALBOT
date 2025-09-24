@@ -1,6 +1,5 @@
 const { prisma } = require('../config/database');
 const jwt = require('jsonwebtoken');
-
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
 // Login directo para compatibilidad con frontend existente
@@ -13,24 +12,40 @@ const login = async (req, res) => {
 
     const persona = await prisma.persona.findFirst({
       where: { correo: email },
-      include: { usuario: true }
+      include: { usuario: { include: { role: true } } }
     });
 
     if (!persona) {
       return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
     }
 
-    const user = persona.usuario.find(u => u.clave === password);
+    const user = (persona.usuario || []).find(u => u.clave === password);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
     }
 
+    // 🔐 Emite JWT para Swagger / endpoints protegidos
+    const token = jwt.sign(
+      {
+        personaId: persona.id,
+        usuarioId: user.id,
+        rolId: user.rol_id,
+        scope: 'full',
+      },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
     res.json({
       success: true,
+      token, // <= IMPORTANTE
       user: {
         id: user.id,
         email: persona.correo,
-        nombre: `${persona.primer_nombre} ${persona.apellido_paterno}`.trim()
+        nombre: `${persona.primer_nombre} ${persona.apellido_paterno}`.trim(),
+        rolCodigo: user.role?.codigo || null,
+        rolNombre: user.role?.nombre || null,
+        activo: user.activo,
       }
     });
   } catch (error) {
@@ -38,7 +53,6 @@ const login = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 };
-
 
 
 // Cambiar de cuenta sin reautenticar (misma persona)

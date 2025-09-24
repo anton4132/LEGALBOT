@@ -15,13 +15,11 @@ const isValidUrl = (value) => {
   }
 };
 
-// Permite ISO (recomendado) y, si quieres, dd/MM/yyyy (opcional).
+// Permite ISO (recomendado) y dd/MM/yyyy (opcional).
 const parseDate = (v) => {
   if (!v || typeof v !== 'string') return null;
-  // ISO primero
   const iso = new Date(v);
   if (!Number.isNaN(iso.getTime())) return iso;
-  // dd/MM/yyyy (simple)
   const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (m) {
     const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
@@ -46,8 +44,6 @@ const mapApplication = (row) => {
     aprobadoEl: row.aprobado_el,
     creadoEl: row.creado_el,
     actualizadoEl: row.actualizado_el,
-
-    // anidado para el front
     colegiatura: c
       ? {
           id: c.id,
@@ -76,43 +72,53 @@ const ensureAdmin = async (rolId) => {
   return code === 'admin' || code === 'superadmin';
 };
 
-const ensureLawyerAccount = async (tx, personaId) => {
-  const role = await tx.role.findFirst({ where: { codigo: 'abogado' } });
-  if (!role) return null;
 
-  let lawyerAccount = await tx.usuario.findFirst({
-    where: { persona_id: personaId, rol_id: role.id },
+const createOrActivateAbogadoUser = async (tx, personaId) => {
+  // 1) rol 'abogado' case-insensitive
+  const lawyerRole = await tx.role.findFirst({
+    where: { codigo: { equals: 'abogado', mode: 'insensitive' } },
   });
+  if (!lawyerRole) {
+    throw new Error('ROLE_ABOGADO_MISSING');
+  }
 
-  if (lawyerAccount) {
-    if (!lawyerAccount.activo) {
-      lawyerAccount = await tx.usuario.update({
-        where: { id: lawyerAccount.id },
+  // 2) ¿ya existe usuario abogado?
+  let lawyerUser = await tx.usuario.findFirst({
+    where: { persona_id: personaId, rol_id: lawyerRole.id },
+  });
+  if (lawyerUser) {
+    if (!lawyerUser.activo) {
+      lawyerUser = await tx.usuario.update({
+        where: { id: lawyerUser.id },
         data: { activo: true },
       });
     }
-    return lawyerAccount;
+    return lawyerUser;
   }
 
-  const baseAccount = await tx.usuario.findFirst({
-    where: { persona_id: personaId },
+  // 3) tomar cuenta base NO abogado para copiar la clave (hash)
+  const baseUser = await tx.usuario.findFirst({
+    where: {
+      persona_id: personaId,
+      role: { codigo: { not: 'abogado', mode: 'insensitive' } },
+    },
     orderBy: { id: 'asc' },
   });
-
-  if (!baseAccount) {
-    throw new Error(
-      'La persona no cuenta con una cuenta base para generar el rol de abogado',
-    );
+  if (!baseUser) {
+    throw new Error('BASE_USER_MISSING'); // no hay cuenta previa desde la cual copiar clave
   }
 
-  return tx.usuario.create({
+  // 4) crear usuario abogado duplicando SOLO la clave
+  const newLawyer = await tx.usuario.create({
     data: {
       persona_id: personaId,
-      rol_id: role.id,
-      clave: baseAccount.clave,
-      activo: true,
+      rol_id: lawyerRole.id,
+      clave: baseUser.clave, // <— SOLO contraseña (hash)
+      activo: true,          // aprobado => habilitado
     },
   });
+
+  return newLawyer;
 };
 
 // ---------- controladores ----------
@@ -125,11 +131,7 @@ const getOwnApplication = async (req, res) => {
 
     const application = await prisma.verificacionabogado.findUnique({
       where: { persona_id: personaId },
-      include: {
-        colegiatura: {
-          include: { colegio: true },
-        },
-      },
+      include: { colegiatura: { include: { colegio: true } } },
     });
 
     return res.json({ success: true, application: mapApplication(application) });
@@ -153,7 +155,7 @@ const submitApplication = async (req, res) => {
     const tituloUrl = sanitizeString(req.body?.tituloUrl);
 
     const colegiaturaNumero = sanitizeString(req.body?.colegiaturaNumero);
-    const colegiaturaCarnet = sanitizeString(req.body?.colegiaturaCarnet); // puede venir vacío
+    const colegiaturaCarnet = sanitizeString(req.body?.colegiaturaCarnet); // opcional
     const colegioNombre = sanitizeString(req.body?.colegioNombre);
     const colegioRegion = sanitizeString(req.body?.colegioRegion);
 
@@ -168,14 +170,10 @@ const submitApplication = async (req, res) => {
       });
     }
     if (!colegiaturaNumero) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'colegiaturaNumero es requerido' });
+      return res.status(400).json({ success: false, message: 'colegiaturaNumero es requerido' });
     }
     if (!colegioNombre) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'colegioNombre es requerido' });
+      return res.status(400).json({ success: false, message: 'colegioNombre es requerido' });
     }
     if (fechaEmision && fechaVigencia && fechaVigencia < fechaEmision) {
       return res.status(400).json({
@@ -184,7 +182,7 @@ const submitApplication = async (req, res) => {
       });
     }
 
-    // Persona + roles
+    // Persona + roles (sólo para bloquear doble rol activo por error)
     const persona = await prisma.persona.findUnique({
       where: { id: personaId },
       include: { usuario: { include: { role: true } } },
@@ -203,7 +201,7 @@ const submitApplication = async (req, res) => {
 
     // Transacción: upsert de verificación, colegio y colegiatura
     const result = await prisma.$transaction(async (tx) => {
-      // 1) Upsert de verificación (solo setear linkedin/título si aún no existen)
+      // 1) verificación (si existe y quedó OBSERVADA, vuelve a PENDIENTE y no borra URLs)
       let verification = await tx.verificacionabogado.findUnique({
         where: { persona_id: personaId },
       });
@@ -220,22 +218,16 @@ const submitApplication = async (req, res) => {
           },
         });
       } else {
-        // reglas de negocio previas
-        if (verification.estado === EstadoVerificacion.PENDIENTE) {
+        if (verification.estado === EstadoVerificacion.PENDIENTE)
           throw new Error('PENDING_ALREADY');
-        }
-        if (verification.estado === EstadoVerificacion.APROBADA) {
+        if (verification.estado === EstadoVerificacion.APROBADA)
           throw new Error('APPROVED_ALREADY');
-        }
-        if (verification.estado === EstadoVerificacion.RECHAZADA) {
+        if (verification.estado === EstadoVerificacion.RECHAZADA)
           throw new Error('REJECTED_ALREADY');
-        }
 
-        // OBSERVADA u otros → resetea estado a PENDIENTE y deja observaciones en null
         verification = await tx.verificacionabogado.update({
           where: { persona_id: personaId },
           data: {
-            // solo seteo si no había
             linkedin_url: verification.linkedin_url || linkedinUrl,
             titulo_url: verification.titulo_url || tituloUrl,
             estado: EstadoVerificacion.PENDIENTE,
@@ -245,20 +237,22 @@ const submitApplication = async (req, res) => {
         });
       }
 
-      // 2) Colegio: buscar por (nombre, region) y crear si no existe
-      const colegio = await tx.colegioabogado.findFirst({
-        where: {
-          nombre: { equals: colegioNombre, mode: 'insensitive' },
-          OR: [
-            { region: colegioRegion ? { equals: colegioRegion, mode: 'insensitive' } : null },
-            { region: null },
-          ].filter(Boolean),
-        },
-      }) || await tx.colegioabogado.create({
-        data: { nombre: colegioNombre, region: colegioRegion || null },
-      });
-      
-      // 3) Colegiatura de la persona (upsert por persona_id)
+      // 2) colegio: buscar por (nombre, region) insensible; NO duplicar si ya existe
+      const colegio =
+        (await tx.colegioabogado.findFirst({
+          where: {
+            nombre: { equals: colegioNombre, mode: 'insensitive' },
+            OR: [
+              { region: colegioRegion ? { equals: colegioRegion, mode: 'insensitive' } : undefined },
+              { region: null },
+            ].filter(Boolean),
+          },
+        })) ||
+        (await tx.colegioabogado.create({
+          data: { nombre: colegioNombre, region: colegioRegion || null },
+        }));
+
+      // 3) colegiatura: upsert por persona_id + validar unicidad (colegio_id, numero)
       let colegiatura = await tx.colegiaturaabogado.findUnique({
         where: { persona_id: personaId },
       });
@@ -275,12 +269,7 @@ const submitApplication = async (req, res) => {
           },
         });
       } else {
-        // Antes de actualizar, cuidemos la unicidad (colegio_id, numero)
-        // Si el número cambia o el colegio cambia, validamos que no exista el mismo par
-        if (
-          colegiatura.numero !== colegiaturaNumero ||
-          colegiatura.colegio_id !== colegio.id
-        ) {
+        if (colegiatura.numero !== colegiaturaNumero || colegiatura.colegio_id !== colegio.id) {
           const dup = await tx.colegiaturaabogado.findFirst({
             where: {
               colegio_id: colegio.id,
@@ -288,9 +277,7 @@ const submitApplication = async (req, res) => {
               NOT: { id: colegiatura.id },
             },
           });
-          if (dup) {
-            throw new Error('DUP_COLE_NUM');
-          }
+          if (dup) throw new Error('DUP_COLE_NUM');
         }
 
         colegiatura = await tx.colegiaturaabogado.update({
@@ -305,7 +292,7 @@ const submitApplication = async (req, res) => {
         });
       }
 
-      // 4) Vincular verificación con la colegiatura si aún no está enlazada
+      // 4) vincular verificación ↔ colegiatura
       if (verification.colegiatura_id !== colegiatura.id) {
         verification = await tx.verificacionabogado.update({
           where: { persona_id: personaId },
@@ -313,12 +300,11 @@ const submitApplication = async (req, res) => {
         });
       }
 
-      // devolver con include
-      const full = await tx.verificacionabogado.findUnique({
+      // devolver payload completo
+      return tx.verificacionabogado.findUnique({
         where: { persona_id: personaId },
         include: { colegiatura: { include: { colegio: true } } },
       });
-      return full;
     });
 
     return res.status(verificationWasCreated(result) ? 201 : 200).json({
@@ -326,40 +312,31 @@ const submitApplication = async (req, res) => {
       application: mapApplication(result),
     });
   } catch (error) {
-    // traducir algunos mensajes “controlados”
     if (error.message === 'PENDING_ALREADY') {
-      return res
-        .status(409)
-        .json({ success: false, message: 'Tu solicitud ya está en revisión' });
+      return res.status(409).json({ success: false, message: 'Tu solicitud ya está en revisión' });
     }
     if (error.message === 'APPROVED_ALREADY') {
-      return res
-        .status(409)
-        .json({ success: false, message: 'Tu solicitud ya fue aprobada' });
+      return res.status(409).json({ success: false, message: 'Tu solicitud ya fue aprobada' });
     }
     if (error.message === 'REJECTED_ALREADY') {
       return res.status(409).json({
         success: false,
-        message:
-          'Tu solicitud fue rechazada. Comunícate con soporte para más información',
+        message: 'Tu solicitud fue rechazada. Comunícate con soporte para más información',
       });
     }
     if (error.message === 'DUP_COLE_NUM') {
       return res.status(409).json({
         success: false,
-        message:
-          'Ya existe una colegiatura registrada con ese número en el mismo colegio',
+        message: 'Ya existe una colegiatura registrada con ese número en el mismo colegio',
       });
     }
 
     console.error('Error enviando solicitud de abogado:', error);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Error enviando solicitud' });
+    return res.status(500).json({ success: false, message: 'Error enviando solicitud' });
   }
 };
 
-// para decidir 201/200 arriba
+// para decidir 201/200 arriba (heurística simple)
 function verificationWasCreated(v) {
   return !v?.creado_el || (v.creado_el && v.creado_el.getTime() === v.actualizado_el?.getTime());
 }
@@ -384,9 +361,7 @@ const reviewApplication = async (req, res) => {
       return res.status(400).json({ success: false, message: 'estado es requerido' });
     }
     if (!Object.values(EstadoVerificacion).includes(estado)) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Estado de verificación inválido' });
+      return res.status(400).json({ success: false, message: 'Estado de verificación inválido' });
     }
 
     const application = await prisma.verificacionabogado.findUnique({
@@ -423,8 +398,7 @@ const reviewApplication = async (req, res) => {
     }
 
     if (
-      (current === EstadoVerificacion.RECHAZADA ||
-        current === EstadoVerificacion.APROBADA) &&
+      (current === EstadoVerificacion.RECHAZADA || current === EstadoVerificacion.APROBADA) &&
       !force
     ) {
       return res.status(409).json({
@@ -441,6 +415,7 @@ const reviewApplication = async (req, res) => {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      // 1) actualizar estado de verificación
       const result = await tx.verificacionabogado.update({
         where: { persona_id: personaId },
         data: {
@@ -456,8 +431,9 @@ const reviewApplication = async (req, res) => {
         include: { colegiatura: { include: { colegio: true } } },
       });
 
+      // 2) SI Y SOLO SI quedó APROBADA => crear/activar usuario ABOGADO (duplicando SOLO la clave)
       if (estado === EstadoVerificacion.APROBADA) {
-        await ensureLawyerAccount(tx, personaId);
+        await createOrActivateAbogadoUser(tx, personaId);
       }
 
       return result;
@@ -466,9 +442,7 @@ const reviewApplication = async (req, res) => {
     return res.json({ success: true, application: mapApplication(updated) });
   } catch (error) {
     console.error('Error revisando solicitud de abogado:', error);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Error actualizando solicitud' });
+    return res.status(500).json({ success: false, message: 'Error actualizando solicitud' });
   }
 };
 

@@ -4,6 +4,17 @@ import 'package:http/http.dart' as http;
 import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
 
+
+class UnauthorizedException implements Exception {
+  final String message;
+
+  const UnauthorizedException(
+      [this.message = 'Tu sesión ha expirado. Inicia sesión nuevamente.']);
+
+  @override
+  String toString() => message;
+}
+
 class ApiClient {
   static const String _baseUrl = 'http://localhost:3000/api';
 
@@ -153,6 +164,12 @@ class ApiClient {
     );
 
     final data = _tryDecodeJson(response.body);
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
     if (response.statusCode == 200 && data != null) {
       return SwitchAccountResult.fromJson(data);
     }
@@ -169,6 +186,13 @@ class ApiClient {
     final response = await http.get(uri, headers: _authHeaders(token));
     final data = _tryDecodeJson(response.body);
 
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
     if (response.statusCode == 200) {
       return LawyerApplicationStatus.fromJson(
           data?['application'] as Map<String, dynamic>?);
@@ -180,9 +204,7 @@ class ApiClient {
     throw Exception(message);
   }
 
-  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-  //  SIN "colegiaturaCarnet": se elimina el parámetro y su uso
-  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  
   static Future<LawyerApplicationStatus> submitLawyerApplication({
     required String token,
     required String linkedinUrl,
@@ -227,6 +249,12 @@ class ApiClient {
     );
 
     final data = _tryDecodeJson(response.body);
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
     if (response.statusCode == 200 || response.statusCode == 201) {
       return LawyerApplicationStatus.fromJson(
           data?['application'] as Map<String, dynamic>?);

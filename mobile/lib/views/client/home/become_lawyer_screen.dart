@@ -1,15 +1,14 @@
 import 'dart:io' as io;
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
+import 'package:intl/intl.dart';
 import '../../../constants/colors.dart';
 import '../../../models/lawyer_application.dart';
 import '../../../models/user_session.dart';
 import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
-import 'package:intl/intl.dart';
+import '../../authentication/login_screen.dart';
 
 class BecomeLawyerScreen extends StatefulWidget {
   const BecomeLawyerScreen({super.key});
@@ -123,6 +122,52 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     );
   }
 
+  void _handleUnauthorized(String? message) {
+    SessionService.instance.clear();
+    _session = null;
+
+    if (!mounted) {
+      return;
+    }
+
+    final resolvedMessage = (() {
+      final trimmed = message?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        return trimmed;
+      }
+      return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+    })();
+
+    setState(() {
+      _isLoading = false;
+      _isSubmitting = false;
+      _status = LawyerApplicationStatus.empty;
+      _selectedCarnetFile = null;
+      _colegiaturaFechaEmision = null;
+      _colegiaturaFechaVigenciaHasta = null;
+      _selectedColegioRegion = null;
+      _linkedinController.clear();
+      _degreeLinkController.clear();
+      _colegiaturaNumeroController.clear();
+      _colegioNombreController.clear();
+      _colegioRegionController.clear();
+      _colegiaturaFechaEmisionController.clear();
+      _colegiaturaFechaVigenciaHastaController.clear();
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(resolvedMessage),
+        backgroundColor: Colors.red,
+      ),
+    );
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
   void _populateFormFromStatus(LawyerApplicationStatus status) {
     _linkedinController.text = status.linkedinUrl ?? '';
     _degreeLinkController.text = status.tituloUrl ?? '';
@@ -548,6 +593,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         _isLoading = false;
       });
       _populateFormFromStatus(status);
+        } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
     } catch (error) {
       setState(() => _isLoading = false);
       final message = error.toString().replaceFirst('Exception: ', '');
@@ -639,6 +686,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             : 'Solicitud actualizada correctamente.',
         color: AppColors.button2Color,
       );
+        } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
     } catch (error) {
       setState(() => _isSubmitting = false);
       final message = error.toString().replaceFirst('Exception: ', '');

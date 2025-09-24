@@ -38,6 +38,41 @@ class _LawyerHomeState extends State<LawyerHome> {
     ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
+  void _handleUnauthorized(String? message) {
+    SessionService.instance.clear();
+
+    if (!mounted) {
+      return;
+    }
+
+    final resolvedMessage = (() {
+      final trimmed = message?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        return trimmed;
+      }
+      return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+    })();
+
+    setState(() {
+      _isRecording = false;
+      _isSwitchingAccount = false;
+      _consultationController.clear();
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(resolvedMessage),
+        backgroundColor: Colors.red,
+      ),
+    );
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   void _handleSendConsultation() {
     final text = _consultationController.text.trim();
     if (text.isNotEmpty) {
@@ -81,6 +116,8 @@ class _LawyerHomeState extends State<LawyerHome> {
         MaterialPageRoute(builder: (_) => const ClientHome()),
         (route) => false,
       );
+        } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
     } catch (error) {
       final message = error.toString().replaceFirst('Exception: ', '');
       _showSnack(
