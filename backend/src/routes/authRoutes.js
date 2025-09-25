@@ -181,4 +181,21 @@ router.post('/mobile-login', mobileAuthController.loginFlutter);
  */
 router.post('/switch-account', authenticate(), authController.switchAccount);
 
+
+/**
+ * @swagger
+ * /auth/mobile-accounts:
+ *   get:
+ *     summary: Lista las cuentas disponibles para la persona autenticada
+ *     tags: [Auth]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cuentas asociadas a la persona
+ *       401:
+ *         description: No autenticado
+ */
+router.get('/mobile-accounts', authenticate(), mobileAuthController.getMyAccounts);
+
 module.exports = router;

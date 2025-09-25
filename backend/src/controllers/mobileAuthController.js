@@ -145,5 +145,46 @@ const loginFlutter = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 };
+const getMyAccounts = async (req, res) => {
+  try {
+    const personaId = req.ctx?.personaId;
+    if (!personaId) {
+      return res.status(401).json({ message: 'No autenticado' });
+    }
 
-module.exports = { loginFlutter };
+    const persona = await prisma.persona.findUnique({
+      where: { id: personaId },
+      include: {
+        usuario: {
+          include: { role: true },
+        },
+      },
+    });
+
+    if (!persona) {
+      return res.status(404).json({ message: 'Persona no encontrada' });
+    }
+
+    const accounts = (persona.usuario || []).map((u) => ({
+      usuarioId: u.id,
+      rolId: u.rol_id,
+      rolCodigo: u.role?.codigo || null,
+      rolNombre: u.role?.nombre || null,
+      activo: u.activo,
+    }));
+
+    res.json({
+      personaId: persona.id,
+      telefono: persona.telefono,
+      dni: persona.dni,
+      correo: persona.correo,
+      nombreCompleto: buildFullName(persona),
+      accounts,
+    });
+  } catch (error) {
+    console.error('Error obteniendo cuentas móviles:', error);
+    res.status(500).json({ message: 'Error obteniendo cuentas' });
+  }
+};
+
+module.exports = { loginFlutter, getMyAccounts };

@@ -650,6 +650,28 @@ router.put('/:id/especialidades', userController.updateUserEspecialidades);
  */
 router.get('/:id/estudios', userController.getUserEstudios);
 router.post('/:id/estudios', userController.upsertUserEstudio);
+/**
+ * @swagger
+ * /users/{id}/estudios/{estudioId}:
+ *   delete:
+ *     summary: Elimina (desactiva) el vínculo entre el usuario y un estudio
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: estudioId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Vínculo desactivado
+ *       404:
+ *         description: Vínculo no encontrado
+ */
+router.delete('/:id/estudios/:estudioId', userController.deleteUserEstudio);
 
 /**
  * @swagger

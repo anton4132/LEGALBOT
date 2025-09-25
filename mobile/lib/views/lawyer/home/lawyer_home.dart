@@ -13,6 +13,8 @@ import '../../../widgets/section_header.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
 import '../../client/home/client_home.dart';
+import '../profile/lawyer_profile_screen.dart';
+
 
 class LawyerHome extends StatefulWidget {
   const LawyerHome({super.key});
@@ -21,10 +23,30 @@ class LawyerHome extends StatefulWidget {
   State<LawyerHome> createState() => _LawyerHomeState();
 }
 
+class _WarningDot extends StatelessWidget {
+  const _WarningDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: const BoxDecoration(
+        color: Colors.amber,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
 class _LawyerHomeState extends State<LawyerHome> {
   final TextEditingController _consultationController = TextEditingController();
   bool _isRecording = false;
   bool _isSwitchingAccount = false;
+  bool _profileIncomplete = false;
+  bool _loadingProfileStatus = false;
+  bool _profileStatusScheduled = false;
+  int? _profileStatusLoadedFor;
 
   @override
   void dispose() {
@@ -57,6 +79,9 @@ class _LawyerHomeState extends State<LawyerHome> {
       _isRecording = false;
       _isSwitchingAccount = false;
       _consultationController.clear();
+        _loadingProfileStatus = false;
+      _profileStatusLoadedFor = null;
+      _profileIncomplete = false;
     });
 
     final messenger = ScaffoldMessenger.of(context);
@@ -163,6 +188,94 @@ class _LawyerHomeState extends State<LawyerHome> {
     );
   }
 
+  Future<void> _updateProfileStatus({bool force = false}) async {
+    final session = SessionService.instance.session;
+    if (session == null) {
+      if (!mounted) return;
+      setState(() {
+        _loadingProfileStatus = false;
+        _profileStatusLoadedFor = null;
+        _profileIncomplete = false;
+      });
+      return;
+    }
+    if (!force) {
+      if (_loadingProfileStatus) return;
+      if (_profileStatusLoadedFor == session.usuarioId) return;
+    }
+    setState(() {
+      _loadingProfileStatus = true;
+      _profileStatusLoadedFor = session.usuarioId;
+    });
+    try {
+      final snapshot = await ApiClient.fetchLawyerProfileSnapshot(
+        token: session.token,
+        userId: session.usuarioId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _profileIncomplete = !snapshot.isComplete;
+        _loadingProfileStatus = false;
+      });
+    } on UnauthorizedException catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingProfileStatus = false);
+      _handleUnauthorized(error.message);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingProfileStatus = false);
+    }
+  }
+
+  Future<void> _openLawyerProfile() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const LawyerProfileScreen()),
+    );
+    if (!mounted) return;
+    await _updateProfileStatus(force: true);
+  }
+
+  Widget _buildProfileReminderCard(String name) {
+    return ShadowCard(
+      padding: const EdgeInsets.all(15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber, color: Colors.amber),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Completa tu perfil, $name',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.buttonColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Tu perfil de abogado está incompleto. Completa tus datos profesionales para que los clientes puedan encontrarte.',
+            style: TextStyle(fontSize: 13, color: Colors.black87),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _openLawyerProfile,
+              icon: const Icon(Icons.edit, color: AppColors.buttonColor),
+              label: const Text('Completar perfil'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<UserSession?>(
@@ -172,6 +285,21 @@ class _LawyerHomeState extends State<LawyerHome> {
             (session?.nombreCompleto?.trim().isNotEmpty ?? false)
                 ? session!.nombreCompleto!.trim()
                 : 'Abogado';
+    if (session != null &&
+            !_loadingProfileStatus &&
+            _profileStatusLoadedFor != session.usuarioId) {
+          Future.microtask(() => _updateProfileStatus());
+        } else if (session == null &&
+            !_loadingProfileStatus &&
+            _profileStatusLoadedFor != null) {
+          Future.microtask(() {
+            if (!mounted) return;
+            setState(() {
+              _profileStatusLoadedFor = null;
+              _profileIncomplete = false;
+            });
+          });
+        }
 
         return Scaffold(
           appBar: const CustomAppBar(title: 'LegalBot - Abogado'),
@@ -182,6 +310,13 @@ class _LawyerHomeState extends State<LawyerHome> {
             subtitle: 'Panel de Control',
             items: [
               const DrawerItem(icon: Icons.home, title: 'Inicio'),
+               DrawerItem(
+                icon: Icons.verified_user,
+                title: 'Perfil de Abogado',
+                trailing:
+                    _profileIncomplete ? const _WarningDot() : null,
+                onTap: _openLawyerProfile,
+              ),
               DrawerItem(
                 icon: Icons.info,
                 title: 'Información Legal',
@@ -270,6 +405,10 @@ class _LawyerHomeState extends State<LawyerHome> {
                     ],
                   ),
                 ),
+                 if (_profileIncomplete) ...[
+                  const SizedBox(height: 16),
+                  _buildProfileReminderCard(displayName),
+                ],
                 const SizedBox(height: 20),
                 ShadowCard(
                   padding: const EdgeInsets.all(15),

@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
+import '../models/lawyer_profile_models.dart';
 import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
 
@@ -265,4 +265,429 @@ class ApiClient {
         : 'No se pudo enviar la solicitud';
     throw Exception(message);
   }
+  static Future<MobileAccountsResult> fetchMobileAccounts({
+    required String token,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/mobile-accounts');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data != null) {
+      return MobileAccountsResult.fromJson(data);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudieron obtener las cuentas';
+    throw Exception(message);
+  }
+
+  static Future<LawyerProfileInfo?> fetchLawyerProfileInfo({
+    required String token,
+    required int userId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/perfil');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 404) {
+      return null;
+    }
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200) {
+      return LawyerProfileInfo.fromJson(data);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo obtener el perfil de abogado';
+    throw Exception(message);
+  }
+
+  static Future<LawyerProfileInfo> saveLawyerProfileInfo({
+    required String token,
+    required int userId,
+    required LawyerProfileInfo info,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/perfil');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode(info.toPayload()),
+    );
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data != null) {
+      final perfilJson = data['perfil'] as Map<String, dynamic>? ?? data;
+      return LawyerProfileInfo.fromJson(perfilJson);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo guardar el perfil de abogado';
+    throw Exception(message);
+  }
+
+  static Future<List<LawyerSpecialty>> fetchSpecialtyCatalog() async {
+    final rows = await fetchEspecialidades();
+    return rows
+        .map((row) => LawyerSpecialty.fromJson(row))
+        .where((specialty) => specialty.nombre.isNotEmpty)
+        .toList();
+  }
+
+  static Future<List<LawyerSpecialty>> fetchLawyerSpecialties({
+    required String token,
+    required int userId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/especialidades');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data is List) {
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(LawyerSpecialty.fromJson)
+          .toList();
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudieron obtener las especialidades';
+    throw Exception(message);
+  }
+
+  static Future<void> updateLawyerSpecialties({
+    required String token,
+    required int userId,
+    required List<int> specialtyIds,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/especialidades');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode({'ids': specialtyIds}),
+    );
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200) {
+      return;
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudieron guardar las especialidades';
+    throw Exception(message);
+  }
+
+  static Future<List<LawyerAvailabilitySlot>> fetchLawyerAvailability({
+    required String token,
+    required int userId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/disponibilidad');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data is List) {
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(LawyerAvailabilitySlot.fromJson)
+          .toList();
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo obtener la disponibilidad';
+    throw Exception(message);
+  }
+
+  static Future<LawyerAvailabilitySlot> addLawyerAvailabilitySlot({
+    required String token,
+    required int userId,
+    required int day,
+    required String startTime,
+    required String endTime,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/disponibilidad');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode({
+        'dia_semana': day,
+        'hora_inicio': startTime,
+        'hora_fin': endTime,
+      }),
+    );
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final slotJson = data?['slot'] as Map<String, dynamic>? ?? const {};
+      return LawyerAvailabilitySlot.fromJson(slotJson);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo registrar la disponibilidad';
+    throw Exception(message);
+  }
+
+  static Future<void> deleteLawyerAvailabilitySlot({
+    required String token,
+    required int userId,
+    required int slotId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/disponibilidad/$slotId');
+    final response = await http.delete(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200) {
+      return;
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo eliminar la disponibilidad';
+    throw Exception(message);
+  }
+
+  static Future<List<LawyerStudyAssignment>> fetchLawyerStudies({
+    required String token,
+    required int userId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/estudios');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data is List) {
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(LawyerStudyAssignment.fromJson)
+          .toList();
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudieron obtener los estudios vinculados';
+    throw Exception(message);
+  }
+
+  static Future<LawyerStudyAssignment> upsertLawyerStudy({
+    required String token,
+    required int userId,
+    required int studyId,
+    required bool principal,
+    String? role,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/estudios');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode({
+        'estudio_id': studyId,
+        'principal': principal,
+        'rol_en_estudio': role,
+      }),
+    );
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
+      final vinculo = data['vinculo'] as Map<String, dynamic>? ?? const {};
+      return LawyerStudyAssignment.fromJson(vinculo);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo guardar el estudio vinculado';
+    throw Exception(message);
+  }
+
+  static Future<void> deleteLawyerStudy({
+    required String token,
+    required int userId,
+    required int studyId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId/estudios/$studyId');
+    final response = await http.delete(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200) {
+      return;
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo eliminar el estudio vinculado';
+    throw Exception(message);
+  }
+
+  static Future<List<LawFirmSummary>> searchLawFirms({
+    required String token,
+    required String query,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/estudios?search=${Uri.encodeQueryComponent(query)}');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data is List) {
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(LawFirmSummary.fromJson)
+          .toList();
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudieron buscar estudios';
+    throw Exception(message);
+  }
+
+  static Future<LawFirmSummary> createLawFirm({
+    required String token,
+    String? ruc,
+    String? nombreComercial,
+    String? pais,
+    String? ciudad,
+    String? correoContacto,
+    String? telefono,
+    String? direccion,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/estudios');
+    final payload = {
+      'ruc': ruc,
+      'nombre_comercial': nombreComercial,
+      'pais': pais,
+      'ciudad': ciudad,
+      'correo_contacto': correoContacto,
+      'telefono': telefono,
+      'direccion': direccion,
+    }..removeWhere((key, value) => value == null || (value is String && value.trim().isEmpty));
+
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode(payload),
+    );
+    final data = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
+      return LawFirmSummary.fromJson(data);
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo registrar el estudio';
+    throw Exception(message);
+  }
+
+  static Future<LawyerProfileSnapshot> fetchLawyerProfileSnapshot({
+    required String token,
+    required int userId,
+  }) async {
+    final results = await Future.wait([
+      fetchLawyerProfileInfo(token: token, userId: userId),
+      fetchLawyerSpecialties(token: token, userId: userId),
+      fetchLawyerAvailability(token: token, userId: userId),
+      fetchLawyerStudies(token: token, userId: userId),
+    ]);
+
+    return LawyerProfileSnapshot(
+      info: results[0] as LawyerProfileInfo?,
+      specialties: (results[1] as List<LawyerSpecialty>),
+      availability: (results[2] as List<LawyerAvailabilitySlot>),
+      studies: (results[3] as List<LawyerStudyAssignment>),
+    );
+  }
 }
+
+

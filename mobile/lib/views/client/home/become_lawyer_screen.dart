@@ -9,6 +9,8 @@ import '../../../models/user_session.dart';
 import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
 import '../../authentication/login_screen.dart';
+import '../../lawyer/home/lawyer_home.dart';
+
 
 class BecomeLawyerScreen extends StatefulWidget {
   const BecomeLawyerScreen({super.key});
@@ -69,6 +71,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   LawyerApplicationStatus _status = LawyerApplicationStatus.empty;
   bool _isLoading = true;
   bool _isSubmitting = false;
+  bool _redirectingToLawyer = false;
   UserSession? _session;
   PlatformFile? _selectedCarnetFile;
   DateTime? _colegiaturaFechaEmision;
@@ -197,6 +200,70 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _carnetFileFieldKey.currentState?.didChange(_selectedCarnetFile);
     });
+  }
+
+  Future<void> _handleApproval(LawyerApplicationStatus status) async {
+    if (!mounted || status.state != LawyerApplicationState.aprobada) {
+      return;
+    }
+    if (_redirectingToLawyer) return;
+    final session = SessionService.instance.session;
+    if (session == null) return;
+
+    setState(() => _redirectingToLawyer = true);
+    try {
+      final accountsResult =
+          await ApiClient.fetchMobileAccounts(token: session.token);
+
+      final currentSession = SessionService.instance.session;
+      if (currentSession != null) {
+        SessionService.instance.setSession(
+          currentSession.copyWith(
+            personaId: accountsResult.personaId ?? currentSession.personaId,
+            telefono: accountsResult.telefono ?? currentSession.telefono,
+            dni: accountsResult.dni ?? currentSession.dni,
+            correo: accountsResult.correo ?? currentSession.correo,
+            nombreCompleto:
+                accountsResult.nombreCompleto ?? currentSession.nombreCompleto,
+            accounts: accountsResult.accounts,
+          ),
+        );
+        _session = SessionService.instance.session;
+      } else {
+        SessionService.instance.updateAccounts(accountsResult.accounts);
+        _session = SessionService.instance.session;
+      }
+
+      final updatedSession = SessionService.instance.session;
+      final lawyerAccount = SessionService.instance.accountForRole('abogado');
+      if (updatedSession != null && lawyerAccount != null) {
+        final switchResult = await ApiClient.switchAccount(
+          token: updatedSession.token,
+          usuarioId: lawyerAccount.usuarioId,
+        );
+        final newSession = updatedSession.applySwitchResult(switchResult);
+        SessionService.instance.setSession(newSession);
+
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LawyerHome()),
+          (route) => false,
+        );
+      } else {
+        if (mounted) {
+          setState(() => _redirectingToLawyer = false);
+        }
+      }
+    } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _redirectingToLawyer = false);
+      }
+      _showSnack(
+        error.toString().replaceFirst('Exception: ', ''),
+      );
+    }
   }
 
   String _formatFileSize(int bytes) {
@@ -593,6 +660,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
         _isLoading = false;
       });
       _populateFormFromStatus(status);
+      await _handleApproval(status);
+
         } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
     } catch (error) {

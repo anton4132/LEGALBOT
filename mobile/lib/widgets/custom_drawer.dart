@@ -56,14 +56,17 @@ class CustomDrawer extends StatelessWidget {
               ],
             ),
           ),
-          ...items.map((item) => ListTile(
-            leading: Icon(item.icon, color: AppColors.buttonColor),
-            title: Text(item.title),
-            onTap: () {
-              Navigator.pop(context);
-              item.onTap?.call();
-            },
-          )),
+             ...items.map(
+            (item) => ListTile(
+              leading: Icon(item.icon, color: AppColors.buttonColor),
+              title: Text(item.title),
+              trailing: item.trailing,
+              onTap: () {
+                Navigator.pop(context);
+                item.onTap?.call();
+              },
+            ),
+          ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
@@ -83,10 +86,12 @@ class DrawerItem {
   final IconData icon;
   final String title;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   const DrawerItem({
     required this.icon,
     required this.title,
     this.onTap,
+    this.trailing,
   });
 } 

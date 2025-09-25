@@ -1218,6 +1218,30 @@ const upsertUserEstudio = async (req, res) => {
   }
 };
 
+const deleteUserEstudio = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const estudioId = parseInt(req.params.estudioId, 10);
+
+    if (Number.isNaN(userId) || Number.isNaN(estudioId)) {
+      return res.status(400).json({ message: 'Parámetros inválidos' });
+    }
+
+    const result = await prisma.abogadoestudio.updateMany({
+      where: { usuario_id: userId, estudio_id: estudioId, activo: true },
+      data: { activo: false, principal: false },
+    });
+
+    if (result.count === 0) {
+      return res.status(404).json({ message: 'Vínculo con estudio no encontrado' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error desactivando estudio del usuario:', error);
+    res.status(500).json({ message: 'Error desactivando estudio del usuario' });
+  }
+};
 
 // ======== Disponibilidad de abogado =========
 const getUserDisponibilidad = async (req, res) => {
@@ -1299,6 +1323,7 @@ module.exports = {
   updateUserEspecialidades,
   getUserEstudios,
   upsertUserEstudio,
+  deleteUserEstudio,
   getUserDisponibilidad,
   addUserDisponibilidad,
   deleteUserDisponibilidad,

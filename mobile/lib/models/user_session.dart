@@ -41,7 +41,7 @@ class UserAccount {
 }
 
 class UserSession {
-  final int personaId;
+    final int personaId;
   final int usuarioId;
   final int rolId;
   final String? rolCodigo;
@@ -150,6 +150,42 @@ class UserSession {
       rolNombre: result.rolNombre,
       token: result.token,
       activo: result.activo,
+    );
+  }
+}
+
+class MobileAccountsResult {
+  final int? personaId;
+  final String? nombreCompleto;
+  final String? telefono;
+  final String? dni;
+  final String? correo;
+  final List<UserAccount> accounts;
+
+  const MobileAccountsResult({
+    this.personaId,
+    this.nombreCompleto,
+    this.telefono,
+    this.dni,
+    this.correo,
+    required this.accounts,
+  });
+
+  factory MobileAccountsResult.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      return const MobileAccountsResult(accounts: []);
+    }
+    final accountsJson = (json['accounts'] as List?) ?? const [];
+    return MobileAccountsResult(
+      personaId: _parseInt(json['personaId']),
+      nombreCompleto: json['nombreCompleto'] as String?,
+      telefono: json['telefono'] as String?,
+      dni: json['dni'] as String?,
+      correo: json['correo'] as String?,
+      accounts: accountsJson
+          .whereType<Map<String, dynamic>>()
+          .map(UserAccount.fromJson)
+          .toList(growable: false),
     );
   }
 }
