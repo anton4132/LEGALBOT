@@ -18,14 +18,23 @@ class UnauthorizedException implements Exception {
 class ApiClient {
   static const String _baseUrl = 'http://localhost:3000/api';
 
-  static Map<String, dynamic>? _tryDecodeJson(String body) {
+  static Object? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {
-      final dynamic parsed = jsonDecode(body);
-      return parsed is Map<String, dynamic> ? parsed : null;
+      return jsonDecode(body);
     } catch (_) {
       return null;
     }
+  }
+   static Map<String, dynamic>? _asJsonMap(Object? value) {
+    return value is Map<String, dynamic> ? value : null;
+  }
+
+  static List<Map<String, dynamic>> _asJsonMapList(Object? value) {
+    if (value is List) {
+      return value.whereType<Map<String, dynamic>>().toList();
+    }
+    return const [];
   }
 
   static Map<String, String> _authHeaders(String token, {bool json = false}) {
@@ -135,8 +144,9 @@ class ApiClient {
       }),
     );
 
-    final data = _tryDecodeJson(response.body);
-    final bool success =
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);    final bool success =
         response.statusCode == 200 && (data?['success'] as bool? ?? false);
     if (success && data != null) {
       try {
@@ -163,7 +173,8 @@ class ApiClient {
       body: jsonEncode({'usuarioId': usuarioId}),
     );
 
-    final data = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -184,7 +195,8 @@ class ApiClient {
       {required String token}) async {
     final uri = Uri.parse('$_baseUrl/lawyers/applications/me');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
@@ -248,7 +260,8 @@ class ApiClient {
       body: jsonEncode(payload),
     );
 
-    final data = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -270,8 +283,8 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/auth/mobile-accounts');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
-
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -295,8 +308,8 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/perfil');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
-
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 404) {
       return null;
     }
@@ -329,7 +342,8 @@ class ApiClient {
       headers: _authHeaders(token, json: true),
       body: jsonEncode(info.toPayload()),
     );
-    final data = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
@@ -363,20 +377,17 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/especialidades');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
-
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
           : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
-
-    if (response.statusCode == 200 && data is List) {
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(LawyerSpecialty.fromJson)
-          .toList();
+ if (response.statusCode == 200 && decoded is List) {
+      final list = _asJsonMapList(decoded);
+      return list.map(LawyerSpecialty.fromJson).toList();
     }
 
     final message = data != null && data['message'] is String
@@ -396,7 +407,8 @@ class ApiClient {
       headers: _authHeaders(token, json: true),
       body: jsonEncode({'ids': specialtyIds}),
     );
-    final data = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
@@ -421,7 +433,8 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/disponibilidad');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
@@ -430,11 +443,9 @@ class ApiClient {
       throw UnauthorizedException(message);
     }
 
-    if (response.statusCode == 200 && data is List) {
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(LawyerAvailabilitySlot.fromJson)
-          .toList();
+      if (response.statusCode == 200 && decoded is List) {
+      final list = _asJsonMapList(decoded);
+      return list.map(LawyerAvailabilitySlot.fromJson).toList();
     }
 
     final message = data != null && data['message'] is String
@@ -460,8 +471,8 @@ class ApiClient {
         'hora_fin': endTime,
       }),
     );
-    final data = _tryDecodeJson(response.body);
-
+ final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -487,8 +498,8 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/disponibilidad/$slotId');
     final response = await http.delete(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
-
+ final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -512,8 +523,8 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/estudios');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
-
+final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -521,11 +532,9 @@ class ApiClient {
       throw UnauthorizedException(message);
     }
 
-    if (response.statusCode == 200 && data is List) {
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(LawyerStudyAssignment.fromJson)
-          .toList();
+   if (response.statusCode == 200 && decoded is List) {
+      final list = _asJsonMapList(decoded);
+      return list.map(LawyerStudyAssignment.fromJson).toList();
     }
 
     final message = data != null && data['message'] is String
@@ -551,8 +560,8 @@ class ApiClient {
         'rol_en_estudio': role,
       }),
     );
-    final data = _tryDecodeJson(response.body);
-
+final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -578,8 +587,8 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/estudios/$studyId');
     final response = await http.delete(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
-
+final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
           ? data['message'] as String
@@ -603,7 +612,8 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/estudios?search=${Uri.encodeQueryComponent(query)}');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _tryDecodeJson(response.body);
+final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String
@@ -612,11 +622,9 @@ class ApiClient {
       throw UnauthorizedException(message);
     }
 
-    if (response.statusCode == 200 && data is List) {
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(LawFirmSummary.fromJson)
-          .toList();
+   if (response.statusCode == 200 && decoded is List) {
+      final list = _asJsonMapList(decoded);
+      return list.map(LawFirmSummary.fromJson).toList();
     }
 
     final message = data != null && data['message'] is String
@@ -651,7 +659,8 @@ class ApiClient {
       headers: _authHeaders(token, json: true),
       body: jsonEncode(payload),
     );
-    final data = _tryDecodeJson(response.body);
+final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
       final message = data != null && data['message'] is String

@@ -452,48 +452,48 @@ class _LawyerHomeState extends State<LawyerHome> {
                 const SizedBox(height: 20),
                 const SectionHeader(title: 'Herramientas'),
                 const SizedBox(height: 15),
-                Expanded(
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 15,
-                    mainAxisSpacing: 15,
-                    childAspectRatio: 1.1,
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    children: [
-                      OptionCard(
-                        icon: Icons.info_outline,
-                        title: 'Información\nLegal',
-                        color: Colors.blue,
-                        onTap: () {
-                          // TODO: Navegar a la sección de información legal.
-                        },
-                      ),
-                      OptionCard(
-                        icon: Icons.description,
-                        title: 'Formatos\ny Plantillas',
-                        color: Colors.orange,
-                        onTap: () {
-                          // TODO: Navegar a los formatos y plantilla disponibles
-                        },
-                      ),
-                      OptionCard(
-                        icon: Icons.people_alt,
-                        title: 'Clientes',
-                        color: Colors.green,
-                        onTap: () {
-                          // TODO: Mostrar la lista de clientes.
-                        },
-                      ),
-                      OptionCard(
-                        icon: Icons.calendar_today,
-                        title: 'Agenda',
-                        color: Colors.purple,
-                        onTap: () {
-                          // TODO: Abrir la agenda de citas.
-                        },
-                      ),
-                    ],
-                  ),
+                    GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 15,
+                  mainAxisSpacing: 15,
+                  childAspectRatio: 1.1,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  children: [
+                    OptionCard(
+                      icon: Icons.info_outline,
+                      title: 'Información\nLegal',
+                      color: Colors.blue,
+                      onTap: () {
+                        // TODO: Navegar a la sección de información legal.
+                      },
+                    ),
+                    OptionCard(
+                      icon: Icons.description,
+                      title: 'Formatos\ny Plantillas',
+                      color: Colors.orange,
+                      onTap: () {
+                        // TODO: Navegar a los formatos y plantilla disponibles
+                      },
+                    ),
+                    OptionCard(
+                      icon: Icons.people_alt,
+                      title: 'Clientes',
+                      color: Colors.green,
+                      onTap: () {
+                        // TODO: Mostrar la lista de clientes.
+                      },
+                    ),
+                    OptionCard(
+                      icon: Icons.calendar_today,
+                      title: 'Agenda',
+                      color: Colors.purple,
+                      onTap: () {
+                        // TODO: Abrir la agenda de citas.
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
