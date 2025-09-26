@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/archivo_reference.dart';
 import '../models/lawyer_profile_models.dart';
 import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
@@ -220,18 +221,19 @@ class ApiClient {
   static Future<LawyerApplicationStatus> submitLawyerApplication({
     required String token,
     required String linkedinUrl,
-    required String tituloUrl,
     required String colegiaturaNumero,
     required String colegioNombre,
     required String colegioRegion,
     String? colegiaturaFechaEmision,
     String? colegiaturaFechaVigenciaHasta,
-    List<int>? colegiaturaCarnetArchivoBytes,
+    ArchivoReference? tituloArchivo,
+    int? tituloArchivoId,
+    ArchivoReference? colegiaturaCarnetArchivo,
+    int? colegiaturaCarnetArchivoId,
   }) async {
     final uri = Uri.parse('$_baseUrl/lawyers/applications');
     final Map<String, dynamic> payload = {
       'linkedinUrl': linkedinUrl,
-      'tituloUrl': tituloUrl,
       'colegiaturaNumero': colegiaturaNumero,
       'colegioNombre': colegioNombre,
       'colegioRegion': colegioRegion,
@@ -248,10 +250,15 @@ class ApiClient {
           colegiaturaFechaVigenciaHasta.trim();
     }
 
-    if (colegiaturaCarnetArchivoBytes != null &&
-        colegiaturaCarnetArchivoBytes.isNotEmpty) {
-      payload['colegiaturaCarnetBytes'] =
-          base64Encode(colegiaturaCarnetArchivoBytes);
+     payload['tituloArchivoId'] = tituloArchivoId;
+    payload['colegiaturaCarnetArchivoId'] = colegiaturaCarnetArchivoId;
+
+    if (tituloArchivo != null) {
+      payload['tituloArchivo'] = tituloArchivo.toJson();
+    }
+    if (colegiaturaCarnetArchivo != null) {
+      payload['colegiaturaCarnetArchivo'] =
+          colegiaturaCarnetArchivo.toJson();
     }
 
     final response = await http.post(
@@ -335,12 +342,19 @@ class ApiClient {
     required String token,
     required int userId,
     required LawyerProfileInfo info,
+    ArchivoReference? avatarArchivo,
+    int? avatarArchivoId,
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/perfil');
+    final Map<String, dynamic> payload = info.toPayload();
+    payload['avatar_archivo_id'] = avatarArchivoId;
+    if (avatarArchivo != null) {
+      payload['avatarArchivo'] = avatarArchivo.toJson();
+    }
     final response = await http.put(
       uri,
       headers: _authHeaders(token, json: true),
-      body: jsonEncode(info.toPayload()),
+      body: jsonEncode(payload),
     );
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);

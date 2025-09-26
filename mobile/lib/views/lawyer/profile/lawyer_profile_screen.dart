@@ -1,8 +1,15 @@
+import 'dart:io' as io;
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../constants/colors.dart';
+import '../../../models/archivo_reference.dart';
 import '../../../models/lawyer_profile_models.dart';
 import '../../../models/user_session.dart';
 import '../../../services/api_client.dart';
+import '../../../services/blob_storage_service.dart';
 import '../../../services/session_service.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
@@ -34,7 +41,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   bool _savingSpecialties = false;
   bool _addingAvailability = false;
   bool _savingLawFirm = false;
-
+  static const int _maxAvatarFileSizeBytes = 5 * 1024 * 1024;
   LawyerProfileInfo? _profileInfo;
   List<LawyerSpecialty> _catalogSpecialties = const [];
   Set<int> _selectedSpecialties = <int>{};
@@ -47,6 +54,11 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
   LawFirmSummary? _selectedLawFirm;
   bool _lawFirmPrincipal = false;
+
+  PlatformFile? _selectedAvatarFile;
+  ArchivoReference? _existingAvatarArchivo;
+  Uint8List? _avatarPreviewBytes;
+  bool _retainExistingAvatar = false;
 
   @override
   void initState() {
@@ -117,6 +129,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         _availability = availability;
         _studies = studies;
         _loading = false;
+        _existingAvatarArchivo = info?.avatarArchivo;
+        _retainExistingAvatar = _existingAvatarArchivo != null;
+        _selectedAvatarFile = null;
+        _avatarPreviewBytes = null;
       });
 
       _applyProfileToControllers(info);
@@ -181,6 +197,127 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     _lawFirmAddressController.clear();
   }
 
+   Future<void> _pickAvatarFile() async {
+    if (_savingProfile) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: kIsWeb,
+      );
+      if (result == null || result.files.isEmpty) {
+        return;
+      }
+      final PlatformFile file = result.files.single;
+      if (file.size > _maxAvatarFileSizeBytes) {
+        _showSnack(
+          'La imagen supera el máximo permitido de ${(file.size / (1024 * 1024)).toStringAsFixed(2)} MB. Máximo 5 MB.',
+        );
+        return;
+      }
+      Uint8List bytes;
+      if (file.bytes != null) {
+        bytes = file.bytes!;
+      } else if (!kIsWeb && file.path != null && file.path!.isNotEmpty) {
+        bytes = await io.File(file.path!).readAsBytes();
+      } else {
+        throw Exception('No se pudo leer el archivo seleccionado.');
+      }
+      setState(() {
+        _selectedAvatarFile = file;
+        _avatarPreviewBytes = bytes;
+        _retainExistingAvatar = false;
+      });
+    } catch (error) {
+      _showSnack('No se pudo seleccionar la foto de perfil: $error');
+    }
+  }
+
+  void _clearAvatarSelection() {
+    setState(() {
+      _selectedAvatarFile = null;
+      _avatarPreviewBytes = null;
+      if (_existingAvatarArchivo != null) {
+        _retainExistingAvatar = true;
+      }
+    });
+  }
+
+  void _removeExistingAvatar() {
+    setState(() {
+      _retainExistingAvatar = false;
+      _existingAvatarArchivo = null;
+    });
+  }
+
+  Widget _buildAvatarPicker(bool canInteract) {
+    final Uint8List? previewBytes = _avatarPreviewBytes;
+    final String? remoteUrl =
+        _retainExistingAvatar ? _existingAvatarArchivo?.resolvedUrl : null;
+    ImageProvider<Object>? imageProvider;
+    if (previewBytes != null) {
+      imageProvider = MemoryImage(previewBytes);
+    } else if (remoteUrl != null && remoteUrl.isNotEmpty) {
+      imageProvider = NetworkImage(remoteUrl);
+    }
+
+    final bool hasExisting =
+        _retainExistingAvatar && _existingAvatarArchivo != null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          radius: 40,
+          backgroundColor: AppColors.strokeColor,
+          backgroundImage: imageProvider,
+          child: imageProvider == null
+              ? const Icon(Icons.person_outline,
+                  size: 40, color: AppColors.text2Color)
+              : null,
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ElevatedButton.icon(
+                onPressed: canInteract ? _pickAvatarFile : null,
+                icon: const Icon(Icons.camera_alt_rounded),
+                label:
+                    Text(canInteract ? 'Cambiar foto' : 'Foto de perfil'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.buttonColor,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Usa una imagen cuadrada de buena calidad (máx. 5 MB).',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.text2Color,
+                ),
+              ),
+              if ((_selectedAvatarFile != null || hasExisting) && canInteract)
+                TextButton.icon(
+                  onPressed: _selectedAvatarFile != null
+                      ? _clearAvatarSelection
+                      : _removeExistingAvatar,
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(
+                    _selectedAvatarFile != null
+                        ? 'Quitar selección'
+                        : 'Eliminar foto actual',
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showSnack(String message, {Color color = Colors.red}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -218,18 +355,47 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       duracionMinutos: duracion,
       direccionAtencion: _addressController.text.trim(),
       bio: _bioController.text.trim(),
+      avatarArchivo: _retainExistingAvatar ? _existingAvatarArchivo : null,
     );
 
+    final PlatformFile? avatarFile = _selectedAvatarFile;
+    ArchivoReference? avatarArchivoUpload;
+    int? avatarArchivoId =
+        _retainExistingAvatar ? _existingAvatarArchivo?.id : null;
     setState(() => _savingProfile = true);
     try {
+      if (avatarFile != null) {
+        final Uint8List bytes;
+        if (avatarFile.bytes != null) {
+          bytes = avatarFile.bytes!;
+        } else if (!kIsWeb && avatarFile.path != null && avatarFile.path!.isNotEmpty) {
+          bytes = await io.File(avatarFile.path!).readAsBytes();
+        } else {
+          throw Exception('No se pudo leer la foto seleccionada.');
+        }
+
+        final upload = await BlobStorageService.upload(
+          bytes: bytes,
+          fileName: avatarFile.name,
+          prefix: 'usuarios/${session.usuarioId}/perfil/avatar',
+        );
+        avatarArchivoUpload = upload.toArchivoReference();
+        avatarArchivoId = null;
+      }
       final saved = await ApiClient.saveLawyerProfileInfo(
         token: session.token,
         userId: session.usuarioId,
         info: info,
+        avatarArchivo: avatarArchivoUpload,
+        avatarArchivoId: avatarArchivoId,
       );
       setState(() {
         _profileInfo = saved;
         _savingProfile = false;
+         _existingAvatarArchivo = saved.avatarArchivo;
+        _retainExistingAvatar = _existingAvatarArchivo != null;
+        _selectedAvatarFile = null;
+        _avatarPreviewBytes = null;
       });
       _applyProfileToControllers(saved);
       _showSnack(
@@ -695,6 +861,8 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         children: [
           _buildSectionTitle('Información profesional', icon: Icons.badge),
           const SizedBox(height: 12),
+           _buildAvatarPicker(!_savingProfile),
+          const SizedBox(height: 16),
           TextField(
             controller: _baseRateController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),

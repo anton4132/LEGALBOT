@@ -1,3 +1,4 @@
+import 'archivo_reference.dart';
 enum LawyerApplicationState { none, pendiente, observada, aprobada, rechazada }
 
 
@@ -34,9 +35,9 @@ class LawyerApplicationStatus {
   final LawyerApplicationState state;
   final String? observation;
   final String? linkedinUrl;
-  final String? tituloUrl;
+  final ArchivoReference? tituloArchivo;
   final String? colegiaturaNumero;
-  final String? colegiaturaCarnet;
+  final ArchivoReference? colegiaturaCarnetArchivo;
   final DateTime? colegiaturaFechaEmision;
   final DateTime? colegiaturaFechaVigenciaHasta;
   final String? colegioNombre;
@@ -51,9 +52,9 @@ class LawyerApplicationStatus {
     required this.state,
     this.observation,
     this.linkedinUrl,
-    this.tituloUrl,
+    this.tituloArchivo,
     this.colegiaturaNumero,
-    this.colegiaturaCarnet,
+    this.colegiaturaCarnetArchivo,
     this.colegiaturaFechaEmision,
     this.colegiaturaFechaVigenciaHasta,
     this.colegioNombre,
@@ -84,7 +85,7 @@ class LawyerApplicationStatus {
       return LawyerApplicationStatus.empty;
     }
 
-Map<String, dynamic>? _nestedMap(String key) {
+    Map<String, dynamic>? _nestedMap(String key) {
       final dynamic value = json[key];
       if (value is Map<String, dynamic>) {
         return value;
@@ -121,23 +122,45 @@ Map<String, dynamic>? _nestedMap(String key) {
       return _parseDate(snakeValue);
     }
 
+    ArchivoReference? _normalizeArchivo(dynamic value) {
+      final ref = ArchivoReference.fromJson(value);
+      if (ref.id == null && (ref.ruta == null || ref.ruta!.isEmpty)) {
+        return null;
+      }
+      return ref;
+    }
+
+    final dynamic tituloSource =
+        json['tituloArchivo'] ??
+        json['titulo_archivo'] ??
+        json['titulo'] ??
+        (json['verificacionAbogado'] as Map<String, dynamic>?)?['titulo'];
+
+    final dynamic carnetSource =
+        json['colegiaturaCarnetArchivo'] ??
+        json['colegiatura_carnet_archivo'] ??
+        colegiatura?['carnetArchivo'] ??
+        colegiatura?['carnet_archivo'] ??
+        json['carnetArchivo'] ??
+        json['carnet_archivo'];
+
+    final String? carnetInline =
+        (json['colegiaturaCarnet'] as String?) ??
+        (json['colegiatura_carnet'] as String?) ??
+        _readString(colegiatura, 'carnet', 'carnet');
+
     return LawyerApplicationStatus(
       id: json['id'] as int?,
       state: parseLawyerApplicationState(json['estado'] as String?),
       observation: json['observaciones'] as String?,
       linkedinUrl: json['linkedinUrl'] as String? ?? json['linkedin_url'] as String?,
-      tituloUrl: json['tituloUrl'] as String? ?? json['titulo_url'] as String?,
+      tituloArchivo: _normalizeArchivo(tituloSource),
 
       colegiaturaNumero: json['colegiaturaNumero'] as String?
           ?? json['colegiatura_numero'] as String?,
 
-      
-
-      colegiaturaCarnet: json['colegiaturaCarnet'] as String?
-              ?? json['colegiatura_carnet'] as String?
-              ?? _readString(colegiatura, 'carnet', 'carnet')
-              ?? _readString(json['colegiatura'] as Map<String, dynamic>?, 'carnet', 'carnet')
-              ?? _readString(json, 'carnet', 'carnet'),
+     colegiaturaCarnetArchivo:
+          _normalizeArchivo(carnetSource ?? (carnetInline != null ? {'ruta': carnetInline} : null)),
 
       
 
@@ -168,9 +191,9 @@ Map<String, dynamic>? _nestedMap(String key) {
     LawyerApplicationState? state,
     String? observation,
     String? linkedinUrl,
-    String? tituloUrl,
+    ArchivoReference? tituloArchivo,
     String? colegiaturaNumero,
-    String? colegiaturaCarnet,
+    ArchivoReference? colegiaturaCarnetArchivo,
     DateTime? colegiaturaFechaEmision,
     DateTime? colegiaturaFechaVigenciaHasta,
     String? colegioNombre,
@@ -184,10 +207,10 @@ Map<String, dynamic>? _nestedMap(String key) {
       state: state ?? this.state,
       observation: observation ?? this.observation,
       linkedinUrl: linkedinUrl ?? this.linkedinUrl,
-      tituloUrl: tituloUrl ?? this.tituloUrl,
+      tituloArchivo: tituloArchivo ?? this.tituloArchivo,
       colegiaturaNumero: colegiaturaNumero ?? this.colegiaturaNumero,
-      colegiaturaCarnet: colegiaturaCarnet ?? this.colegiaturaCarnet,
-      colegiaturaFechaEmision: colegiaturaFechaEmision ?? this.colegiaturaFechaEmision,
+colegiaturaCarnetArchivo:
+          colegiaturaCarnetArchivo ?? this.colegiaturaCarnetArchivo,      colegiaturaFechaEmision: colegiaturaFechaEmision ?? this.colegiaturaFechaEmision,
       colegiaturaFechaVigenciaHasta: colegiaturaFechaVigenciaHasta ?? this.colegiaturaFechaVigenciaHasta,
       colegioNombre: colegioNombre ?? this.colegioNombre,
       colegioRegion: colegioRegion ?? this.colegioRegion,

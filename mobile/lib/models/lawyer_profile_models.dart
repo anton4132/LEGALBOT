@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'archivo_reference.dart';
 
 TimeOfDay? _parseTimeOfDay(String? value) {
   if (value == null || value.isEmpty) return null;
@@ -22,12 +23,15 @@ class LawyerProfileInfo {
   final int? duracionMinutos;
   final String? direccionAtencion;
   final String? bio;
+  final ArchivoReference? avatarArchivo;
+
 
   const LawyerProfileInfo({
     this.tarifaBase,
     this.duracionMinutos,
     this.direccionAtencion,
     this.bio,
+    this.avatarArchivo,
   });
 
   bool get hasBasicInfo =>
@@ -45,11 +49,25 @@ class LawyerProfileInfo {
     } else if (tarifaValue is String) {
       tarifaBase = double.tryParse(tarifaValue);
     }
+
+     ArchivoReference? _normalizeArchivo(dynamic value) {
+      final ref = ArchivoReference.fromJson(value);
+      if (ref.id == null && (ref.ruta == null || ref.ruta!.isEmpty)) {
+        return null;
+      }
+      return ref;
+    }
+
     return LawyerProfileInfo(
       tarifaBase: tarifaBase,
       duracionMinutos: (json['duracion_minutos'] as num?)?.toInt(),
       direccionAtencion: json['direccion_atencion'] as String?,
       bio: json['bio'] as String?,
+       avatarArchivo: _normalizeArchivo(
+        json['avatarArchivo'] ??
+            json['avatar_archivo'] ??
+            json['avatar'],
+      ),
     );
   }
 

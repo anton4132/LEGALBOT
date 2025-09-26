@@ -2,11 +2,14 @@ import 'dart:io' as io;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../constants/colors.dart';
+import '../../../models/archivo_reference.dart';
 import '../../../models/lawyer_application.dart';
 import '../../../models/user_session.dart';
 import '../../../services/api_client.dart';
+import '../../../services/blob_storage_service.dart';
 import '../../../services/session_service.dart';
 import '../../authentication/login_screen.dart';
 import '../../lawyer/home/lawyer_home.dart';
@@ -21,7 +24,6 @@ class BecomeLawyerScreen extends StatefulWidget {
 
 class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   final TextEditingController _linkedinController = TextEditingController();
-  final TextEditingController _degreeLinkController = TextEditingController();
   final TextEditingController _colegiaturaNumeroController =
       TextEditingController();
   final TextEditingController _colegioNombreController =
@@ -35,6 +37,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey<FormFieldState<PlatformFile?>> _carnetFileFieldKey =
+      GlobalKey<FormFieldState<PlatformFile?>>();
+   final GlobalKey<FormFieldState<PlatformFile?>> _tituloFileFieldKey =
       GlobalKey<FormFieldState<PlatformFile?>>();
 
   static const int _maxCarnetFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -74,6 +78,11 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   bool _redirectingToLawyer = false;
   UserSession? _session;
   PlatformFile? _selectedCarnetFile;
+   PlatformFile? _selectedTituloFile;
+  ArchivoReference? _existingTituloArchivo;
+  ArchivoReference? _existingCarnetArchivo;
+  bool _retainExistingTitulo = false;
+  bool _retainExistingCarnet = false;
   DateTime? _colegiaturaFechaEmision;
   DateTime? _colegiaturaFechaVigenciaHasta;
   String? _selectedColegioRegion;
@@ -106,7 +115,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   @override
   void dispose() {
     _linkedinController.dispose();
-    _degreeLinkController.dispose();
     _colegiaturaNumeroController.dispose();
     _colegioNombreController.dispose();
     _colegioRegionController.dispose();
@@ -146,16 +154,25 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       _isSubmitting = false;
       _status = LawyerApplicationStatus.empty;
       _selectedCarnetFile = null;
+      _selectedTituloFile = null;
+      _existingTituloArchivo = null;
+      _existingCarnetArchivo = null;
+      _retainExistingTitulo = false;
+      _retainExistingCarnet = false;
       _colegiaturaFechaEmision = null;
       _colegiaturaFechaVigenciaHasta = null;
       _selectedColegioRegion = null;
       _linkedinController.clear();
-      _degreeLinkController.clear();
       _colegiaturaNumeroController.clear();
       _colegioNombreController.clear();
       _colegioRegionController.clear();
       _colegiaturaFechaEmisionController.clear();
       _colegiaturaFechaVigenciaHastaController.clear();
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _carnetFileFieldKey.currentState?.didChange(null);
+      _tituloFileFieldKey.currentState?.didChange(null);
     });
 
     final messenger = ScaffoldMessenger.of(context);
@@ -173,7 +190,6 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   }
   void _populateFormFromStatus(LawyerApplicationStatus status) {
     _linkedinController.text = status.linkedinUrl ?? '';
-    _degreeLinkController.text = status.tituloUrl ?? '';
     _colegiaturaNumeroController.text = status.colegiaturaNumero ?? '';
     _colegioNombreController.text = status.colegioNombre ?? '';
 
@@ -193,12 +209,19 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       _selectedColegioRegion =
           (region != null && region.trim().isNotEmpty) ? region : null;
       _colegioRegionController.text = _selectedColegioRegion ?? '';
-
+      
+      _selectedTituloFile = null;
       _selectedCarnetFile = null;
+      _existingTituloArchivo = status.tituloArchivo;
+      _existingCarnetArchivo = status.colegiaturaCarnetArchivo;
+      _retainExistingTitulo = _existingTituloArchivo != null;
+      _retainExistingCarnet = _existingCarnetArchivo != null;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _carnetFileFieldKey.currentState?.didChange(_selectedCarnetFile);
+      _tituloFileFieldKey.currentState?.didChange(_selectedTituloFile);
+
     });
   }
 
@@ -408,6 +431,8 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
 
       setState(() {
         _selectedCarnetFile = file;
+        _retainExistingCarnet = false;
+
       });
       field.didChange(file);
     } catch (error) {
@@ -418,12 +443,81 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   void _clearSelectedCarnetFile(FormFieldState<PlatformFile?> field) {
     setState(() {
       _selectedCarnetFile = null;
+      if (_existingCarnetArchivo != null) {
+        _retainExistingCarnet = true;
+      }
     });
     field.didChange(null);
   }
 
-  Future<List<int>> _readCarnetFileBytes(PlatformFile file) async {
-    if (file.bytes != null) {
+void _removeExistingCarnetFile() {
+    setState(() {
+      _retainExistingCarnet = false;
+      _existingCarnetArchivo = null;
+    });
+    _carnetFileFieldKey.currentState?.validate();
+  }
+
+  Future<void> _pickTituloFile(FormFieldState<PlatformFile?> field) async {
+    if (!(_status.canEdit) || _isSubmitting) {
+      return;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: kIsWeb,
+      );
+
+      if (!mounted || result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final PlatformFile file = result.files.single;
+      if (file.size > _maxCarnetFileSizeBytes) {
+        _showSnack(
+          'El archivo supera el máximo permitido de ${_formatFileSize(_maxCarnetFileSizeBytes)}.',
+        );
+        return;
+      }
+
+      if (file.bytes == null && (file.path == null || file.path!.isEmpty)) {
+        _showSnack('No se pudo leer el archivo seleccionado.');
+        return;
+      }
+
+      setState(() {
+        _selectedTituloFile = file;
+        _retainExistingTitulo = false;
+      });
+      field.didChange(file);
+    } catch (error) {
+      _showSnack('No se pudo seleccionar el archivo: $error');
+    }
+  }
+
+  void _clearSelectedTituloFile(FormFieldState<PlatformFile?> field) {
+    setState(() {
+      _selectedTituloFile = null;
+      if (_existingTituloArchivo != null) {
+        _retainExistingTitulo = true;
+      }
+    });
+    field.didChange(null);
+  }
+
+  void _removeExistingTituloFile() {
+    setState(() {
+      _retainExistingTitulo = false;
+      _existingTituloArchivo = null;
+    });
+    _tituloFileFieldKey.currentState?.validate();
+  }
+
+  Future<List<int>> _readFileBytes(PlatformFile file) async {
+    
+        if (file.bytes != null) {
       return file.bytes!;
     }
     if (!kIsWeb && file.path != null && file.path!.isNotEmpty) {
@@ -432,82 +526,73 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     }
     throw Exception('No se pudo obtener el contenido del archivo seleccionado.');
   }
-
-  Widget _buildCarnetFilePicker(bool canInteract) {
+  Widget _buildTituloFilePicker(bool canInteract) {
     return FormField<PlatformFile?>(
-      key: _carnetFileFieldKey,
+      key: _tituloFileFieldKey,
       enabled: canInteract,
-      validator: (value) {
-        if (value == null) {
-          return 'Adjunta el archivo digital de tu carnet.';
+      validator: (_) {
+        final bool hasExisting =
+            _retainExistingTitulo && _existingTituloArchivo != null;
+        if (!hasExisting && _selectedTituloFile == null) {
+          return 'Adjunta el archivo digital de tu título profesional.';
         }
         return null;
       },
       builder: (field) {
-        final hasValue = _selectedCarnetFile != null;
-        final String helperText = hasValue
-            ? _selectedCarnetFile!.name
-            : 'Selecciona un archivo (PDF, JPG o PNG, máx. ${_formatFileSize(_maxCarnetFileSizeBytes)})';
+        final PlatformFile? value = field.value ?? _selectedTituloFile;
+        final bool hasLocalFile = value != null;
+        final ArchivoReference? existing =
+            _retainExistingTitulo ? _existingTituloArchivo : null;
 
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            InputDecorator(
-              decoration: InputDecoration(
-                labelText: 'Archivo digital del carnet',
-                labelStyle:
-                    const TextStyle(color: AppColors.textFormFieldLabelColor),
-                prefixIcon: const Icon(Icons.upload_file_rounded,
-                    color: AppColors.text2Color),
-                enabled: canInteract,
-                errorText: field.errorText,
-                suffixIcon: canInteract
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_selectedCarnetFile != null)
-                            IconButton(
-                              tooltip: 'Quitar archivo',
-                              icon: const Icon(Icons.close_rounded,
-                                  color: AppColors.text2Color),
-                              onPressed: () =>
-                                  _clearSelectedCarnetFile(field),
-                            ),
-                          IconButton(
-                            tooltip: 'Adjuntar archivo',
-                            icon: const Icon(Icons.attach_file_rounded,
-                                color: AppColors.text2Color),
-                            onPressed: () => _pickCarnetFile(field),
-                          ),
-                        ],
-                      )
-                    : null,
-              ),
-              child: GestureDetector(
-                onTap: canInteract ? () => _pickCarnetFile(field) : null,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 6.0, horizontal: 4),
-                  child: Text(
-                    helperText,
-                    style: TextStyle(
-                      color: hasValue
-                          ? AppColors.text1Color
-                          : AppColors.text2Color,
-                    ),
-                  ),
-                ),
+            const Text(
+              'Título profesional',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.text1Color,
               ),
             ),
-            if (_selectedCarnetFile != null)
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: canInteract ? () => _pickTituloFile(field) : null,
+                  icon: const Icon(Icons.upload_file_rounded),
+                  label: const Text('Seleccionar archivo'),
+                ),
+                const SizedBox(width: 12),
+                if (hasLocalFile)
+                  Expanded(
+                    child: _FileSummaryChip(
+                      fileName: value!.name,
+                      sizeLabel: _formatFileSize(value.size),
+                      onRemove: canInteract
+                          ? () => _clearSelectedTituloFile(field)
+                          : null,
+                    ),
+                  )
+                else if (existing != null)
+                  Expanded(
+                    child: _FileSummaryChip(
+                      fileName: existing.fileName ?? 'archivo',
+                      sizeLabel: existing.tamano != null
+                          ? _formatFileSize(existing.tamano!)
+                          : null,
+                      downloadUrl: existing.resolvedUrl,
+                      onRemove:
+                          canInteract ? _removeExistingTituloFile : null,
+                    ),
+                  ),
+              ],
+            ),
+            if (field.hasError)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  'Peso: ${_formatFileSize(_selectedCarnetFile!.size)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.text2Color,
-                  ),
+                  field.errorText ?? '',
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
                 ),
               ),
           ],
@@ -515,6 +600,160 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       },
     );
   }
+
+  Widget _buildCarnetFilePicker(bool canInteract) {
+    return FormField<PlatformFile?>(
+      key: _carnetFileFieldKey,
+      enabled: canInteract,
+      validator: (value) {
+ if (value == null &&
+            !(_retainExistingCarnet && _existingCarnetArchivo != null)) {          return 'Adjunta el archivo digital de tu carnet.';
+        }
+        return null;
+      },
+      builder: (field) {
+        final PlatformFile? file = field.value ?? _selectedCarnetFile;
+        final ArchivoReference? existing =
+            _retainExistingCarnet ? _existingCarnetArchivo : null;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Carnet de colegiatura',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.text1Color,
+              ),
+               ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: canInteract ? () => _pickCarnetFile(field) : null,
+                  icon: const Icon(Icons.upload_rounded),
+                  label: const Text('Seleccionar archivo'),
+                ),
+                const SizedBox(width: 12),
+                if (file != null)
+                  Expanded(
+                    child: _FileSummaryChip(
+                      fileName: file.name,
+                      sizeLabel: _formatFileSize(file.size),
+                      onRemove: canInteract
+                          ? () => _clearSelectedCarnetFile(field)
+                          : null,
+                    ),
+                  )
+                else if (existing != null)
+                  Expanded(
+                    child: _FileSummaryChip(
+                      fileName: existing.fileName ?? 'archivo',
+                      sizeLabel: existing.tamano != null
+                          ? _formatFileSize(existing.tamano!)
+                          : null,
+                      downloadUrl: existing.resolvedUrl,
+                      onRemove:
+                          canInteract ? _removeExistingCarnetFile : null,
+                    )
+                  ),
+              ],
+            ),
+            if (field.hasError)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  field.errorText ?? '',
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+  class _FileSummaryChip extends StatelessWidget {
+  final String fileName;
+  final String? sizeLabel;
+  final String? downloadUrl;
+  final VoidCallback? onRemove;
+
+  const _FileSummaryChip({
+    required this.fileName,
+    this.sizeLabel,
+    this.downloadUrl,
+    this.onRemove,
+  });
+
+  Future<void> _copyUrl(BuildContext context) async {
+    final url = downloadUrl;
+    if (url == null || url.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Enlace copiado al portapapeles'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.buttonTextColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.strokeColor),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.insert_drive_file_rounded,
+              color: AppColors.text2Color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.text1Color,
+                  ),
+                ),
+                if (sizeLabel != null)
+                  Text(
+                    sizeLabel!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.text2Color,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (downloadUrl != null)
+            IconButton(
+              tooltip: 'Copiar enlace',
+              icon: const Icon(Icons.copy_rounded,
+                  color: AppColors.text2Color, size: 20),
+              onPressed: () => _copyUrl(context),
+            ),
+          if (onRemove != null)
+            IconButton(
+              tooltip: 'Quitar archivo',
+              icon: const Icon(Icons.close_rounded,
+                  color: AppColors.text2Color, size: 20),
+              onPressed: onRemove,
+            ),
+        ],
+      ),
+    );
+  }
+}
 
   Widget _buildStatusIndicator() {
     final LawyerApplicationStatus status = _status;
@@ -682,14 +921,15 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
     }
 
     final isValid = _formKey.currentState!.validate();
-    final bool isFileValid =
+    final bool isTituloValid =
+        _tituloFileFieldKey.currentState?.validate() ?? true;
+    final bool isCarnetValid =
         _carnetFileFieldKey.currentState?.validate() ?? true;
-    if (!isValid || !isFileValid) {
+    if (!isValid || !isTituloValid || !isCarnetValid) {
       return;
     }
 
     final linkedin = _linkedinController.text.trim();
-    final degreeLink = _degreeLinkController.text.trim();
     final colegiaturaNumero = _colegiaturaNumeroController.text.trim();
     final colegioNombre = _colegioNombreController.text.trim();
     final colegioRegion = _colegioRegionController.text.trim().isNotEmpty
@@ -713,35 +953,56 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
       return;
     }
 
-    final PlatformFile? carnetArchivo = _selectedCarnetFile;
-    List<int>? carnetArchivoBytes;
-
-    if (carnetArchivo != null) {
-      try {
-        carnetArchivoBytes = await _readCarnetFileBytes(carnetArchivo);
-      } catch (error) {
-        _showSnack('No se pudo leer el archivo del carnet seleccionado: $error');
-        return;
-      }
-    }
-
     final String colegiaturaFechaEmision = fechaEmision.toIso8601String();
     final String colegiaturaFechaVigenciaHasta =
         fechaVigencia.toIso8601String();
 
+    final PlatformFile? tituloArchivo = _selectedTituloFile;
+    final PlatformFile? carnetArchivo = _selectedCarnetFile;
+    ArchivoReference? tituloArchivoUpload;
+    ArchivoReference? carnetArchivoUpload;
+    int? tituloArchivoId =
+        _retainExistingTitulo ? _existingTituloArchivo?.id : null;
+    int? carnetArchivoId =
+        _retainExistingCarnet ? _existingCarnetArchivo?.id : null;
+
     setState(() => _isSubmitting = true);
     try {
+      if (tituloArchivo != null) {
+        final bytes = await _readFileBytes(tituloArchivo);
+        final upload = await BlobStorageService.upload(
+          bytes: bytes,
+          fileName: tituloArchivo.name,
+          prefix:
+              'usuarios/${session.usuarioId}/postulaciones/titulos',
+        );
+        tituloArchivoUpload = upload.toArchivoReference();
+        tituloArchivoId = null;
+      }
+
+      if (carnetArchivo != null) {
+        final bytes = await _readFileBytes(carnetArchivo);
+        final upload = await BlobStorageService.upload(
+          bytes: bytes,
+          fileName: carnetArchivo.name,
+          prefix: 'usuarios/${session.usuarioId}/postulaciones/carnets',
+        );
+        carnetArchivoUpload = upload.toArchivoReference();
+        carnetArchivoId = null;
+      }
+
       final status = await ApiClient.submitLawyerApplication(
         token: session.token,
         linkedinUrl: linkedin,
-        tituloUrl: degreeLink,
         colegiaturaNumero: colegiaturaNumero,
         colegioNombre: colegioNombre,
         colegioRegion: colegioRegion,
         colegiaturaFechaEmision: colegiaturaFechaEmision,
         colegiaturaFechaVigenciaHasta: colegiaturaFechaVigenciaHasta,
-        colegiaturaCarnetArchivoBytes: carnetArchivoBytes,
-      );
+        tituloArchivo: tituloArchivoUpload,
+        tituloArchivoId: tituloArchivoId,
+        colegiaturaCarnetArchivo: carnetArchivoUpload,
+        colegiaturaCarnetArchivoId: carnetArchivoId,      );
       SessionService.instance.updateApplication(status);
       setState(() {
         _status = status;
@@ -891,38 +1152,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
             },
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _degreeLinkController,
-            enabled: canInteract,
-            decoration: const InputDecoration(
-              labelText: 'Link a tu Título (Google Drive, etc.)',
-              labelStyle: TextStyle(color: AppColors.textFormFieldLabelColor),
-              prefixIcon:
-                  Icon(Icons.school_rounded, color: AppColors.text2Color),
-              hintText: 'Asegúrate de que sea un enlace público',
-              hintStyle: TextStyle(color: AppColors.text2Color),
-              enabledBorder: OutlineInputBorder(
-                borderSide:
-                    BorderSide(color: AppColors.textFormFieldBorderColor),
-                borderRadius: BorderRadius.all(Radius.circular(14)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.button2Color, width: 2),
-                borderRadius: BorderRadius.all(Radius.circular(14)),
-              ),
-              filled: true,
-              fillColor: AppColors.buttonTextColor,
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-            validator: (value) {
-              final trimmed = value?.trim() ?? '';
-              if (trimmed.isEmpty || !trimmed.startsWith('http')) {
-                return 'Por favor, introduce una URL válida.';
-              }
-              return null;
-            },
-          ),
+          _buildTituloFilePicker(canInteract),
           const SizedBox(height: 16),
           TextFormField(
             controller: _colegioNombreController,

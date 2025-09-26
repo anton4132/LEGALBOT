@@ -28,6 +28,67 @@ const parseDate = (v) => {
   return null;
 };
 
+
+const parseArchivoPayload = (input) => {
+  if (!input) return null;
+  let data = input;
+  if (typeof input === 'string') {
+    try {
+      data = JSON.parse(input);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof data !== 'object' || data === null) return null;
+
+  const ruta = sanitizeString(
+    data.ruta || data.url || data.path || data.pathname,
+  );
+  if (!ruta) return null;
+
+  const rawTamano = Number(data.tamano ?? data.size ?? data.bytes);
+  const tamano = Number.isFinite(rawTamano)
+    ? Math.max(0, Math.trunc(rawTamano))
+    : null;
+  const tipo = sanitizeString(
+    data.tipo || data.mime || data.contentType || data.mimeType,
+  );
+
+  return {
+    ruta,
+    tamano,
+    tipo: tipo || null,
+  };
+};
+
+const mapArchivo = (archivo) => {
+  if (!archivo) return null;
+  const ruta = sanitizeString(archivo.ruta) || null;
+  const isAbsolute = ruta
+    ? ruta.startsWith('http://') || ruta.startsWith('https://')
+    : false;
+  const normalizedPath = !ruta
+    ? null
+    : isAbsolute
+    ? ruta
+    : ruta.startsWith('/')
+    ? ruta
+    : `/${ruta}`;
+  const fullUrl = !normalizedPath
+    ? null
+    : isAbsolute
+    ? normalizedPath
+    : `https://blob.vercel-storage.com${normalizedPath}`;
+
+  return {
+    id: archivo.id,
+    ruta,
+    tamano: archivo.tamano,
+    tipo: archivo.tipo,
+    url: fullUrl,
+  };
+};
+
 // Mapea la solicitud incluyendo colegiatura y colegio
 const mapApplication = (row) => {
   if (!row) return null;
@@ -39,20 +100,32 @@ const mapApplication = (row) => {
     personaId: row.persona_id,
     estado: row.estado,
     linkedinUrl: row.linkedin_url,
+    tituloUrl: row.titulo_url || row.titulo?.ruta || null,
+    tituloArchivo: mapArchivo(row.titulo),
     tituloUrl: row.titulo_url,
     observaciones: row.observaciones,
     aprobadoEl: row.aprobado_el,
     creadoEl: row.creado_el,
     actualizadoEl: row.actualizado_el,
+    tituloArchivoId: row.titulo_archivo_id,
+    colegiaturaCarnetArchivo: mapArchivo(row.colegiatura?.carnet_archivo),
+    colegiaturaCarnetArchivoId: row.colegiatura?.carnet_archivo_id ?? null,
+    colegiaturaNumero: c?.numero || null,
+    colegiaturaFechaEmision: c?.fecha_emision || null,
+    colegiaturaFechaVigenciaHasta: c?.fecha_vigencia_hasta || null,
+    colegioNombre: col?.nombre || null,
+    colegioRegion: col?.region || null,
+    colegioId: col?.id || null,
     colegiatura: c
       ? {
           id: c.id,
           personaId: c.persona_id,
           colegioId: c.colegio_id,
           numero: c.numero,
-          carnet: c.carnet ?? null,
           fechaEmision: c.fecha_emision,
           fechaVigenciaHasta: c.fecha_vigencia_hasta,
+          carnetArchivo: mapArchivo(c.carnet_archivo),
+          carnetArchivoId: c.carnet_archivo_id,
           colegio: col
             ? {
                 id: col.id,
@@ -131,7 +204,10 @@ const getOwnApplication = async (req, res) => {
 
     const application = await prisma.verificacionabogado.findUnique({
       where: { persona_id: personaId },
-      include: { colegiatura: { include: { colegio: true } } },
+      include: {
+        titulo: true,
+        colegiatura: { include: { colegio: true, carnet_archivo: true } },
+      },
     });
 
     return res.json({ success: true, application: mapApplication(application) });
@@ -146,28 +222,86 @@ const getOwnApplication = async (req, res) => {
 const submitApplication = async (req, res) => {
   try {
     const personaId = req.ctx?.personaId;
-    if (!personaId) {
+    const usuarioId = req.ctx?.usuarioId;
+    if (!personaId || !usuarioId) {
       return res.status(401).json({ success: false, message: 'No autenticado' });
     }
 
     // ----- datos que llegan del app -----
     const linkedinUrl = sanitizeString(req.body?.linkedinUrl);
-    const tituloUrl = sanitizeString(req.body?.tituloUrl);
+    let tituloArchivo = parseArchivoPayload(req.body?.tituloArchivo);
+    const legacyTituloUrl = sanitizeString(req.body?.tituloUrl);
+    if (!tituloArchivo && isValidUrl(legacyTituloUrl)) {
+      tituloArchivo = { ruta: legacyTituloUrl, tamano: null, tipo: null };
+    }
+
+    let carnetArchivo = parseArchivoPayload(req.body?.colegiaturaCarnetArchivo);
+    const legacyCarnet = sanitizeString(req.body?.colegiaturaCarnet);
+    if (!carnetArchivo && legacyCarnet) {
+      carnetArchivo = { ruta: legacyCarnet, tamano: null, tipo: null };
+    }
+
+    let tituloArchivoId;
+    let tituloArchivoIdProvided = false;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'tituloArchivoId')) {
+      tituloArchivoIdProvided = true;
+      const raw = req.body.tituloArchivoId;
+      if (raw === null || raw === undefined || raw === '') {
+        tituloArchivoId = null;
+      } else {
+        const parsed = Number(raw);
+        tituloArchivoId = Number.isInteger(parsed) ? parsed : null;
+      }
+    }
+
+    let carnetArchivoId;
+    let carnetArchivoIdProvided = false;
+    if (
+      Object.prototype.hasOwnProperty.call(
+        req.body,
+        'colegiaturaCarnetArchivoId',
+      )
+    ) {
+      carnetArchivoIdProvided = true;
+      const raw = req.body.colegiaturaCarnetArchivoId;
+      if (raw === null || raw === undefined || raw === '') {
+        carnetArchivoId = null;
+      } else {
+        const parsed = Number(raw);
+        carnetArchivoId = Number.isInteger(parsed) ? parsed : null;
+      }
+    }
+
 
     const colegiaturaNumero = sanitizeString(req.body?.colegiaturaNumero);
-    const colegiaturaCarnet = sanitizeString(req.body?.colegiaturaCarnet); // opcional
     const colegioNombre = sanitizeString(req.body?.colegioNombre);
     const colegioRegion = sanitizeString(req.body?.colegioRegion);
-
     const fechaEmision = parseDate(req.body?.colegiaturaFechaEmision);
     const fechaVigencia = parseDate(req.body?.colegiaturaFechaVigenciaHasta);
 
     // Validaciones básicas
-    if (!isValidUrl(linkedinUrl) || !isValidUrl(tituloUrl)) {
+    if (!isValidUrl(linkedinUrl)) {
       return res.status(400).json({
         success: false,
-        message: 'linkedinUrl y tituloUrl deben ser URLs válidas (http/https)',
+        message: 'linkedinUrl debe ser una URL válida (http/https)',
       });
+    }
+    const hasTituloArchivo = Boolean(tituloArchivo) ||
+      (tituloArchivoIdProvided && tituloArchivoId != null);
+    if (!hasTituloArchivo) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debes adjuntar el archivo digital de tu título profesional',
+      });
+    }
+    const hasCarnetArchivo = Boolean(carnetArchivo) ||
+      (carnetArchivoIdProvided && carnetArchivoId != null);
+    if (!hasCarnetArchivo) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debes adjuntar el archivo digital de tu carnet de colegiatura',
+      });
+      
     }
     if (!colegiaturaNumero) {
       return res.status(400).json({ success: false, message: 'colegiaturaNumero es requerido' });
@@ -206,12 +340,37 @@ const submitApplication = async (req, res) => {
         where: { persona_id: personaId },
       });
 
+      let tituloArchivoIdToUse = verification?.titulo_archivo_id ?? null;
+      if (tituloArchivo) {
+        const created = await tx.archivo.create({
+          data: {
+            usuario_id: usuarioId,
+            ruta: tituloArchivo.ruta,
+            tamano: tituloArchivo.tamano ?? 0,
+            tipo: tituloArchivo.tipo,
+          },
+        });
+        tituloArchivoIdToUse = created.id;
+      } else if (tituloArchivoIdProvided) {
+        if (tituloArchivoId === null) {
+          tituloArchivoIdToUse = null;
+        } else {
+          const owned = await tx.archivo.findUnique({
+            where: { id: tituloArchivoId },
+          });
+          if (!owned || owned.usuario_id !== usuarioId) {
+            throw new Error('ARCHIVO_TITULO_INVALIDO');
+          }
+          tituloArchivoIdToUse = owned.id;
+        }
+      }
+
       if (!verification) {
         verification = await tx.verificacionabogado.create({
           data: {
             persona_id: personaId,
             linkedin_url: linkedinUrl,
-            titulo_url: tituloUrl,
+            titulo_archivo_id: tituloArchivoIdToUse,
             estado: EstadoVerificacion.PENDIENTE,
             observaciones: null,
             aprobado_el: null,
@@ -228,8 +387,8 @@ const submitApplication = async (req, res) => {
         verification = await tx.verificacionabogado.update({
           where: { persona_id: personaId },
           data: {
-            linkedin_url: verification.linkedin_url || linkedinUrl,
-            titulo_url: verification.titulo_url || tituloUrl,
+            linkedin_url: linkedinUrl,
+            titulo_archivo_id: tituloArchivoIdToUse,
             estado: EstadoVerificacion.PENDIENTE,
             observaciones: null,
             aprobado_el: null,
@@ -255,7 +414,33 @@ const submitApplication = async (req, res) => {
       // 3) colegiatura: upsert por persona_id + validar unicidad (colegio_id, numero)
       let colegiatura = await tx.colegiaturaabogado.findUnique({
         where: { persona_id: personaId },
+        include: { carnet_archivo: true },
       });
+
+      let carnetArchivoIdToUse = colegiatura?.carnet_archivo_id ?? null;
+      if (carnetArchivo) {
+        const createdCarnet = await tx.archivo.create({
+          data: {
+            usuario_id: usuarioId,
+            ruta: carnetArchivo.ruta,
+            tamano: carnetArchivo.tamano ?? 0,
+            tipo: carnetArchivo.tipo,
+          },
+        });
+        carnetArchivoIdToUse = createdCarnet.id;
+      } else if (carnetArchivoIdProvided) {
+        if (carnetArchivoId === null) {
+          carnetArchivoIdToUse = null;
+        } else {
+          const ownedCarnet = await tx.archivo.findUnique({
+            where: { id: carnetArchivoId },
+          });
+          if (!ownedCarnet || ownedCarnet.usuario_id !== usuarioId) {
+            throw new Error('ARCHIVO_CARNET_INVALIDO');
+          }
+          carnetArchivoIdToUse = ownedCarnet.id;
+        }
+      }
 
       if (!colegiatura) {
         colegiatura = await tx.colegiaturaabogado.create({
@@ -263,10 +448,12 @@ const submitApplication = async (req, res) => {
             persona_id: personaId,
             colegio_id: colegio.id,
             numero: colegiaturaNumero,
-            carnet: colegiaturaCarnet || null,
+            carnet_archivo_id: carnetArchivoIdToUse,
             fecha_emision: fechaEmision || null,
             fecha_vigencia_hasta: fechaVigencia || null,
           },
+        include: { carnet_archivo: true, colegio: true },
+
         });
       } else {
         if (colegiatura.numero !== colegiaturaNumero || colegiatura.colegio_id !== colegio.id) {
@@ -285,10 +472,12 @@ const submitApplication = async (req, res) => {
           data: {
             colegio_id: colegio.id,
             numero: colegiaturaNumero,
-            carnet: colegiaturaCarnet || null,
+            carnet_archivo_id: carnetArchivoIdToUse,
             fecha_emision: fechaEmision || null,
             fecha_vigencia_hasta: fechaVigencia || null,
           },
+          include: { carnet_archivo: true, colegio: true },
+          
         });
       }
 
@@ -303,8 +492,10 @@ const submitApplication = async (req, res) => {
       // devolver payload completo
       return tx.verificacionabogado.findUnique({
         where: { persona_id: personaId },
-        include: { colegiatura: { include: { colegio: true } } },
-      });
+        include: {
+          titulo: true,
+          colegiatura: { include: { colegio: true, carnet_archivo: true } },
+        },      });
     });
 
     return res.status(verificationWasCreated(result) ? 201 : 200).json({
@@ -324,6 +515,19 @@ const submitApplication = async (req, res) => {
         message: 'Tu solicitud fue rechazada. Comunícate con soporte para más información',
       });
     }
+
+    if (error.message === 'ARCHIVO_TITULO_INVALIDO') {
+      return res.status(400).json({
+        success: false,
+        message: 'El archivo de título proporcionado no es válido',
+      });
+    }
+    if (error.message === 'ARCHIVO_CARNET_INVALIDO') {
+      return res.status(400).json({
+        success: false,
+        message: 'El archivo de carnet proporcionado no es válido',
+      });
+    }
     if (error.message === 'DUP_COLE_NUM') {
       return res.status(409).json({
         success: false,
@@ -338,7 +542,10 @@ const submitApplication = async (req, res) => {
 
 // para decidir 201/200 arriba (heurística simple)
 function verificationWasCreated(v) {
-  return !v?.creado_el || (v.creado_el && v.creado_el.getTime() === v.actualizado_el?.getTime());
+  if (!v) return false;
+  if (!v.creado_el) return false;
+  if (!v.actualizado_el) return true;
+  return v.creado_el.getTime() === v.actualizado_el.getTime();
 }
 
 const reviewApplication = async (req, res) => {
@@ -428,8 +635,11 @@ const reviewApplication = async (req, res) => {
               : null,
           aprobado_el: estado === EstadoVerificacion.APROBADA ? new Date() : null,
         },
-        include: { colegiatura: { include: { colegio: true } } },
-      });
+        include: {
+          titulo: true,
+          colegiatura: { include: { colegio: true, carnet_archivo: true } },
+        },
+            });
 
       // 2) SI Y SOLO SI quedó APROBADA => crear/activar usuario ABOGADO (duplicando SOLO la clave)
       if (estado === EstadoVerificacion.APROBADA) {
