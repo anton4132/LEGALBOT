@@ -9,8 +9,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL") // pooled (PgBouncer)
+  provider          = "postgresql"
+  url               = env("DATABASE_URL") // pooled (PgBouncer)
+  directUrl         = env("DIRECT_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 /**
@@ -167,7 +169,7 @@ enum tipo_consulta {
 
 /**
  * ================================
- * DOCUMENTOS / ARCHIVOS PARA LAS IMAGENSE PARA CARNETA DOLEGIATURA Y PARA LA FOTO DE PERFIL
+ * DOCUMENTOS / ARCHIVOS
  * ================================
  */
 

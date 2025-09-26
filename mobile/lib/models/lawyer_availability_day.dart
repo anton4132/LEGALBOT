@@ -4,7 +4,7 @@ class LawyerAvailabilityBlock {
   final DateTime start;
   final DateTime end;
 
-  const LawyerAvailabilityBlock({
+  LawyerAvailabilityBlock({
     required this.start,
     required this.end,
   }) : assert(!end.isBefore(start), 'El bloque debe terminar después de iniciar');
@@ -25,7 +25,7 @@ class LawyerAvailabilityDay {
   final List<LawyerAvailabilityBlock> freeBlocks;
   final List<LawyerAvailabilityBlock> busyBlocks;
 
-  const LawyerAvailabilityDay({
+  LawyerAvailabilityDay({
     required this.date,
     this.freeBlocks = const [],
     this.busyBlocks = const [],
@@ -38,7 +38,7 @@ class LawyerAvailabilitySelection {
   final DateTime date;
   final LawyerAvailabilityBlock block;
 
-  const LawyerAvailabilitySelection({
+  LawyerAvailabilitySelection({
     required this.date,
     required this.block,
   });

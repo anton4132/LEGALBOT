@@ -75,7 +75,7 @@ class _ClientLawyerAvailabilityCalendarState
 
   List<_CalendarSlot> _slotsForDay(DateTime day) {
     final dayData = _daysIndex[DateUtils.dateOnly(day)];
-    if (dayData == null) return const [];
+    if (dayData == null) return const <_CalendarSlot>[];
     final items = <_CalendarSlot>[
       ...dayData.freeBlocks
           .map((block) => _CalendarSlot(block: block, isFree: true)),
@@ -96,8 +96,8 @@ class _ClientLawyerAvailabilityCalendarState
         : DateTime.now().add(const Duration(days: 30));
 
     final selectedDay = _selectedDay;
-    final selectedSlots = selectedDay != null ? _slotsForDay(selectedDay) : const [];
-
+final selectedSlots =
+        selectedDay != null ? _slotsForDay(selectedDay) : const <_CalendarSlot>[];
     return Column(
       children: [
         TableCalendar(
