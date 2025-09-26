@@ -80,7 +80,7 @@ class BlobStorageService {
       '${now.year}',
       '${now.month.toString().padLeft(2, '0')}',
       '${now.day.toString().padLeft(2, '0')}',
-      '${now.millisecondsSinceEpoch}_$random_${sanitizedName}',
+      '${now.millisecondsSinceEpoch}_${random}_${sanitizedName}',
     ];
     return segments.join('/');
   }

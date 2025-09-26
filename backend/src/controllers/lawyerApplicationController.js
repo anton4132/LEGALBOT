@@ -102,7 +102,6 @@ const mapApplication = (row) => {
     linkedinUrl: row.linkedin_url,
     tituloUrl: row.titulo_url || row.titulo?.ruta || null,
     tituloArchivo: mapArchivo(row.titulo),
-    tituloUrl: row.titulo_url,
     observaciones: row.observaciones,
     aprobadoEl: row.aprobado_el,
     creadoEl: row.creado_el,
@@ -136,6 +135,39 @@ const mapApplication = (row) => {
         }
       : null,
   };
+};
+const fetchApplicationWithRelations = async (client, where) => {
+  const base = await client.verificacionabogado.findUnique({
+    where,
+    include: {
+      colegiatura: { include: { colegio: true } },
+    },
+  });
+  if (!base) return null;
+
+  const tituloPromise = base.titulo_archivo_id
+  ? client.archivo.findUnique({ where: { id: base.titulo_archivo_id } })
+  : Promise.resolve(null);
+
+  const carnetPromise = base.colegiatura?.carnet_archivo_id
+    ? client.archivo.findUnique({
+        where: { id: base.colegiatura.carnet_archivo_id },
+      })
+    : Promise.resolve(null);
+
+  const [titulo, carnetArchivo] = await Promise.all([
+    tituloPromise,
+    carnetPromise,
+  ]);
+
+  const colegiatura = base.colegiatura
+    ? { ...base.colegiatura, carnet_archivo: carnetArchivo || null }
+    : null;
+    return {
+      ...base,
+      titulo: titulo || null,
+      colegiatura,
+    };
 };
 
 const ensureAdmin = async (rolId) => {
@@ -202,12 +234,9 @@ const getOwnApplication = async (req, res) => {
       return res.status(401).json({ success: false, message: 'No autenticado' });
     }
 
-    const application = await prisma.verificacionabogado.findUnique({
-      where: { persona_id: personaId },
-      include: {
-        titulo: true,
-        colegiatura: { include: { colegio: true, carnet_archivo: true } },
-      },
+   
+    const application = await fetchApplicationWithRelations(prisma, {
+      persona_id: personaId,
     });
 
     return res.json({ success: true, application: mapApplication(application) });
@@ -414,7 +443,6 @@ const submitApplication = async (req, res) => {
       // 3) colegiatura: upsert por persona_id + validar unicidad (colegio_id, numero)
       let colegiatura = await tx.colegiaturaabogado.findUnique({
         where: { persona_id: personaId },
-        include: { carnet_archivo: true },
       });
 
       let carnetArchivoIdToUse = colegiatura?.carnet_archivo_id ?? null;
@@ -452,7 +480,6 @@ const submitApplication = async (req, res) => {
             fecha_emision: fechaEmision || null,
             fecha_vigencia_hasta: fechaVigencia || null,
           },
-        include: { carnet_archivo: true, colegio: true },
 
         });
       } else {
@@ -476,7 +503,6 @@ const submitApplication = async (req, res) => {
             fecha_emision: fechaEmision || null,
             fecha_vigencia_hasta: fechaVigencia || null,
           },
-          include: { carnet_archivo: true, colegio: true },
           
         });
       }
@@ -490,12 +516,8 @@ const submitApplication = async (req, res) => {
       }
 
       // devolver payload completo
-      return tx.verificacionabogado.findUnique({
-        where: { persona_id: personaId },
-        include: {
-          titulo: true,
-          colegiatura: { include: { colegio: true, carnet_archivo: true } },
-        },      });
+      return fetchApplicationWithRelations(tx, { persona_id: personaId });
+
     });
 
     return res.status(verificationWasCreated(result) ? 201 : 200).json({
@@ -623,7 +645,7 @@ const reviewApplication = async (req, res) => {
 
     const updated = await prisma.$transaction(async (tx) => {
       // 1) actualizar estado de verificación
-      const result = await tx.verificacionabogado.update({
+      await tx.verificacionabogado.update({
         where: { persona_id: personaId },
         data: {
           estado,
@@ -635,18 +657,15 @@ const reviewApplication = async (req, res) => {
               : null,
           aprobado_el: estado === EstadoVerificacion.APROBADA ? new Date() : null,
         },
-        include: {
-          titulo: true,
-          colegiatura: { include: { colegio: true, carnet_archivo: true } },
-        },
-            });
+      });
 
       // 2) SI Y SOLO SI quedó APROBADA => crear/activar usuario ABOGADO (duplicando SOLO la clave)
       if (estado === EstadoVerificacion.APROBADA) {
         await createOrActivateAbogadoUser(tx, personaId);
       }
 
-      return result;
+      return fetchApplicationWithRelations(tx, { persona_id: personaId });
+
     });
 
     return res.json({ success: true, application: mapApplication(updated) });

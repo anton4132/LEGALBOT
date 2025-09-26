@@ -14,6 +14,89 @@ import '../../../services/session_service.dart';
 import '../../authentication/login_screen.dart';
 import '../../lawyer/home/lawyer_home.dart';
 
+class _FileSummaryChip extends StatelessWidget {
+  final String fileName;
+  final String? sizeLabel;
+  final String? downloadUrl;
+  final VoidCallback? onRemove;
+
+  const _FileSummaryChip({
+    required this.fileName,
+    this.sizeLabel,
+    this.downloadUrl,
+    this.onRemove,
+  });
+
+  Future<void> _copyUrl(BuildContext context) async {
+    final url = downloadUrl;
+    if (url == null || url.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Enlace copiado al portapapeles'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.buttonTextColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.strokeColor),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.insert_drive_file_rounded,
+              color: AppColors.text2Color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.text1Color,
+                  ),
+                ),
+                if (sizeLabel != null)
+                  Text(
+                    sizeLabel!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.text2Color,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (downloadUrl != null)
+            IconButton(
+              tooltip: 'Copiar enlace',
+              icon: const Icon(Icons.copy_rounded,
+                  color: AppColors.text2Color, size: 20),
+              onPressed: () => _copyUrl(context),
+            ),
+          if (onRemove != null)
+            IconButton(
+              tooltip: 'Quitar archivo',
+              icon: const Icon(Icons.close_rounded,
+                  color: AppColors.text2Color, size: 20),
+              onPressed: onRemove,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 
 class BecomeLawyerScreen extends StatefulWidget {
   const BecomeLawyerScreen({super.key});
@@ -38,7 +121,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey<FormFieldState<PlatformFile?>> _carnetFileFieldKey =
       GlobalKey<FormFieldState<PlatformFile?>>();
-   final GlobalKey<FormFieldState<PlatformFile?>> _tituloFileFieldKey =
+  final GlobalKey<FormFieldState<PlatformFile?>> _tituloFileFieldKey =
       GlobalKey<FormFieldState<PlatformFile?>>();
 
   static const int _maxCarnetFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -78,7 +161,7 @@ class _BecomeLawyerScreenState extends State<BecomeLawyerScreen> {
   bool _redirectingToLawyer = false;
   UserSession? _session;
   PlatformFile? _selectedCarnetFile;
-   PlatformFile? _selectedTituloFile;
+  PlatformFile? _selectedTituloFile;
   ArchivoReference? _existingTituloArchivo;
   ArchivoReference? _existingCarnetArchivo;
   bool _retainExistingTitulo = false;
@@ -672,89 +755,7 @@ void _removeExistingCarnetFile() {
       },
     );
   }
-  class _FileSummaryChip extends StatelessWidget {
-  final String fileName;
-  final String? sizeLabel;
-  final String? downloadUrl;
-  final VoidCallback? onRemove;
-
-  const _FileSummaryChip({
-    required this.fileName,
-    this.sizeLabel,
-    this.downloadUrl,
-    this.onRemove,
-  });
-
-  Future<void> _copyUrl(BuildContext context) async {
-    final url = downloadUrl;
-    if (url == null || url.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: url));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Enlace copiado al portapapeles'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.buttonTextColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.strokeColor),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.insert_drive_file_rounded,
-              color: AppColors.text2Color, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.text1Color,
-                  ),
-                ),
-                if (sizeLabel != null)
-                  Text(
-                    sizeLabel!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.text2Color,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (downloadUrl != null)
-            IconButton(
-              tooltip: 'Copiar enlace',
-              icon: const Icon(Icons.copy_rounded,
-                  color: AppColors.text2Color, size: 20),
-              onPressed: () => _copyUrl(context),
-            ),
-          if (onRemove != null)
-            IconButton(
-              tooltip: 'Quitar archivo',
-              icon: const Icon(Icons.close_rounded,
-                  color: AppColors.text2Color, size: 20),
-              onPressed: onRemove,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
+  
   Widget _buildStatusIndicator() {
     final LawyerApplicationStatus status = _status;
 

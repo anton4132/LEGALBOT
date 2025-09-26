@@ -57,15 +57,13 @@ model bitacorabusquedavh {
  * ================================
  */
 
-
- enum est_cita {
+enum est_cita {
   pendiente
   confirmada
   cancelada
   completada
   no_show
 }
-
 
 enum est_doc_tramite {
   pendiente
@@ -89,6 +87,7 @@ model cita {
   usuario_cita_cliente_idTousuario usuario  @relation("cita_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   consulta                         consulta @relation(fields: [consulta_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   pago                             pago?    @relation(fields: [pago_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resena                           resena?
 
   @@index([cliente_id])
   @@index([abogado_id])
@@ -101,18 +100,17 @@ model cita {
 }
 
 model resena {
-  id             Int       @id @default(autoincrement())
-  cita_id        Int       @unique           // 1 reseña por cita
+  id             Int      @id @default(autoincrement())
+  cita_id        Int      @unique // 1 reseña por cita
   rating         Int
   comentario     String?
-  creado_el      DateTime  @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime  @updatedAt       @db.Timestamptz(6)
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
   cita cita @relation(fields: [cita_id], references: [id], onDelete: Cascade)
 
   @@index([creado_el])
 }
-
 
 model clienteabogado {
   id                                         Int      @id @default(autoincrement())
@@ -126,7 +124,6 @@ model clienteabogado {
   @@index([abogado_id, cliente_id])
   @@index([creado_el])
 }
-
 
 enum est_consulta {
   pendiente
@@ -214,13 +211,16 @@ model documento {
 }
 
 model archivo {
-  id         Int      @id @default(autoincrement())
-  usuario_id Int
-  ruta       String
-  tamano     Int
-  tipo       String?
-  creado_el  DateTime @default(now()) @db.Timestamptz(6)
-  usuario    usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                  Int                   @id @default(autoincrement())
+  usuario_id          Int
+  ruta                String
+  tamano              Int
+  tipo                String?
+  creado_el           DateTime              @default(now()) @db.Timestamptz(6)
+  usuario             usuario               @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  verificacionabogado verificacionabogado[]
+  colegiaturaabogado  colegiaturaabogado[]
+  perfilabogado       perfilabogado[]
 
   @@index([usuario_id])
   @@index([creado_el])
@@ -410,8 +410,6 @@ model pasarelametodo {
  * ================================
  */
 
-
-
 enum EstadoVerificacion {
   PENDIENTE
   OBSERVADA
@@ -420,24 +418,23 @@ enum EstadoVerificacion {
 }
 
 model verificacionabogado {
-  id             Int                @id @default(autoincrement())
-  persona_id     Int                @unique
+  id         Int @id @default(autoincrement())
+  persona_id Int @unique
 
   /////////////////////////////////////////////////////////
 
-  linkedin_url   String?
+  linkedin_url      String?
   titulo_archivo_id Int?
-  estado         EstadoVerificacion @default(PENDIENTE)
-  observaciones  String?
-  aprobado_el    DateTime?
+  estado            EstadoVerificacion @default(PENDIENTE)
+  observaciones     String?
+  aprobado_el       DateTime?
 
   /////////////////////////////////////////////////////////
-  creado_el      DateTime           @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime           @updatedAt @db.Timestamptz(6)
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
-
-  titulo            archivo? @relation(fields: [titulo_archivo_id], references: [id], onDelete: SetNull)
-  persona persona @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+  titulo         archivo?            @relation(fields: [titulo_archivo_id], references: [id], onDelete: SetNull)
+  persona        persona             @relation(fields: [persona_id], references: [id], onDelete: Cascade)
   colegiatura_id Int?
   colegiatura    colegiaturaabogado? @relation(fields: [colegiatura_id], references: [id], onDelete: SetNull)
 
@@ -453,18 +450,18 @@ model colegioabogado {
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
   colegiaturas colegiaturaabogado[]
-  
+
   @@unique([nombre, region])
   @@index([region])
 }
 
 model colegiaturaabogado {
-  id                   Int       @id @default(autoincrement())
-  persona_id           Int       @unique
-  colegio_id           Int
-  carnet_archivo_id    Int?
+  id                Int  @id @default(autoincrement())
+  persona_id        Int  @unique
+  colegio_id        Int
+  carnet_archivo_id Int?
   /////////////////////////////////////////////////////////
-  
+
   numero               String    @db.VarChar(30)
   fecha_emision        DateTime? @db.Timestamptz(6)
   fecha_vigencia_hasta DateTime? @db.Timestamptz(6)
@@ -472,7 +469,7 @@ model colegiaturaabogado {
   actualizado_el       DateTime  @updatedAt @db.Timestamptz(6)
 
   /////////////////////////////////////////////////////////
-  carnet_archivo       archivo?  @relation(fields: [carnet_archivo_id], references: [id], onDelete: SetNull)
+  carnet_archivo      archivo?              @relation(fields: [carnet_archivo_id], references: [id], onDelete: SetNull)
   persona             persona               @relation(fields: [persona_id], references: [id], onDelete: Cascade)
   colegio             colegioabogado        @relation(fields: [colegio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   verificacionabogado verificacionabogado[]
@@ -506,8 +503,6 @@ model role {
   nombre  String
   usuario usuario[]
 }
-
-
 
 model usuario {
   id                                                Int                  @id @default(autoincrement())
@@ -545,7 +540,6 @@ model usuario {
   @@index([activo])
 }
 
-
 model disponibilidadabogado {
   id          Int      @id @default(autoincrement())
   abogado_id  Int
@@ -579,6 +573,7 @@ model especialidad {
   formatos              formato[]
   perfiles_especialidad perfilabogado_especialidad[] @relation("EspecialidadPerfiles")
 }
+
 model estudio {
   id               Int     @id @default(autoincrement())
   /////////////////////////
@@ -624,29 +619,27 @@ model perfilabogado {
   usuario_id Int @id
 
   /////////////////////////////////////////////////////////
- avatar_archivo_id   Int? 
+  avatar_archivo_id  Int?
   tarifa_base        Decimal? @db.Decimal
   direccion_atencion String?
   bio                String?
 
   /////////////////////////////////////////////////////////
-  rating_promedio   Decimal? @db.Decimal
-  rating_cantidad   Int      @default(0)
+  rating_promedio Decimal? @db.Decimal
+  rating_cantidad Int      @default(0)
 
-  place_id_api       String?
-  creado_el          DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el     DateTime @updatedAt @db.Timestamptz(6)
+  place_id_api   String?
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
   /////////////////////////////////////////////////////////
 
-  avatar   archivo?  @relation(fields: [avatar_archivo_id], references: [id], onDelete: SetNull)
+  avatar                archivo?                @relation(fields: [avatar_archivo_id], references: [id], onDelete: SetNull)
   usuario               usuario                 @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   disponibilidadabogado disponibilidadabogado[]
 
   especialidades perfilabogado_especialidad[] @relation("PerfilEspecialidades")
 }
-
-
 
 /**
  * ================================
@@ -700,8 +693,6 @@ model planservicio {
   @@index([plan_id])
   @@index([activo])
 }
-
-
 
 model formato {
   id              Int           @id @default(autoincrement())
