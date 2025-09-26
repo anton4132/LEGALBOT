@@ -36,7 +36,6 @@ class LawyerProfileInfo {
 
   bool get hasBasicInfo =>
       (tarifaBase != null && tarifaBase! > 0) &&
-      (duracionMinutos != null && duracionMinutos! > 0) &&
       (direccionAtencion?.trim().isNotEmpty ?? false) &&
       (bio?.trim().isNotEmpty ?? false);
 
@@ -73,7 +72,6 @@ class LawyerProfileInfo {
 
   Map<String, dynamic> toPayload() => {
         'tarifa_base': tarifaBase,
-        'duracion_minutos': duracionMinutos,
         'direccion_atencion': direccionAtencion,
         'bio': bio,
       }..removeWhere((key, value) => value == null);

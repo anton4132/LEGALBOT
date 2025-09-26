@@ -388,10 +388,8 @@ async function saveUser() {
 
 function collectPerfilAbogado() {
   const tarifaRaw = document.getElementById('tarifaBase')?.value?.trim();
-  const durRaw    = document.getElementById('duracionMinutos')?.value?.trim();
   return {
     tarifa_base: tarifaRaw === '' ? undefined : Number(tarifaRaw),
-    duracion_minutos: durRaw === '' ? undefined : parseInt(durRaw, 10),
     direccion_atencion: trimOrUndefined(document.getElementById('direccionAtencion')?.value),
     bio: trimOrUndefined(document.getElementById('bio')?.value)
   };

@@ -65,12 +65,7 @@ enum est_cita {
   no_show
 }
 
-enum est_doc_tramite {
-  pendiente
-  enviado
-  recibido
-  observado
-}
+
 
 model cita {
   id             Int      @id @default(autoincrement())
@@ -177,6 +172,13 @@ enum tipo_consulta {
  * DOCUMENTOS / ARCHIVOS
  * ================================
  */
+
+ enum est_doc_tramite {
+  pendiente
+  enviado
+  recibido
+  observado
+}
 
 model documento {
   id             Int             @id @default(autoincrement())

@@ -1,6 +1,14 @@
 // controllers/userController.js
 const { prisma } = require('../config/database');
 
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+
+function createHttpError(statusCode, message, code) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  if (code) error.code = code;
+  return error;
+}
 // ========== Utiles comunes ==========
 const INVALID_DNI_SEQUENCES = ['00000000', '11111111', '12345678', '87654321'];
 
@@ -26,6 +34,143 @@ function hhmmToTimeDate(t) {
   return new Date(Date.UTC(1970, 0, 1, parseInt(hh, 10), parseInt(mm, 10), 0, 0));
 }
 
+function sanitizeString(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function toIntOrNull(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+function parseAvatarId(raw) {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === '') return null;
+  if (typeof raw === 'number') {
+    if (!Number.isInteger(raw) || raw < 0) {
+      throw createHttpError(400, 'ID de archivo inválido', 'INVALID_AVATAR_ID');
+    }
+    return raw;
+  }
+  const trimmed = String(raw).trim();
+  if (trimmed === '') return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    throw createHttpError(400, 'ID de archivo inválido', 'INVALID_AVATAR_ID');
+  }
+  return parsed;
+}
+
+function normalizeArchivoPayload(input) {
+  if (!input) return null;
+
+  let payload = input;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return null;
+    try {
+      payload = JSON.parse(trimmed);
+    } catch (error) {
+      return { id: null, ruta: trimmed, tamano: null, tipo: null };
+    }
+  }
+
+  if (typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+
+  const id = toIntOrNull(payload.id ?? payload.archivoId ?? payload.archivo_id);
+  const ruta = sanitizeString(payload.ruta ?? payload.path ?? payload.pathname ?? payload.url);
+  const tamano = toIntOrNull(payload.tamano ?? payload.size ?? payload.tamaño);
+  const tipo = sanitizeString(payload.tipo ?? payload.mime ?? payload.contentType);
+
+  if (id == null && !ruta) {
+    return null;
+  }
+
+  return { id, ruta, tamano, tipo };
+}
+
+function mapArchivoResponse(archivo) {
+  if (!archivo) return null;
+  return {
+    id: archivo.id,
+    ruta: archivo.ruta,
+    tamano: archivo.tamano,
+    tipo: archivo.tipo,
+  };
+}
+
+async function resolveAvatarArchivo(tx, userId, avatarArchivoPayload, avatarArchivoId, avatarIdProvided) {
+  let resolved = avatarIdProvided ? avatarArchivoId : undefined;
+  let resolvedRecord = null;
+
+  const archivoInput = normalizeArchivoPayload(avatarArchivoPayload);
+
+  if (archivoInput) {
+    if (archivoInput.id != null) {
+      const existing = await tx.archivo.findUnique({ where: { id: archivoInput.id } });
+      if (!existing) {
+        throw createHttpError(400, 'El archivo de avatar proporcionado no existe', 'AVATAR_NOT_FOUND');
+      }
+      if (existing.usuario_id !== userId) {
+        throw createHttpError(403, 'No puedes usar ese archivo como avatar', 'AVATAR_NOT_OWNER');
+      }
+
+      const updates = {};
+      if (archivoInput.ruta && archivoInput.ruta !== existing.ruta) updates.ruta = archivoInput.ruta;
+      if (archivoInput.tamano != null && archivoInput.tamano !== existing.tamano) updates.tamano = Math.max(0, archivoInput.tamano);
+      if (archivoInput.tipo !== undefined && archivoInput.tipo !== existing.tipo) updates.tipo = archivoInput.tipo || null;
+
+      resolvedRecord = Object.keys(updates).length
+        ? await tx.archivo.update({ where: { id: existing.id }, data: updates })
+        : existing;
+      resolved = resolvedRecord.id;
+    } else if (archivoInput.ruta) {
+      const created = await tx.archivo.create({
+        data: {
+          usuario_id: userId,
+          ruta: archivoInput.ruta,
+          tamano: Math.max(0, archivoInput.tamano ?? 0),
+          tipo: archivoInput.tipo || null,
+        },
+      });
+      resolvedRecord = created;
+      resolved = created.id;
+    }
+  }
+
+  if (resolved != null && resolvedRecord == null) {
+    const existing = await tx.archivo.findUnique({ where: { id: resolved } });
+    if (!existing) {
+      throw createHttpError(400, 'El archivo de avatar indicado no existe', 'AVATAR_NOT_FOUND');
+    }
+    if (existing.usuario_id !== userId) {
+      throw createHttpError(403, 'No puedes usar ese archivo como avatar', 'AVATAR_NOT_OWNER');
+    }
+    resolvedRecord = existing;
+  }
+
+  return { avatarId: resolved, avatarRecord: resolvedRecord };
+}
+
+function mapPerfilResponse(perfil) {
+  if (!perfil) return null;
+  const { avatar, ...rest } = perfil;
+  return {
+    ...rest,
+    avatarArchivo: mapArchivoResponse(avatar),
+  };
+}
 // ========== API Perú (opcional) ==========
 async function fetchDniInfo(dni) {
   const token = process.env.APIPERU_TOKEN;
@@ -257,7 +402,8 @@ const getAllUsers = async (_req, res) => {
         perfilabogado: {
           include: {
             disponibilidadabogado: true,
-            especialidades: { include: { especialidad: true } }
+            especialidades: { include: { especialidad: true } },
+            avatar: true,
           }
         },
         abogadoestudios: {
@@ -270,15 +416,17 @@ const getAllUsers = async (_req, res) => {
     });
 
     // Aplana especialidades para facilitar al front
-    const data = usuarios.map(u => ({
-      ...u,
-      perfilabogado: u.perfilabogado
-        ? {
-            ...u.perfilabogado,
-            especialidades: (u.perfilabogado.especialidades || []).map(pe => pe.especialidad)
-          }
-        : null
-    }));
+    const data = usuarios.map(u => {
+      const { perfilabogado, ...rest } = u;
+      if (!perfilabogado) {
+        return { ...rest, perfilabogado: null };
+      }
+      const perfilMapped = mapPerfilResponse(perfilabogado);
+      if (perfilMapped) {
+        perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
+      }
+      return { ...rest, perfilabogado: perfilMapped };
+    });
 
     res.json(data);
   } catch (error) {
@@ -300,8 +448,8 @@ const getUserById = async (req, res) => {
         perfilabogado: {
           include: {
             disponibilidadabogado: true,
-            especialidades: { include: { especialidad: true } }
-          }
+            especialidades: { include: { especialidad: true } },
+            avatar: true,          }
         },
         abogadoestudios: {
           include: { estudio: true },
@@ -312,14 +460,14 @@ const getUserById = async (req, res) => {
     });
     if (!usuario) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
-    const data = usuario.perfilabogado
-      ? {
-          ...usuario,
-          perfilabogado: {
-            ...usuario.perfilabogado,
-            especialidades: (usuario.perfilabogado.especialidades || []).map(pe => pe.especialidad)
-          }
-        }
+    const { perfilabogado, ...rest } = usuario;
+    const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
+    if (perfilMapped) {
+      perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
+    }
+
+    const data = perfilabogado
+      ? { ...rest, perfilabogado: perfilMapped }
       : usuario;
 
     res.json({ success: true, user: data });
@@ -401,7 +549,6 @@ const createUser = async (req, res) => {
           data: {
             usuario_id: usuarioCreated.id,
             tarifa_base: abogado_info.tarifabase ?? null,
-            duracion_minutos: abogado_info.duracionMinutos ?? 60,
             direccion_atencion: abogado_info.direccionAtencion || null,
             bio: abogado_info.biografia || null
           }
@@ -516,8 +663,8 @@ const createUser = async (req, res) => {
             perfilabogado: {
               include: {
                 disponibilidadabogado: true,
-                especialidades: { include: { especialidad: true } }
-              }
+                especialidades: { include: { especialidad: true } },
+                avatar: true,              }
             },
             abogadoestudios: {
               include: { estudio: true },
@@ -527,15 +674,15 @@ const createUser = async (req, res) => {
           }
         });
       });
+      const { perfilabogado, ...rest } = result || {};
+      const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
+      if (perfilMapped) {
+        perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
+      }
 
       const user = result?.perfilabogado
-        ? {
-            ...result,
-            perfilabogado: {
-              ...result.perfilabogado,
-              especialidades: (result.perfilabogado.especialidades || []).map(pe => pe.especialidad)
-            }
-          }
+      ? { ...rest, perfilabogado: perfilMapped }
+
         : result;
 
       return res.status(201).json({ success: true, message: 'Cuenta agregada a persona existente', user });
@@ -624,7 +771,6 @@ const createUser = async (req, res) => {
         data: {
           usuario_id: usuarioCreated.id,
           tarifa_base: abogado_info.tarifabase ?? null,
-          duracion_minutos: abogado_info.duracionMinutos ?? 60,
           direccion_atencion: abogado_info.direccionAtencion || null,
           bio: abogado_info.biografia || null
         }
@@ -739,8 +885,8 @@ const createUser = async (req, res) => {
           perfilabogado: {
             include: {
               disponibilidadabogado: true,
-              especialidades: { include: { especialidad: true } }
-            }
+              especialidades: { include: { especialidad: true } },
+              avatar: true,            }
           },
           abogadoestudios: {
             include: { estudio: true },
@@ -750,15 +896,16 @@ const createUser = async (req, res) => {
         }
       });
     });
+    const { perfilabogado, ...rest } = result || {};
+    const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
+    if (perfilMapped) {
+      perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
+    }
+
 
     const user = result?.perfilabogado
-      ? {
-          ...result,
-          perfilabogado: {
-            ...result.perfilabogado,
-            especialidades: (result.perfilabogado.especialidades || []).map(pe => pe.especialidad)
-          }
-        }
+    ? { ...rest, perfilabogado: perfilMapped }
+
       : result;
 
     res.status(201).json({ success: true, message: 'Usuario creado exitosamente', user });
@@ -862,24 +1009,28 @@ const updateUser = async (req, res) => {
       const isAbogado = rol?.codigo === 'abogado';
 
       if (isAbogado && abogado_info) {
+        const avatarArchivoRaw = abogado_info.avatarArchivo ?? abogado_info.avatar_archivo ?? null;
+        const avatarArchivoIdRaw = abogado_info.avatar_archivo_id ?? abogado_info.avatarArchivoId;
+        const avatarIdProvided = hasOwn(abogado_info, 'avatar_archivo_id') || hasOwn(abogado_info, 'avatarArchivoId') || hasOwn(abogado_info, 'avatarArchivo');
+        const parsedAvatarId = avatarIdProvided ? parseAvatarId(avatarArchivoIdRaw) : undefined;
+        const { avatarId } = await resolveAvatarArchivo(tx, userId, avatarArchivoRaw, parsedAvatarId, avatarIdProvided);
         // Upsert perfil (sin columnas inexistentes)
         await tx.perfilabogado.upsert({
+          
           where: { usuario_id: userId },
           update: {
             tarifa_base: abogado_info.tarifabase ?? null,
-            duracion_minutos: abogado_info.duracionMinutos ?? 60,
             direccion_atencion: abogado_info.direccionAtencion || null,
             bio: abogado_info.biografia || null,
-            place_id_api: abogado_info.placeIdApi || null
-          },
+            place_id_api: abogado_info.placeIdApi || null,
+            ...(avatarId !== undefined ? { avatar_archivo_id: avatarId } : {}),          },
           create: {
             usuario_id: userId,
             tarifa_base: abogado_info.tarifabase ?? null,
-            duracion_minutos: abogado_info.duracionMinutos ?? 60,
             direccion_atencion: abogado_info.direccionAtencion || null,
             bio: abogado_info.biografia || null,
-            place_id_api: abogado_info.placeIdApi || null
-          }
+            place_id_api: abogado_info.placeIdApi || null,
+            avatar_archivo_id: avatarId ?? null,          }
         });
 
         // Especialidades (sync)
@@ -1019,8 +1170,8 @@ const updateUser = async (req, res) => {
           perfilabogado: {
             include: {
               disponibilidadabogado: true,
-              especialidades: { include: { especialidad: true } }
-            }
+              especialidades: { include: { especialidad: true } },
+              avatar: true,            }
           },
           abogadoestudios: {
             include: { estudio: true },
@@ -1030,24 +1181,27 @@ const updateUser = async (req, res) => {
         }
       });
     });
+    
+    const { perfilabogado, ...rest } = updated || {};
+    const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
+    if (perfilMapped) {
+      perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
+    }
 
-    const user = updated?.perfilabogado
-      ? {
-          ...updated,
-          perfilabogado: {
-            ...updated.perfilabogado,
-            especialidades: (updated.perfilabogado.especialidades || []).map(pe => pe.especialidad)
-          }
-        }
-      : updated;
+    const user = updated?.perfilabogado !== undefined 
+      ? updated.perfilabogado 
+      : { ...rest, perfilabogado: perfilMapped };
 
     res.json({ success: true, message: 'Usuario actualizado exitosamente', user });
   } catch (error) {
     if (error?.message === 'DUP_ROLE') {
-    return res.status(409).json({ success: false, message: 'La persona ya tiene ese rol' });
-  }
-  console.error('Error actualizando usuario:', error);
-  res.status(500).json({ success: false, message: 'Error actualizando usuario' });
+      return res.status(409).json({ success: false, message: 'La persona ya tiene ese rol' });
+    }
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    console.error('Error actualizando usuario:', error);
+    res.status(500).json({ success: false, message: 'Error actualizando usuario' });
   }
 };
 // ========== Eliminar ==========
@@ -1092,9 +1246,16 @@ const deleteUser = async (req, res) => {
 const getUserPerfil = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    const perfil = await prisma.perfilabogado.findUnique({ where: { usuario_id: userId } });
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({ message: 'ID de usuario inválido' });
+    }
+
+    const perfil = await prisma.perfilabogado.findUnique({
+      where: { usuario_id: userId },
+      include: { avatar: true },
+    });
     if (!perfil) return res.status(404).json({ message: 'Perfil de abogado no encontrado' });
-    res.json(perfil);
+    res.json(mapPerfilResponse(perfil));
   } catch (error) {
     console.error('Error obteniendo perfil de abogado:', error);
     res.status(500).json({ message: 'Error obteniendo perfil de abogado' });
@@ -1104,35 +1265,45 @@ const getUserPerfil = async (req, res) => {
 const updateUserPerfil = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({ message: 'ID de usuario inválido' });
+    }
+
+    const body = req.body || {};
     const {
       tarifa_base,
-      duracion_minutos,
       direccion_atencion,
-      bio
-    } = req.body || {};
+      bio,
+    } = body;
 
-    const perfil = await prisma.perfilabogado.upsert({
-      where: { usuario_id: userId },
-      update: {
-        tarifa_base: tarifa_base ?? undefined,
-        duracion_minutos: duracion_minutos ?? undefined,
-        direccion_atencion: direccion_atencion ?? undefined,
-        bio: bio ?? undefined
-      },
-      create: {
-        usuario_id: userId,
+    const avatarArchivoRaw = body.avatarArchivo ?? body.avatar_archivo ?? null;
+    const avatarArchivoIdRaw = body.avatar_archivo_id ?? body.avatarArchivoId;
+    const avatarIdProvided = hasOwn(body, 'avatar_archivo_id') || hasOwn(body, 'avatarArchivoId');
+
+    const perfil = await prisma.$transaction(async (tx) => {
+      const parsedAvatarId = avatarIdProvided ? parseAvatarId(avatarArchivoIdRaw) : undefined;
+      const { avatarId } = await resolveAvatarArchivo(tx, userId, avatarArchivoRaw, parsedAvatarId, avatarIdProvided);
+
+      const updateData = {
         tarifa_base: tarifa_base ?? null,
-        duracion_minutos: duracion_minutos ?? 60,
         direccion_atencion: direccion_atencion ?? null,
-        bio: bio ?? null
-      }
+        bio: bio ?? null,
+        avatar_archivo_id: avatarId ?? null,
+      };
+
+      return tx.perfilabogado.upsert({
+        where: { usuario_id: userId },
+        update: updateData,
+        create: createData,
+        include: { avatar: true },
+      });
     });
 
-    res.json({ success: true, perfil });
+    res.json({ success: true, perfil: mapPerfilResponse(perfil) });
   } catch (error) {
     console.error('Error guardando perfil de abogado:', error);
-    res.status(500).json({ message: 'Error guardando perfil de abogado' });
-  }
+    const status = error.statusCode || 500;
+    res.status(status).json({ message: error.message || 'Error guardando perfil de abogado' });  }
 };
 
 const getUserEspecialidades = async (req, res) => {
