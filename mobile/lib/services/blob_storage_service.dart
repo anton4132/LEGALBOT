@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
@@ -122,7 +123,45 @@ class BlobStorageService {
     }
     return BlobUploadResult.fromJson(decoded);
   }
+  static Future<bool> delete(String path) async {
+    final resolved = path.trim();
+    if (resolved.isEmpty) {
+      return true;
+    }
+    String extractPath(String value) {
+      if (value.startsWith('http://') || value.startsWith('https://')) {
+        final uri = Uri.tryParse(value);
+        if (uri != null) {
+          return uri.path.replaceFirst(RegExp(r'^/'), '');
+        }
+      }
+      return value.startsWith('/') ? value.substring(1) : value;
+    }
 
+    final normalized = extractPath(resolved);    final uri = Uri.parse('$_baseUrl/$normalized');
+    try {
+      final response = await http
+          .delete(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $_token',
+            },
+          )
+          .timeout(_timeout);
+      if (response.statusCode == 404) {
+        return true;
+      }
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
+      }
+      debugPrint(
+        'Error eliminando blob (${response.statusCode}): ${response.body}',
+      );
+    } catch (error, stackTrace) {
+      debugPrint('No se pudo eliminar el blob: $error\n$stackTrace');
+    }
+    return false;
+  }
   static String _defaultUploadPrefix() {
     final session = SessionService.instance.session;
     if (session is UserSession) {

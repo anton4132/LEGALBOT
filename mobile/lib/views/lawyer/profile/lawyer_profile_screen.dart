@@ -23,7 +23,6 @@ class LawyerProfileScreen extends StatefulWidget {
 
 class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   final TextEditingController _bioController = TextEditingController();
-  final TextEditingController _durationController = TextEditingController();
   final TextEditingController _baseRateController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
@@ -69,7 +68,6 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   @override
   void dispose() {
     _bioController.dispose();
-    _durationController.dispose();
     _baseRateController.dispose();
     _addressController.dispose();
     _lawFirmRucController.dispose();
@@ -150,14 +148,12 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   void _applyProfileToControllers(LawyerProfileInfo? info) {
     if (info == null) {
       _bioController.clear();
-      _durationController.text = '60';
       _baseRateController.clear();
       _addressController.clear();
       return;
     }
     _bioController.text = info.bio ?? '';
-    _durationController.text =
-        info.duracionMinutos != null ? '${info.duracionMinutos}' : '60';
+
     _baseRateController.text =
         info.tarifaBase != null ? info.tarifaBase!.toStringAsFixed(2) : '';
     _addressController.text = info.direccionAtencion ?? '';
@@ -249,7 +245,86 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       _existingAvatarArchivo = null;
     });
   }
+void _showAvatarViewer(ImageProvider<Object> provider) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          backgroundColor: Colors.black,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: 600,
+              maxHeight: 600,
+            ),
+            child: InteractiveViewer(
+              maxScale: 5,
+              child: Center(
+                child: Image(
+                  image: provider,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        size: 64,
+                        color: Colors.white70,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
+  Widget _buildAvatarPlaceholder() {
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.strokeColor,
+      ),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.person_outline,
+        size: 40,
+        color: AppColors.text2Color,
+      ),
+    );
+  }
+
+  Widget _buildAvatarImage(ImageProvider<Object> provider, bool enablePreview) {
+    final avatar = Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.strokeColor),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Image(
+        image: provider,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildAvatarPlaceholder();
+        },
+      ),
+    );
+
+    if (!enablePreview) {
+      return avatar;
+    }
+
+    return GestureDetector(
+      onTap: () => _showAvatarViewer(provider),
+      child: avatar,
+    );
+  }
   Widget _buildAvatarPicker(bool canInteract) {
     final Uint8List? previewBytes = _avatarPreviewBytes;
     final String? remoteUrl =
@@ -263,19 +338,14 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
     final bool hasExisting =
         _retainExistingAvatar && _existingAvatarArchivo != null;
+          final avatarWidget = imageProvider != null
+        ? _buildAvatarImage(imageProvider, true)
+        : _buildAvatarPlaceholder();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        CircleAvatar(
-          radius: 40,
-          backgroundColor: AppColors.strokeColor,
-          backgroundImage: imageProvider,
-          child: imageProvider == null
-              ? const Icon(Icons.person_outline,
-                  size: 40, color: AppColors.text2Color)
-              : null,
-        ),
+        avatarWidget,
         const SizedBox(width: 16),
         Expanded(
           child: Column(
@@ -348,11 +418,9 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
     final tarifaText = _baseRateController.text.replaceAll(',', '.');
     final double? tarifaBase = double.tryParse(tarifaText);
-    final int? duracion = int.tryParse(_durationController.text.trim());
 
     final info = LawyerProfileInfo(
       tarifaBase: tarifaBase,
-      duracionMinutos: duracion,
       direccionAtencion: _addressController.text.trim(),
       bio: _bioController.text.trim(),
       avatarArchivo: _retainExistingAvatar ? _existingAvatarArchivo : null,
@@ -365,6 +433,15 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     setState(() => _savingProfile = true);
     try {
       if (avatarFile != null) {
+         final String? previousPath = _existingAvatarArchivo?.ruta;
+        if (previousPath != null && previousPath.trim().isNotEmpty) {
+          try {
+            await BlobStorageService.delete(previousPath);
+          } catch (error, stackTrace) {
+            debugPrint(
+                'No se pudo eliminar el avatar anterior: $error\n$stackTrace');
+          }
+        }
         final Uint8List bytes;
         if (avatarFile.bytes != null) {
           bytes = avatarFile.bytes!;
@@ -379,8 +456,14 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           fileName: avatarFile.name,
           prefix: 'usuarios/${session.usuarioId}/perfil/avatar',
         );
-        avatarArchivoUpload = upload.toArchivoReference();
-        avatarArchivoId = null;
+        avatarArchivoUpload = ArchivoReference(
+          id: _existingAvatarArchivo?.id,
+          ruta: upload.pathname,
+          tamano: upload.size,
+          tipo: upload.contentType,
+          url: upload.url,
+        );
+        avatarArchivoId = _existingAvatarArchivo?.id;
       }
       final saved = await ApiClient.saveLawyerProfileInfo(
         token: session.token,
@@ -390,9 +473,32 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         avatarArchivoId: avatarArchivoId,
       );
       setState(() {
-        _profileInfo = saved;
         _savingProfile = false;
-         _existingAvatarArchivo = saved.avatarArchivo;
+        final savedAvatar = saved.avatarArchivo;
+        if (savedAvatar != null || avatarArchivoUpload != null) {
+          final mergedAvatar = (savedAvatar ?? avatarArchivoUpload)!.copyWith(
+            id: savedAvatar?.id ?? avatarArchivoUpload?.id,
+            ruta: savedAvatar?.ruta ?? avatarArchivoUpload?.ruta,
+            tamano: savedAvatar?.tamano ?? avatarArchivoUpload?.tamano,
+            tipo: savedAvatar?.tipo ?? avatarArchivoUpload?.tipo,
+            url: savedAvatar?.url ?? avatarArchivoUpload?.url ?? savedAvatar?.resolvedUrl,
+          );
+          _existingAvatarArchivo = mergedAvatar;
+          _profileInfo = LawyerProfileInfo(
+            tarifaBase: saved.tarifaBase,
+            direccionAtencion: saved.direccionAtencion,
+            bio: saved.bio,
+            avatarArchivo: mergedAvatar,
+          );
+        } else {
+          _existingAvatarArchivo = null;
+          _profileInfo = LawyerProfileInfo(
+            tarifaBase: saved.tarifaBase,
+            direccionAtencion: saved.direccionAtencion,
+            bio: saved.bio,
+            avatarArchivo: null,
+          );
+        }
         _retainExistingAvatar = _existingAvatarArchivo != null;
         _selectedAvatarFile = null;
         _avatarPreviewBytes = null;
@@ -861,21 +967,13 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         children: [
           _buildSectionTitle('Información profesional', icon: Icons.badge),
           const SizedBox(height: 12),
-           _buildAvatarPicker(!_savingProfile),
+          _buildAvatarPicker(!_savingProfile),
           const SizedBox(height: 16),
           TextField(
             controller: _baseRateController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
               labelText: 'Tarifa base (S/)',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _durationController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Duración estándar (minutos)',
             ),
           ),
           const SizedBox(height: 12),

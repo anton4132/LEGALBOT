@@ -15,6 +15,23 @@ class ArchivoReference {
     this.url,
   });
 
+   ArchivoReference copyWith({
+    int? id,
+    String? ruta,
+    int? tamano,
+    String? tipo,
+    String? url,
+  }) {
+    return ArchivoReference(
+      id: id ?? this.id,
+      ruta: ruta ?? this.ruta,
+      tamano: tamano ?? this.tamano,
+      tipo: tipo ?? this.tipo,
+      url: url ?? this.url,
+    );
+  }
+
+
   String? get resolvedUrl {
     if (url != null && url!.trim().isNotEmpty) {
       return url;

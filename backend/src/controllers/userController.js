@@ -3,6 +3,37 @@ const { prisma } = require('../config/database');
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 
+const BLOB_BASE_URL = 'https://blob.vercel-storage.com';
+const DEFAULT_BLOB_PUBLIC_BASE_URL = BLOB_BASE_URL;
+
+const DEFAULT_BLOB_RW_TOKEN = 'vercel_blob_rw_w2ZXDcCJ4vCxIR4r_IXP5uJAzwiSiY17yZ2uUbMrIUdVx5H';
+
+const resolveBlobToken = () =>
+  process.env.BLOB_READ_WRITE_TOKEN
+  || process.env.VERCEL_BLOB_RW_TOKEN
+  || DEFAULT_BLOB_RW_TOKEN;
+  const resolveBlobPublicBaseUrl = () => {
+    const configured = process.env.BLOB_PUBLIC_BASE_URL
+      || process.env.VERCEL_BLOB_PUBLIC_BASE_URL
+      || process.env.VERCEL_BLOB_PUBLIC_URL;
+    if (configured) {
+      return configured.replace(/\/$/, '');
+    }
+    return DEFAULT_BLOB_PUBLIC_BASE_URL;
+  };
+  
+  function resolveBlobPublicUrl(pathOrUrl) {
+    const sanitized = sanitizeString(pathOrUrl);
+    if (!sanitized) return null;
+    if (sanitized.startsWith('http://') || sanitized.startsWith('https://')) {
+      return sanitized;
+    }
+    const normalizedPath = sanitized.startsWith('/')
+      ? sanitized
+      : `/${sanitized}`;
+    const base = resolveBlobPublicBaseUrl();
+    return `${base}${normalizedPath}`;
+  }
 function createHttpError(statusCode, message, code) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -80,7 +111,7 @@ function normalizeArchivoPayload(input) {
     try {
       payload = JSON.parse(trimmed);
     } catch (error) {
-      return { id: null, ruta: trimmed, tamano: null, tipo: null };
+      return { id: null, ruta: trimmed, tamano: null, tipo: null, url: null };
     }
   }
 
@@ -89,25 +120,134 @@ function normalizeArchivoPayload(input) {
   }
 
   const id = toIntOrNull(payload.id ?? payload.archivoId ?? payload.archivo_id);
-  const ruta = sanitizeString(payload.ruta ?? payload.path ?? payload.pathname ?? payload.url);
+  const rutaRaw = payload.ruta ?? payload.path ?? payload.pathname ?? payload.url;
+  const ruta = sanitizeString(rutaRaw);  
   const tamano = toIntOrNull(payload.tamano ?? payload.size ?? payload.tamaño);
   const tipo = sanitizeString(payload.tipo ?? payload.mime ?? payload.contentType);
+  const url = sanitizeString(payload.url ?? payload.href);
 
-  if (id == null && !ruta) {
+  let resolvedRuta = ruta;
+  if (url && (!resolvedRuta || !resolvedRuta.startsWith('http'))) {
+    resolvedRuta = url;
+  }
+
+  if (id == null && !resolvedRuta) {
     return null;
   }
 
-  return { id, ruta, tamano, tipo };
+  return { id, ruta: resolvedRuta, tamano, tipo, url };
 }
 
 function mapArchivoResponse(archivo) {
   if (!archivo) return null;
+  const ruta = sanitizeString(archivo.ruta) || null;
+  const isAbsolute = ruta
+    ? ruta.startsWith('http://') || ruta.startsWith('https://')
+    : false;
+  const normalizedPath = !ruta
+    ? null
+    : isAbsolute
+    ? ruta
+    : ruta.startsWith('/')
+    ? ruta
+    : `/${ruta}`;
+  const fullUrl = archivo.url
+    ? archivo.url
+    : !normalizedPath
+    ? null
+    : isAbsolute
+    ? normalizedPath
+    : resolveBlobPublicUrl(normalizedPath);
   return {
     id: archivo.id,
-    ruta: archivo.ruta,
+    ruta,
     tamano: archivo.tamano,
     tipo: archivo.tipo,
+    url: fullUrl,
+
   };
+}
+
+function normalizeBlobPath(path) {
+  if (!path) return null;
+  const raw = String(path).trim();
+  if (!raw) return null;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    try {
+      const parsed = new URL(raw);
+      return parsed.pathname.replace(/^\//, '');
+    } catch (error) {
+      console.warn('URL de blob inválida, usando valor original:', error);
+      return raw.replace(/^\//, '');
+    }
+  }
+  return raw.replace(/^\//, '');
+}
+
+async function deleteBlobFile(path) {
+  const normalized = normalizeBlobPath(path);
+  if (!normalized) {
+    return false;
+  }
+  const token = resolveBlobToken();
+  if (!token) {
+    console.warn('No se configuró BLOB_READ_WRITE_TOKEN; omitiendo eliminación de blob');
+    return false;
+  }
+  try {
+    const response = await fetch(`${BLOB_BASE_URL}/${normalized}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.ok || response.status === 404) {
+      return true;
+    }
+    console.warn('Error eliminando blob:', response.status, await response.text());
+  } catch (error) {
+    console.warn('No se pudo eliminar el blob:', error);
+  }
+  return false;
+}
+async function cleanupOldAvatarArchivos(tx, userId, keepId = null) {
+  const where = {
+    usuario_id: userId,
+    ruta: { contains: '/perfil/avatar/' },
+  };
+
+  if (keepId != null) {
+    where.id = { not: keepId };
+  }
+
+  const candidates = await tx.archivo.findMany({
+    where,
+    include: { perfilabogado: true },
+  });
+
+  if (!candidates.length) {
+    return;
+  }
+
+  const deletable = candidates.filter((archivo) => {
+    return !archivo.perfilabogado?.some(
+      (perfil) => perfil.avatar_archivo_id === archivo.id,
+    );
+  });
+
+  if (!deletable.length) {
+    return;
+  }
+
+  for (const archivo of deletable) {
+    await deleteBlobFile(archivo.ruta);
+  }
+
+  const ids = deletable.map((archivo) => archivo.id);
+  await tx.archivo.deleteMany({
+    where: {
+      usuario_id: userId,
+      id: { in: ids },
+    },
+  });
 }
 
 async function resolveAvatarArchivo(tx, userId, avatarArchivoPayload, avatarArchivoId, avatarIdProvided) {
@@ -127,10 +267,18 @@ async function resolveAvatarArchivo(tx, userId, avatarArchivoPayload, avatarArch
       }
 
       const updates = {};
-      if (archivoInput.ruta && archivoInput.ruta !== existing.ruta) updates.ruta = archivoInput.ruta;
-      if (archivoInput.tamano != null && archivoInput.tamano !== existing.tamano) updates.tamano = Math.max(0, archivoInput.tamano);
-      if (archivoInput.tipo !== undefined && archivoInput.tipo !== existing.tipo) updates.tipo = archivoInput.tipo || null;
-
+      const newRuta = archivoInput.ruta || existing.ruta;
+      const rutaChanged = newRuta && newRuta !== existing.ruta;
+      if (rutaChanged && existing.ruta && existing.ruta !== newRuta) {
+        await deleteBlobFile(existing.ruta);
+      }
+      if (rutaChanged) updates.ruta = newRuta;
+      if (archivoInput.tamano != null && archivoInput.tamano !== existing.tamano) {
+        updates.tamano = Math.max(0, archivoInput.tamano);
+      }
+      if (archivoInput.tipo !== undefined && archivoInput.tipo !== existing.tipo) {
+        updates.tipo = archivoInput.tipo || null;
+      }
       resolvedRecord = Object.keys(updates).length
         ? await tx.archivo.update({ where: { id: existing.id }, data: updates })
         : existing;
@@ -160,7 +308,10 @@ async function resolveAvatarArchivo(tx, userId, avatarArchivoPayload, avatarArch
     resolvedRecord = existing;
   }
 
-  return { avatarId: resolved, avatarRecord: resolvedRecord };
+
+  const shouldCleanup = avatarIdProvided || !!archivoInput;
+
+  return { avatarId: resolved, avatarRecord: resolvedRecord, shouldCleanup };
 }
 
 function mapPerfilResponse(perfil) {
@@ -1013,8 +1164,7 @@ const updateUser = async (req, res) => {
         const avatarArchivoIdRaw = abogado_info.avatar_archivo_id ?? abogado_info.avatarArchivoId;
         const avatarIdProvided = hasOwn(abogado_info, 'avatar_archivo_id') || hasOwn(abogado_info, 'avatarArchivoId') || hasOwn(abogado_info, 'avatarArchivo');
         const parsedAvatarId = avatarIdProvided ? parseAvatarId(avatarArchivoIdRaw) : undefined;
-        const { avatarId } = await resolveAvatarArchivo(tx, userId, avatarArchivoRaw, parsedAvatarId, avatarIdProvided);
-        // Upsert perfil (sin columnas inexistentes)
+        const { avatarId, shouldCleanup } = await resolveAvatarArchivo(tx, userId, avatarArchivoRaw, parsedAvatarId, avatarIdProvided);        // Upsert perfil (sin columnas inexistentes)
         await tx.perfilabogado.upsert({
           
           where: { usuario_id: userId },
@@ -1032,6 +1182,9 @@ const updateUser = async (req, res) => {
             place_id_api: abogado_info.placeIdApi || null,
             avatar_archivo_id: avatarId ?? null,          }
         });
+        if (shouldCleanup) {
+          await cleanupOldAvatarArchivos(tx, userId, avatarId ?? null);
+        }
 
         // Especialidades (sync)
         await tx.perfilabogado_especialidad.deleteMany({ where: { perfilabogado_id: userId } });
@@ -1282,29 +1435,44 @@ const updateUserPerfil = async (req, res) => {
 
     const perfil = await prisma.$transaction(async (tx) => {
       const parsedAvatarId = avatarIdProvided ? parseAvatarId(avatarArchivoIdRaw) : undefined;
-      const { avatarId } = await resolveAvatarArchivo(tx, userId, avatarArchivoRaw, parsedAvatarId, avatarIdProvided);
-
+      const { avatarId, shouldCleanup } = await resolveAvatarArchivo(
+        tx,
+        userId,
+        avatarArchivoRaw,
+        parsedAvatarId,
+        avatarIdProvided,
+      );
       const updateData = {
         tarifa_base: tarifa_base ?? null,
         direccion_atencion: direccion_atencion ?? null,
         bio: bio ?? null,
         avatar_archivo_id: avatarId ?? null,
       };
-
-      return tx.perfilabogado.upsert({
+      const createData = {
+        ...updateData,
+        usuario_id: userId,
+      };
+      const perfil = await tx.perfilabogado.upsert({
         where: { usuario_id: userId },
         update: updateData,
         create: createData,
         include: { avatar: true },
       });
+      if (shouldCleanup) {
+        await cleanupOldAvatarArchivos(tx, userId, avatarId ?? null);
+      }
+
+      return perfil;
     });
 
     res.json({ success: true, perfil: mapPerfilResponse(perfil) });
   } catch (error) {
     console.error('Error guardando perfil de abogado:', error);
     const status = error.statusCode || 500;
-    res.status(status).json({ message: error.message || 'Error guardando perfil de abogado' });  }
-};
+    res
+    .status(status)
+    .json({ message: error.message || 'Error guardando perfil de abogado' });
+}};
 
 const getUserEspecialidades = async (req, res) => {
   try {

@@ -20,7 +20,6 @@ String formatTimeOfDay(TimeOfDay time) {
 
 class LawyerProfileInfo {
   final double? tarifaBase;
-  final int? duracionMinutos;
   final String? direccionAtencion;
   final String? bio;
   final ArchivoReference? avatarArchivo;
@@ -28,7 +27,6 @@ class LawyerProfileInfo {
 
   const LawyerProfileInfo({
     this.tarifaBase,
-    this.duracionMinutos,
     this.direccionAtencion,
     this.bio,
     this.avatarArchivo,
@@ -49,7 +47,7 @@ class LawyerProfileInfo {
       tarifaBase = double.tryParse(tarifaValue);
     }
 
-     ArchivoReference? _normalizeArchivo(dynamic value) {
+    ArchivoReference? _normalizeArchivo(dynamic value) {
       final ref = ArchivoReference.fromJson(value);
       if (ref.id == null && (ref.ruta == null || ref.ruta!.isEmpty)) {
         return null;
@@ -59,10 +57,9 @@ class LawyerProfileInfo {
 
     return LawyerProfileInfo(
       tarifaBase: tarifaBase,
-      duracionMinutos: (json['duracion_minutos'] as num?)?.toInt(),
       direccionAtencion: json['direccion_atencion'] as String?,
       bio: json['bio'] as String?,
-       avatarArchivo: _normalizeArchivo(
+      avatarArchivo: _normalizeArchivo(
         json['avatarArchivo'] ??
             json['avatar_archivo'] ??
             json['avatar'],
