@@ -24,6 +24,7 @@ router.use('/services', serviceRoutes);
 router.use('/especialidades', especialidadRoutes);
 router.use('/estudios', estudioRoutes);
 router.use('/lawyers', lawyerRoutes);
+router.use('/lawyers', lawyerRoutes); // incluye rutas públicas (/api/lawyers/public/*) y privadas
 
 /**
  * @swagger

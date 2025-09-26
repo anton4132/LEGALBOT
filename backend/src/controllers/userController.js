@@ -322,6 +322,374 @@ function mapPerfilResponse(perfil) {
     avatarArchivo: mapArchivoResponse(avatar),
   };
 }
+
+function buildPersonaNombreCompleto(persona) {
+  if (!persona) return null;
+  const parts = [
+    sanitizeString(persona.primer_nombre),
+    sanitizeString(persona.segundo_nombre),
+    sanitizeString(persona.apellido_paterno),
+    sanitizeString(persona.apellido_materno),
+  ].filter(Boolean);
+  return parts.join(' ').trim() || null;
+}
+
+function mapEstudioPublicSummary(estudio) {
+  if (!estudio) return null;
+  return {
+    id: estudio.id,
+    nombre_comercial: estudio.nombre_comercial,
+    pais: estudio.pais,
+    ciudad: estudio.ciudad,
+    direccion: estudio.direccion,
+    telefono: estudio.telefono,
+    correo_contacto: estudio.correo_contacto,
+  };
+}
+
+/**
+ * Busca abogados públicos activos aplicando filtros de especialidad y ubicación.
+ * Respuesta: Array<{ usuarioId, nombreCompleto, avatarArchivo, tarifa_base, rating_promedio, rating_cantidad, estudioPrincipal }>.
+ */
+const searchPublicLawyers = async (req, res) => {
+  try {
+    const {
+      specialtyId,
+      especialidadId,
+      especialidad_id: especialidadIdAlt,
+      especialidad,
+      specialty,
+      especialidadNombre,
+      specialtyName,
+      country,
+      pais,
+      city,
+      ciudad,
+    } = req.query || {};
+
+    const resolvedSpecialtyId = toIntOrNull(
+      specialtyId
+      ?? especialidadId
+      ?? especialidadIdAlt,
+    );
+    const specialtyTerm = sanitizeString(
+      especialidad
+      ?? specialty
+      ?? especialidadNombre
+      ?? specialtyName,
+    );
+    const resolvedCountry = sanitizeString(country ?? pais);
+    const resolvedCity = sanitizeString(city ?? ciudad);
+
+    const where = {
+      usuario: {
+        activo: true,
+        role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+      },
+    };
+
+    if (resolvedSpecialtyId != null) {
+      where.especialidades = {
+        some: { especialidad_id: resolvedSpecialtyId },
+      };
+    } else if (specialtyTerm) {
+      where.especialidades = {
+        some: {
+          especialidad: {
+            nombre: { contains: specialtyTerm, mode: 'insensitive' },
+          },
+        },
+      };
+    }
+
+    if (resolvedCountry || resolvedCity) {
+      where.usuario.abogadoestudios = {
+        some: {
+          activo: true,
+          estudio: {
+            activo: true,
+            ...(resolvedCountry
+              ? { pais: { equals: resolvedCountry, mode: 'insensitive' } }
+              : {}),
+            ...(resolvedCity
+              ? { ciudad: { equals: resolvedCity, mode: 'insensitive' } }
+              : {}),
+          },
+        },
+      };
+    } else {
+      where.usuario.abogadoestudios = {
+        some: {
+          activo: true,
+          estudio: { activo: true },
+        },
+      };
+    }
+
+    const perfiles = await prisma.perfilabogado.findMany({
+      where,
+      include: {
+        avatar: true,
+        usuario: {
+          include: {
+            persona: true,
+            abogadoestudios: {
+              where: { activo: true, estudio: { activo: true } },
+              include: { estudio: true },
+            },
+          },
+        },
+      },
+      orderBy: {
+        usuario: {
+          persona: {
+            primer_nombre: 'asc',
+          },
+        },
+      },
+    });
+
+    const results = perfiles
+      .map((perfil) => {
+        const usuario = perfil.usuario;
+        if (!usuario?.persona) return null;
+        const perfilMapped = mapPerfilResponse(perfil);
+        const principal = (usuario.abogadoestudios || [])
+          .find((row) => row.principal) || (usuario.abogadoestudios || [])[0] || null;
+        const estudioPrincipal = principal?.estudio
+          ? mapEstudioPublicSummary(principal.estudio)
+          : null;
+
+        return {
+          usuarioId: usuario.id,
+          nombreCompleto: buildPersonaNombreCompleto(usuario.persona),
+          avatarArchivo: perfilMapped?.avatarArchivo || null,
+          tarifa_base: perfilMapped?.tarifa_base ?? null,
+          rating_promedio: perfilMapped?.rating_promedio ?? null,
+          rating_cantidad: perfilMapped?.rating_cantidad ?? 0,
+          estudioPrincipal,
+        };
+      })
+      .filter(Boolean);
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error buscando abogados públicos:', error);
+    res.status(500).json({ message: 'Error buscando abogados' });
+  }
+};
+
+/**
+ * Devuelve un perfil público detallado de un abogado.
+ * Respuesta: { usuarioId, nombreCompleto, persona, perfil, especialidades, estudios, estudioPrincipal }.
+ */
+const getPublicLawyerProfile = async (req, res) => {
+  try {
+    const lawyerId = parseInt(req.params.id, 10);
+    if (Number.isNaN(lawyerId)) {
+      return res.status(400).json({ message: 'ID de abogado inválido' });
+    }
+
+    const perfil = await prisma.perfilabogado.findFirst({
+      where: {
+        usuario_id: lawyerId,
+        usuario: {
+          activo: true,
+          role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+        },
+      },
+      include: {
+        avatar: true,
+        especialidades: { include: { especialidad: true } },
+        usuario: {
+          include: {
+            persona: true,
+            abogadoestudios: {
+              where: { activo: true, estudio: { activo: true } },
+              include: { estudio: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!perfil) {
+      return res.status(404).json({ message: 'Abogado no encontrado' });
+    }
+
+    const usuario = perfil.usuario;
+    const persona = usuario?.persona || null;
+    const perfilMapped = mapPerfilResponse(perfil);
+    const especialidades = (perfil.especialidades || [])
+      .map((row) => row.especialidad)
+      .filter(Boolean);
+    if (perfilMapped) {
+      perfilMapped.especialidades = especialidades;
+    }
+
+    const estudios = (usuario?.abogadoestudios || []).map((row) => ({
+      id: row.id,
+      principal: row.principal,
+      rol_en_estudio: row.rol_en_estudio,
+      estudio: mapEstudioPublicSummary(row.estudio),
+    }));
+    const principal = (usuario?.abogadoestudios || []).find((row) => row.principal)
+      || (usuario?.abogadoestudios || [])[0]
+      || null;
+
+    res.json({
+      usuarioId: usuario.id,
+      nombreCompleto: buildPersonaNombreCompleto(persona),
+      persona: persona
+        ? {
+          primer_nombre: persona.primer_nombre,
+          segundo_nombre: persona.segundo_nombre,
+          apellido_paterno: persona.apellido_paterno,
+          apellido_materno: persona.apellido_materno,
+          telefono: persona.telefono,
+          correo: persona.correo,
+          direccion: persona.direccion,
+        }
+        : null,
+      perfil: perfilMapped,
+      especialidades,
+      estudios,
+      estudioPrincipal: principal?.estudio
+        ? mapEstudioPublicSummary(principal.estudio)
+        : null,
+    });
+  } catch (error) {
+    console.error('Error obteniendo perfil público del abogado:', error);
+    res.status(500).json({ message: 'Error obteniendo perfil público del abogado' });
+  }
+};
+
+/**
+ * Obtiene la disponibilidad semanal y las citas reservadas dentro de un rango.
+ * Respuesta: { range: { from, to }, availability: [...], bookings: [...] }.
+ */
+const getLawyerAvailabilityWithBookings = async (req, res) => {
+  try {
+    const lawyerId = parseInt(req.params.id, 10);
+    if (Number.isNaN(lawyerId)) {
+      return res.status(400).json({ message: 'ID de abogado inválido' });
+    }
+
+    const lawyer = await prisma.usuario.findFirst({
+      where: {
+        id: lawyerId,
+        activo: true,
+        role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+        perfilabogado: { isNot: null },
+      },
+      select: { id: true },
+    });
+
+    if (!lawyer) {
+      return res.status(404).json({ message: 'Abogado no encontrado' });
+    }
+
+    const fromRaw = sanitizeString(req.query.from);
+    const toRaw = sanitizeString(req.query.to);
+    const now = new Date();
+    const fromDate = fromRaw ? new Date(fromRaw) : now;
+    if (Number.isNaN(fromDate.getTime())) {
+      return res.status(400).json({ message: 'Parámetro "from" inválido' });
+    }
+    const defaultTo = new Date(fromDate.getTime());
+    defaultTo.setDate(defaultTo.getDate() + 30);
+    const toDate = toRaw ? new Date(toRaw) : defaultTo;
+    if (Number.isNaN(toDate.getTime())) {
+      return res.status(400).json({ message: 'Parámetro "to" inválido' });
+    }
+
+    if (toDate < fromDate) {
+      return res.status(400).json({ message: 'El rango de fechas es inválido' });
+    }
+
+    const availability = await prisma.disponibilidadabogado.findMany({
+      where: { abogado_id: lawyerId },
+      orderBy: [{ dia_semana: 'asc' }, { hora_inicio: 'asc' }],
+    });
+
+    const bookings = await prisma.cita.findMany({
+      where: {
+        abogado_id: lawyerId,
+        estado: { in: ['pendiente', 'confirmada', 'completada'] },
+        inicia_el: { gte: fromDate, lte: toDate },
+      },
+      select: {
+        id: true,
+        inicia_el: true,
+        termina_el: true,
+        estado: true,
+      },
+      orderBy: { inicia_el: 'asc' },
+    });
+
+    res.json({
+      range: { from: fromDate.toISOString(), to: toDate.toISOString() },
+      availability: availability.map((slot) => ({
+        ...slot,
+        hora_inicio: slot.hora_inicio ? slot.hora_inicio.toISOString() : null,
+        hora_fin: slot.hora_fin ? slot.hora_fin.toISOString() : null,
+      })),
+      bookings: bookings.map((booking) => ({
+        ...booking,
+        inicia_el: booking.inicia_el ? booking.inicia_el.toISOString() : null,
+        termina_el: booking.termina_el ? booking.termina_el.toISOString() : null,
+      })),
+    });
+  } catch (error) {
+    console.error('Error obteniendo disponibilidad pública del abogado:', error);
+    res.status(500).json({ message: 'Error obteniendo disponibilidad del abogado' });
+  }
+};
+
+/**
+ * Lista combinaciones únicas de país y ciudad para filtros públicos.
+ * Respuesta: Array<{ pais, ciudad }>.
+ */
+const listLawyerLocations = async (_req, res) => {
+  try {
+    const rows = await prisma.abogadoestudio.findMany({
+      where: {
+        activo: true,
+        usuario: {
+          activo: true,
+          role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+        },
+        estudio: { activo: true },
+      },
+      select: { estudio: { select: { pais: true, ciudad: true } } },
+    });
+
+    const seen = new Set();
+    const locations = [];
+    rows.forEach((row) => {
+      const pais = sanitizeString(row.estudio?.pais);
+      const ciudad = sanitizeString(row.estudio?.ciudad);
+      const key = `${pais || ''}||${ciudad || ''}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      locations.push({ pais, ciudad });
+    });
+
+    locations.sort((a, b) => {
+      const paisA = (a.pais || '').toLowerCase();
+      const paisB = (b.pais || '').toLowerCase();
+      if (paisA !== paisB) return paisA.localeCompare(paisB);
+      const ciudadA = (a.ciudad || '').toLowerCase();
+      const ciudadB = (b.ciudad || '').toLowerCase();
+      return ciudadA.localeCompare(ciudadB);
+    });
+
+    res.json(locations);
+  } catch (error) {
+    console.error('Error listando ubicaciones de abogados:', error);
+    res.status(500).json({ message: 'Error obteniendo ubicaciones disponibles' });
+  }
+};
 // ========== API Perú (opcional) ==========
 async function fetchDniInfo(dni) {
   const token = process.env.APIPERU_TOKEN;
@@ -1668,6 +2036,11 @@ module.exports = {
   deleteUserDisponibilidad,
   // auxiliares
   lookupDni,
-  fetchDniInfo
+  fetchDniInfo,
+  // públicos abogado
+  searchPublicLawyers,
+  getPublicLawyerProfile,
+  getLawyerAvailabilityWithBookings,
+  listLawyerLocations,
 
 };

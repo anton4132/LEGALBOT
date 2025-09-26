@@ -23,13 +23,16 @@ class LawyerProfileInfo {
   final String? direccionAtencion;
   final String? bio;
   final ArchivoReference? avatarArchivo;
-
+final double? ratingPromedio;
+  final int ratingCantidad;
 
   const LawyerProfileInfo({
     this.tarifaBase,
     this.direccionAtencion,
     this.bio,
     this.avatarArchivo,
+    this.ratingPromedio,
+    this.ratingCantidad = 0,
   });
 
   bool get hasBasicInfo =>
@@ -54,7 +57,18 @@ class LawyerProfileInfo {
       }
       return ref;
     }
+     double? parseDouble(dynamic value) {
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
 
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
     return LawyerProfileInfo(
       tarifaBase: tarifaBase,
       direccionAtencion: json['direccion_atencion'] as String?,
@@ -64,6 +78,8 @@ class LawyerProfileInfo {
             json['avatar_archivo'] ??
             json['avatar'],
       ),
+        ratingPromedio: parseDouble(json['rating_promedio']),
+      ratingCantidad: parseInt(json['rating_cantidad']),
     );
   }
 
@@ -72,6 +88,15 @@ class LawyerProfileInfo {
         'direccion_atencion': direccionAtencion,
         'bio': bio,
       }..removeWhere((key, value) => value == null);
+      bool get hasRatings => (ratingPromedio ?? 0) > 0 && ratingCantidad > 0;
+
+  double get ratingPromedioOrZero => ratingPromedio ?? 0;
+
+  String ratingSummary({int fractionDigits = 1}) {
+    if (!hasRatings) return 'Sin reseñas';
+    final formatted = ratingPromedio!.toStringAsFixed(fractionDigits);
+    return '$formatted ($ratingCantidad)';
+  }
 }
 
 class LawyerSpecialty {
@@ -185,6 +210,242 @@ class LawyerStudyAssignment {
       ),
     );
   }
+}
+class LawyerPublicStudy {
+  final int id;
+  final bool principal;
+  final String? rolEnEstudio;
+  final LawFirmSummary? estudio;
+
+  const LawyerPublicStudy({
+    required this.id,
+    required this.principal,
+    required this.rolEnEstudio,
+    required this.estudio,
+  });
+
+  factory LawyerPublicStudy.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+
+    return LawyerPublicStudy(
+      id: parseInt(json['id']),
+      principal: json['principal'] as bool? ?? false,
+      rolEnEstudio: json['rol_en_estudio'] as String?,
+      estudio: json['estudio'] is Map<String, dynamic>
+          ? LawFirmSummary.fromJson(json['estudio'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+class LawyerPersonaSummary {
+  final String? primerNombre;
+  final String? segundoNombre;
+  final String? apellidoPaterno;
+  final String? apellidoMaterno;
+  final String? telefono;
+  final String? correo;
+  final String? direccion;
+
+  const LawyerPersonaSummary({
+    this.primerNombre,
+    this.segundoNombre,
+    this.apellidoPaterno,
+    this.apellidoMaterno,
+    this.telefono,
+    this.correo,
+    this.direccion,
+  });
+
+  factory LawyerPersonaSummary.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const LawyerPersonaSummary();
+    return LawyerPersonaSummary(
+      primerNombre: json['primer_nombre'] as String?,
+      segundoNombre: json['segundo_nombre'] as String?,
+      apellidoPaterno: json['apellido_paterno'] as String?,
+      apellidoMaterno: json['apellido_materno'] as String?,
+      telefono: json['telefono'] as String?,
+      correo: json['correo'] as String?,
+      direccion: json['direccion'] as String?,
+    );
+  }
+
+  String get nombreCompleto {
+    final parts = <String?>[
+      primerNombre,
+      segundoNombre,
+      apellidoPaterno,
+      apellidoMaterno,
+    ];
+    return parts
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .join(' ');
+  }
+}
+
+class LawyerBookingSummary {
+  final int id;
+  final DateTime start;
+  final DateTime end;
+  final String? estado;
+
+  const LawyerBookingSummary({
+    required this.id,
+    required this.start,
+    required this.end,
+    required this.estado,
+  });
+
+  factory LawyerBookingSummary.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic value) {
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed.toLocal();
+      }
+      return DateTime.now();
+    }
+
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+
+    return LawyerBookingSummary(
+      id: parseInt(json['id']),
+      start: parseDate(json['inicia_el'] ?? json['start']),
+      end: parseDate(json['termina_el'] ?? json['end']),
+      estado: json['estado'] as String?,
+    );
+  }
+
+  bool overlaps(DateTime otherStart, DateTime otherEnd) {
+    return start.isBefore(otherEnd) && end.isAfter(otherStart);
+  }
+}
+
+class LawyerAvailabilityCalendarData {
+  final List<LawyerAvailabilitySlot> weeklySlots;
+  final List<LawyerBookingSummary> bookings;
+  final DateTime? rangeStart;
+  final DateTime? rangeEnd;
+
+  const LawyerAvailabilityCalendarData({
+    required this.weeklySlots,
+    required this.bookings,
+    required this.rangeStart,
+    required this.rangeEnd,
+  });
+
+  factory LawyerAvailabilityCalendarData.fromJson(Map<String, dynamic> json) {
+    List<Map<String, dynamic>> parseList(dynamic value) {
+      if (value is List) {
+        return value.whereType<Map<String, dynamic>>().toList();
+      }
+      return const [];
+    }
+
+    DateTime? parseDate(dynamic value) {
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        return parsed?.toLocal();
+      }
+      return null;
+    }
+
+    final availabilityJson = parseList(json['availability']);
+    final bookingsJson = parseList(json['bookings']);
+    final rangeJson = json['range'] as Map<String, dynamic>?;
+
+    return LawyerAvailabilityCalendarData(
+      weeklySlots: availabilityJson
+          .map(LawyerAvailabilitySlot.fromJson)
+          .toList(),
+      bookings: bookingsJson
+          .map(LawyerBookingSummary.fromJson)
+          .toList(),
+      rangeStart: parseDate(rangeJson?['from']),
+      rangeEnd: parseDate(rangeJson?['to']),
+    );
+  }
+}
+
+class LawyerPublicProfile {
+  final int usuarioId;
+  final String? nombreCompleto;
+  final LawyerPersonaSummary persona;
+  final LawyerProfileInfo? perfil;
+  final List<LawyerSpecialty> especialidades;
+  final List<LawyerPublicStudy> estudios;
+  final LawFirmSummary? estudioPrincipal;
+
+  const LawyerPublicProfile({
+    required this.usuarioId,
+    required this.nombreCompleto,
+    required this.persona,
+    required this.perfil,
+    required this.especialidades,
+    required this.estudios,
+    required this.estudioPrincipal,
+  });
+
+  factory LawyerPublicProfile.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+
+    List<LawyerSpecialty> parseSpecialties(dynamic value) {
+      if (value is List) {
+        return value
+            .whereType<Map<String, dynamic>>()
+            .map(LawyerSpecialty.fromJson)
+            .toList();
+      }
+      return const [];
+    }
+
+    List<LawyerPublicStudy> parseStudies(dynamic value) {
+      if (value is List) {
+        return value
+            .whereType<Map<String, dynamic>>()
+            .map(LawyerPublicStudy.fromJson)
+            .toList();
+      }
+      return const [];
+    }
+
+    final perfilJson = json['perfil'] as Map<String, dynamic>?;
+
+    return LawyerPublicProfile(
+      usuarioId: parseInt(json['usuarioId'] ?? json['usuario_id'] ?? json['id']),
+      nombreCompleto: json['nombreCompleto'] as String?,
+      persona: LawyerPersonaSummary.fromJson(json['persona'] as Map<String, dynamic>?),
+      perfil: perfilJson != null ? LawyerProfileInfo.fromJson(perfilJson) : null,
+      especialidades: parseSpecialties(json['especialidades']),
+      estudios: parseStudies(json['estudios']),
+      estudioPrincipal: json['estudioPrincipal'] is Map<String, dynamic>
+          ? LawFirmSummary.fromJson(json['estudioPrincipal'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+
+  List<String> get specialtyNames => especialidades
+      .map((specialty) => specialty.nombre.trim())
+      .where((name) => name.isNotEmpty)
+      .toList();
+
+  bool get hasTarifa => perfil?.tarifaBase != null && (perfil!.tarifaBase ?? 0) > 0;
 }
 
 class LawyerProfileSnapshot {

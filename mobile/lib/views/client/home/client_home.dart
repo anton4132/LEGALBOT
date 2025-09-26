@@ -15,6 +15,7 @@ import '../../../widgets/section_header.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
 import '../../lawyer/home/lawyer_home.dart';
+import '../lawyers/client_lawyer_search_screen.dart';
 import 'become_lawyer_screen.dart';
 
 class ClientHome extends StatefulWidget {
@@ -258,7 +259,12 @@ class _ClientHomeState extends State<ClientHome> {
                 icon: Icons.search,
                 title: 'Buscar Abogados',
                 onTap: () {
-                  // TODO
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ClientLawyerSearchScreen(),
+                    ),
+                  );
                 },
               ),
               DrawerItem(
@@ -420,7 +426,11 @@ class _ClientHomeState extends State<ClientHome> {
                         title: 'Buscar\nAbogados',
                         color: Colors.green,
                         onTap: () {
-                          // TODO
+                           Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ClientLawyerSearchScreen(),
+                            ),
+                          );
                         },
                       ),
                       OptionCard(

@@ -1,8 +1,18 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const lawyerApplicationController = require('../controllers/lawyerApplicationController');
-
+const {
+  searchPublicLawyers,
+  listLawyerLocations,
+  getPublicLawyerProfile,
+  getLawyerAvailabilityWithBookings,
+} = require('../controllers/userController');
 const router = express.Router();
+
+router.get('/public/search', searchPublicLawyers);
+router.get('/public/locations', listLawyerLocations);
+router.get('/public/:id/availability', getLawyerAvailabilityWithBookings);
+router.get('/public/:id', getPublicLawyerProfile);
 /**
  * @swagger
  * /lawyers/applications/me:

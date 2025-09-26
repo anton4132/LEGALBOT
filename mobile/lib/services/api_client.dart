@@ -4,6 +4,7 @@ import '../models/archivo_reference.dart';
 import '../models/lawyer_profile_models.dart';
 import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
+import '../models/lawyer_search_result.dart';
 
 
 class UnauthorizedException implements Exception {
@@ -384,6 +385,95 @@ class ApiClient {
         .where((specialty) => specialty.nombre.isNotEmpty)
         .toList();
   }
+  static Future<List<LawyerLocationOption>> listLawyerLocations({
+    String? token,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/lawyers/public/locations');
+    final headers = token != null ? _authHeaders(token) : <String, String>{};
+    final response = await http.get(uri, headers: headers);
+    final decoded = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final data = _asJsonMap(decoded);
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200) {
+      List<Map<String, dynamic>> rows;
+      if (decoded is List) {
+        rows = _asJsonMapList(decoded);
+      } else if (decoded is Map<String, dynamic>) {
+        rows = _asJsonMapList(
+          decoded['results'] ?? decoded['data'] ?? decoded['locations'],
+        );
+      } else {
+        rows = const [];
+      }
+      return rows.map(LawyerLocationOption.fromJson).toList();
+    }
+
+    final data = _asJsonMap(decoded);
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudieron obtener las ubicaciones';
+    throw Exception(message);
+  }
+
+  static Future<List<LawyerSearchResult>> searchLawyers({
+    String? token,
+    int? specialtyId,
+    String? country,
+    String? city,
+  }) async {
+    final queryParameters = <String, String>{};
+    if (specialtyId != null) {
+      queryParameters['especialidadId'] = specialtyId.toString();
+    }
+    if (country != null && country.trim().isNotEmpty) {
+      queryParameters['pais'] = country.trim();
+    }
+    if (city != null && city.trim().isNotEmpty) {
+      queryParameters['ciudad'] = city.trim();
+    }
+
+    Uri uri = Uri.parse('$_baseUrl/lawyers/public/search');
+    if (queryParameters.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParameters);
+    }
+
+    final headers = token != null ? _authHeaders(token) : <String, String>{};
+    final response = await http.get(uri, headers: headers);
+    final decoded = _tryDecodeJson(response.body);
+
+    if (response.statusCode == 401) {
+      final data = _asJsonMap(decoded);
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200) {
+      List<Map<String, dynamic>> rows;
+      if (decoded is List) {
+        rows = _asJsonMapList(decoded);
+      } else if (decoded is Map<String, dynamic>) {
+        rows = _asJsonMapList(decoded['results'] ?? decoded['data']);
+      } else {
+        rows = const [];
+      }
+      return rows.map(LawyerSearchResult.fromJson).toList();
+    }
+
+    final data = _asJsonMap(decoded);
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo realizar la búsqueda';
+    throw Exception(message);
+  }
 
   static Future<List<LawyerSpecialty>> fetchLawyerSpecialties({
     required String token,
@@ -692,7 +782,81 @@ final decoded = _tryDecodeJson(response.body);
         : 'No se pudo registrar el estudio';
     throw Exception(message);
   }
+  static Future<LawyerPublicProfile> fetchLawyerPublicProfile({
+    String? token,
+    required int lawyerId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/lawyers/public/$lawyerId');
+    final headers = token != null ? _authHeaders(token) : <String, String>{};
+    final response = await http.get(uri, headers: headers);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
 
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data != null) {
+      return LawyerPublicProfile.fromJson(data);
+    }
+
+    if (response.statusCode == 404) {
+      throw Exception('Abogado no encontrado');
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo obtener la información del abogado';
+    throw Exception(message);
+  }
+
+  static Future<LawyerAvailabilityCalendarData> fetchLawyerAvailabilityCalendar({
+    String? token,
+    required int lawyerId,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final queryParameters = <String, String>{};
+    if (from != null) {
+      queryParameters['from'] = from.toUtc().toIso8601String();
+    }
+    if (to != null) {
+      queryParameters['to'] = to.toUtc().toIso8601String();
+    }
+
+    Uri uri = Uri.parse('$_baseUrl/lawyers/public/$lawyerId/availability');
+    if (queryParameters.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParameters);
+    }
+
+    final headers = token != null ? _authHeaders(token) : <String, String>{};
+    final response = await http.get(uri, headers: headers);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 401) {
+      final message = data != null && data['message'] is String
+          ? data['message'] as String
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data != null) {
+      return LawyerAvailabilityCalendarData.fromJson(data);
+    }
+
+    if (response.statusCode == 404) {
+      throw Exception('Abogado no encontrado');
+    }
+
+    final message = data != null && data['message'] is String
+        ? data['message'] as String
+        : 'No se pudo obtener la disponibilidad pública';
+    throw Exception(message);
+  }
   static Future<LawyerProfileSnapshot> fetchLawyerProfileSnapshot({
     required String token,
     required int userId,
