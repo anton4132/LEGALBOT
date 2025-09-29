@@ -6,20 +6,19 @@ import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
 import '../models/lawyer_search_result.dart';
 
-
 class UnauthorizedException implements Exception {
   final String message;
 
-  const UnauthorizedException(
-      [this.message = 'Tu sesión ha expirado. Inicia sesión nuevamente.']);
+  const UnauthorizedException([
+    this.message = 'Tu sesión ha expirado. Inicia sesión nuevamente.',
+  ]);
 
   @override
   String toString() => message;
 }
 
 class ApiClient {
-  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api';
-
+  static const String _baseUrl = 'http://localhost:3000/api';
   static Object? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {
@@ -28,7 +27,8 @@ class ApiClient {
       return null;
     }
   }
-   static Map<String, dynamic>? _asJsonMap(Object? value) {
+
+  static Map<String, dynamic>? _asJsonMap(Object? value) {
     return value is Map<String, dynamic> ? value : null;
   }
 
@@ -40,9 +40,7 @@ class ApiClient {
   }
 
   static Map<String, String> _authHeaders(String token, {bool json = false}) {
-    final headers = <String, String>{
-      'Authorization': 'Bearer $token',
-    };
+    final headers = <String, String>{'Authorization': 'Bearer $token'};
     if (json) {
       headers['Content-Type'] = 'application/json';
     }
@@ -122,9 +120,10 @@ class ApiClient {
 
     if (response.statusCode >= 400 ||
         (data != null && data['success'] == false)) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Error registrando usuario';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Error registrando usuario';
       throw Exception(message);
     }
   }
@@ -146,9 +145,9 @@ class ApiClient {
       }),
     );
 
-
     final decoded = _tryDecodeJson(response.body);
-    final data = _asJsonMap(decoded);    final bool success =
+    final data = _asJsonMap(decoded);
+    final bool success =
         response.statusCode == 200 && (data?['success'] as bool? ?? false);
     if (success && data != null) {
       try {
@@ -158,9 +157,10 @@ class ApiClient {
       }
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo iniciar sesión';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo iniciar sesión';
     throw Exception(message);
   }
 
@@ -178,47 +178,52 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
     if (response.statusCode == 200 && data != null) {
       return SwitchAccountResult.fromJson(data);
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo cambiar de cuenta';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo cambiar de cuenta';
     throw Exception(message);
   }
 
-  static Future<LawyerApplicationStatus> fetchLawyerApplicationStatus(
-      {required String token}) async {
+  static Future<LawyerApplicationStatus> fetchLawyerApplicationStatus({
+    required String token,
+  }) async {
     final uri = Uri.parse('$_baseUrl/lawyers/applications/me');
     final response = await http.get(uri, headers: _authHeaders(token));
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
     if (response.statusCode == 200) {
       return LawyerApplicationStatus.fromJson(
-          data?['application'] as Map<String, dynamic>?);
+        data?['application'] as Map<String, dynamic>?,
+      );
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo obtener el estado de la solicitud';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo obtener el estado de la solicitud';
     throw Exception(message);
   }
 
-  
   static Future<LawyerApplicationStatus> submitLawyerApplication({
     required String token,
     required String linkedinUrl,
@@ -251,15 +256,14 @@ class ApiClient {
           colegiaturaFechaVigenciaHasta.trim();
     }
 
-     payload['tituloArchivoId'] = tituloArchivoId;
+    payload['tituloArchivoId'] = tituloArchivoId;
     payload['colegiaturaCarnetArchivoId'] = colegiaturaCarnetArchivoId;
 
     if (tituloArchivo != null) {
       payload['tituloArchivo'] = tituloArchivo.toJson();
     }
     if (colegiaturaCarnetArchivo != null) {
-      payload['colegiaturaCarnetArchivo'] =
-          colegiaturaCarnetArchivo.toJson();
+      payload['colegiaturaCarnetArchivo'] = colegiaturaCarnetArchivo.toJson();
     }
 
     final response = await http.post(
@@ -271,21 +275,25 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
     if (response.statusCode == 200 || response.statusCode == 201) {
       return LawyerApplicationStatus.fromJson(
-          data?['application'] as Map<String, dynamic>?);
+        data?['application'] as Map<String, dynamic>?,
+      );
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo enviar la solicitud';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo enviar la solicitud';
     throw Exception(message);
   }
+
   static Future<MobileAccountsResult> fetchMobileAccounts({
     required String token,
   }) async {
@@ -294,9 +302,10 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -304,9 +313,10 @@ class ApiClient {
       return MobileAccountsResult.fromJson(data);
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudieron obtener las cuentas';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron obtener las cuentas';
     throw Exception(message);
   }
 
@@ -323,9 +333,10 @@ class ApiClient {
     }
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -333,9 +344,10 @@ class ApiClient {
       return LawyerProfileInfo.fromJson(data);
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo obtener el perfil de abogado';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo obtener el perfil de abogado';
     throw Exception(message);
   }
 
@@ -361,9 +373,10 @@ class ApiClient {
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -372,9 +385,10 @@ class ApiClient {
       return LawyerProfileInfo.fromJson(perfilJson);
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo guardar el perfil de abogado';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo guardar el perfil de abogado';
     throw Exception(message);
   }
 
@@ -385,6 +399,7 @@ class ApiClient {
         .where((specialty) => specialty.nombre.isNotEmpty)
         .toList();
   }
+
   static Future<List<LawyerLocationOption>> listLawyerLocations({
     String? token,
   }) async {
@@ -395,9 +410,10 @@ class ApiClient {
 
     if (response.statusCode == 401) {
       final data = _asJsonMap(decoded);
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -416,9 +432,10 @@ class ApiClient {
     }
 
     final data = _asJsonMap(decoded);
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudieron obtener las ubicaciones';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron obtener las ubicaciones';
     throw Exception(message);
   }
 
@@ -450,9 +467,10 @@ class ApiClient {
 
     if (response.statusCode == 401) {
       final data = _asJsonMap(decoded);
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -469,9 +487,10 @@ class ApiClient {
     }
 
     final data = _asJsonMap(decoded);
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo realizar la búsqueda';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo realizar la búsqueda';
     throw Exception(message);
   }
 
@@ -484,19 +503,21 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
- if (response.statusCode == 200 && decoded is List) {
+    if (response.statusCode == 200 && decoded is List) {
       final list = _asJsonMapList(decoded);
       return list.map(LawyerSpecialty.fromJson).toList();
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudieron obtener las especialidades';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron obtener las especialidades';
     throw Exception(message);
   }
 
@@ -515,9 +536,10 @@ class ApiClient {
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -525,9 +547,10 @@ class ApiClient {
       return;
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudieron guardar las especialidades';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron guardar las especialidades';
     throw Exception(message);
   }
 
@@ -541,20 +564,22 @@ class ApiClient {
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
-      if (response.statusCode == 200 && decoded is List) {
+    if (response.statusCode == 200 && decoded is List) {
       final list = _asJsonMapList(decoded);
       return list.map(LawyerAvailabilitySlot.fromJson).toList();
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo obtener la disponibilidad';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo obtener la disponibilidad';
     throw Exception(message);
   }
 
@@ -575,12 +600,13 @@ class ApiClient {
         'hora_fin': endTime,
       }),
     );
- final decoded = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -589,9 +615,10 @@ class ApiClient {
       return LawyerAvailabilitySlot.fromJson(slotJson);
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo registrar la disponibilidad';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo registrar la disponibilidad';
     throw Exception(message);
   }
 
@@ -602,12 +629,13 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/disponibilidad/$slotId');
     final response = await http.delete(uri, headers: _authHeaders(token));
- final decoded = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -615,9 +643,10 @@ class ApiClient {
       return;
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo eliminar la disponibilidad';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo eliminar la disponibilidad';
     throw Exception(message);
   }
 
@@ -627,23 +656,25 @@ class ApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/estudios');
     final response = await http.get(uri, headers: _authHeaders(token));
-final decoded = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
-   if (response.statusCode == 200 && decoded is List) {
+    if (response.statusCode == 200 && decoded is List) {
       final list = _asJsonMapList(decoded);
       return list.map(LawyerStudyAssignment.fromJson).toList();
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudieron obtener los estudios vinculados';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron obtener los estudios vinculados';
     throw Exception(message);
   }
 
@@ -664,23 +695,26 @@ final decoded = _tryDecodeJson(response.body);
         'rol_en_estudio': role,
       }),
     );
-final decoded = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
-    if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
+    if ((response.statusCode == 200 || response.statusCode == 201) &&
+        data != null) {
       final vinculo = data['vinculo'] as Map<String, dynamic>? ?? const {};
       return LawyerStudyAssignment.fromJson(vinculo);
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo guardar el estudio vinculado';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo guardar el estudio vinculado';
     throw Exception(message);
   }
 
@@ -691,12 +725,13 @@ final decoded = _tryDecodeJson(response.body);
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/estudios/$studyId');
     final response = await http.delete(uri, headers: _authHeaders(token));
-final decoded = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -704,9 +739,10 @@ final decoded = _tryDecodeJson(response.body);
       return;
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo eliminar el estudio vinculado';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo eliminar el estudio vinculado';
     throw Exception(message);
   }
 
@@ -714,26 +750,30 @@ final decoded = _tryDecodeJson(response.body);
     required String token,
     required String query,
   }) async {
-    final uri = Uri.parse('$_baseUrl/estudios?search=${Uri.encodeQueryComponent(query)}');
+    final uri = Uri.parse(
+      '$_baseUrl/estudios?search=${Uri.encodeQueryComponent(query)}',
+    );
     final response = await http.get(uri, headers: _authHeaders(token));
-final decoded = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
-   if (response.statusCode == 200 && decoded is List) {
+    if (response.statusCode == 200 && decoded is List) {
       final list = _asJsonMapList(decoded);
       return list.map(LawFirmSummary.fromJson).toList();
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudieron buscar estudios';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron buscar estudios';
     throw Exception(message);
   }
 
@@ -756,32 +796,39 @@ final decoded = _tryDecodeJson(response.body);
       'correo_contacto': correoContacto,
       'telefono': telefono,
       'direccion': direccion,
-    }..removeWhere((key, value) => value == null || (value is String && value.trim().isEmpty));
+    }..removeWhere(
+      (key, value) =>
+          value == null || (value is String && value.trim().isEmpty),
+    );
 
     final response = await http.post(
       uri,
       headers: _authHeaders(token, json: true),
       body: jsonEncode(payload),
     );
-final decoded = _tryDecodeJson(response.body);
+    final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
-    if ((response.statusCode == 200 || response.statusCode == 201) && data != null) {
+    if ((response.statusCode == 200 || response.statusCode == 201) &&
+        data != null) {
       return LawFirmSummary.fromJson(data);
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo registrar el estudio';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo registrar el estudio';
     throw Exception(message);
   }
+
   static Future<LawyerPublicProfile> fetchLawyerPublicProfile({
     String? token,
     required int lawyerId,
@@ -793,9 +840,10 @@ final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -807,13 +855,15 @@ final decoded = _tryDecodeJson(response.body);
       throw Exception('Abogado no encontrado');
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo obtener la información del abogado';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo obtener la información del abogado';
     throw Exception(message);
   }
 
-  static Future<LawyerAvailabilityCalendarData> fetchLawyerAvailabilityCalendar({
+  static Future<LawyerAvailabilityCalendarData>
+  fetchLawyerAvailabilityCalendar({
     String? token,
     required int lawyerId,
     DateTime? from,
@@ -838,9 +888,10 @@ final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
     if (response.statusCode == 401) {
-      final message = data != null && data['message'] is String
-          ? data['message'] as String
-          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
 
@@ -852,11 +903,13 @@ final decoded = _tryDecodeJson(response.body);
       throw Exception('Abogado no encontrado');
     }
 
-    final message = data != null && data['message'] is String
-        ? data['message'] as String
-        : 'No se pudo obtener la disponibilidad pública';
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo obtener la disponibilidad pública';
     throw Exception(message);
   }
+
   static Future<LawyerProfileSnapshot> fetchLawyerProfileSnapshot({
     required String token,
     required int userId,
@@ -876,5 +929,3 @@ final decoded = _tryDecodeJson(response.body);
     );
   }
 }
-
-

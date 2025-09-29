@@ -9,9 +9,8 @@ generator client {
 }
 
 datasource db {
-  provider          = "postgresql"
-  url               = env("DATABASE_URL") // pooled (PgBouncer)
- 
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // pooled (PgBouncer)
 }
 
 /**
@@ -481,21 +480,37 @@ model colegiaturaabogado {
 }
 
 model persona {
-  id                  Int                  @id @default(autoincrement())
-  dni                 String               @unique @db.Char(8)
-  telefono            String?              @unique @db.VarChar(15)
-  primer_nombre       String               @db.VarChar(100)
-  segundo_nombre      String?              @db.VarChar(100)
-  apellido_paterno    String               @db.VarChar(100)
-  apellido_materno    String?              @db.VarChar(100)
-  correo              String               @unique
-  direccion           String?
-  usuario             usuario[]
-  verificacionabogado verificacionabogado?
-  colegiatura         colegiaturaabogado?
+  id               Int     @id @default(autoincrement())
+  dni              String  @unique @db.Char(8)
+  telefono         String? @unique @db.VarChar(15)
+  primer_nombre    String  @db.VarChar(100)
+  segundo_nombre   String? @db.VarChar(100)
+  apellido_paterno String  @db.VarChar(100)
+  apellido_materno String? @db.VarChar(100)
+  correo           String  @unique
+
+  direccion_id           String?              @db.Char(6)
+  direccion              direccion?           @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
+  usuario                usuario[]
+  linea_exacta_direccion String?
+  verificacionabogado    verificacionabogado?
+  colegiatura            colegiaturaabogado?
 
   @@index([apellido_paterno])
   @@index([correo])
+}
+
+model direccion {
+  ubigeo_codigo String @id @db.Char(6)
+
+  departamento String
+  provincia    String
+  distrito     String
+  persona      persona[]
+  estudio      estudio[]
+
+  @@index([ubigeo_codigo])
+  @@index([departamento, provincia, distrito])
 }
 
 model role {
@@ -576,16 +591,16 @@ model especialidad {
 }
 
 model estudio {
-  id               Int     @id @default(autoincrement())
+  id                     Int        @id @default(autoincrement())
   /////////////////////////
-  ruc              String  @unique
-  nombre_comercial String?
-  pais             String?
-  ciudad           String?
-  activo           Boolean @default(false)
-  correo_contacto  String?
-  telefono         String?
-  direccion        String?
+  ruc                    String     @unique
+  nombre_comercial       String?
+  direccion_id           String?    @db.Char(6)
+  direccion              direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
+  activo                 Boolean    @default(false)
+  correo_contacto        String?
+  telefono               String?
+  linea_exacta_direccion String?
 
   /////////////////////////
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
