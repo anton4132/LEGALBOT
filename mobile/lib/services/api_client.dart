@@ -85,8 +85,9 @@ class ApiClient {
       'segundo_nombre': trimOrNull(personalInfo['segundoNombre']),
       'apellido_paterno': trimOrNull(personalInfo['apellidoPaterno']),
       'apellido_materno': trimOrNull(personalInfo['apellidoMaterno']),
-      'direccion': trimOrNull(contactInfo['direccion']),
-    };
+      'direccion_id': digitsOrNull(contactInfo['ubigeoCodigo']),
+      'linea_exacta_direccion':
+          trimOrNull(contactInfo['lineaExactaDireccion']),    };
     persona.removeWhere((key, value) => value == null);
 
     final Map<String, dynamic> payload = {
@@ -94,15 +95,6 @@ class ApiClient {
       'clave': password,
       'persona': persona,
     };
-
-    if (userType == 'abogado') {
-      final especialidadNombre = trimOrNull(contactInfo['especialidadNombre']);
-      if (especialidadNombre != null) {
-        payload['abogado_info'] = {
-          'especialidades': [especialidadNombre],
-        };
-      }
-    }
 
     final uri = Uri.parse('$_baseUrl/users');
     final http.Response response = await http.post(
@@ -684,16 +676,22 @@ class ApiClient {
     required int studyId,
     required bool principal,
     String? role,
+    String? direccionUbigeoCodigo,
+    String? lineaExactaDireccion,
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/estudios');
+     final payload = {
+      'estudio_id': studyId,
+      'principal': principal,
+      'rol_en_estudio': role,
+      'direccion_id': direccionUbigeoCodigo,
+      'linea_exacta_direccion': lineaExactaDireccion,
+    }..removeWhere((key, value) => value == null);
     final response = await http.post(
       uri,
       headers: _authHeaders(token, json: true),
-      body: jsonEncode({
-        'estudio_id': studyId,
-        'principal': principal,
-        'rol_en_estudio': role,
-      }),
+        body: jsonEncode(payload),
+
     );
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
@@ -785,8 +783,9 @@ class ApiClient {
     String? ciudad,
     String? correoContacto,
     String? telefono,
-    String? direccion,
-  }) async {
+    String? direccionUbigeoCodigo,
+    String? lineaExactaDireccion, 
+   }) async {
     final uri = Uri.parse('$_baseUrl/estudios');
     final payload = {
       'ruc': ruc,
@@ -795,7 +794,8 @@ class ApiClient {
       'ciudad': ciudad,
       'correo_contacto': correoContacto,
       'telefono': telefono,
-      'direccion': direccion,
+      'direccion_id': direccionUbigeoCodigo,
+      'linea_exacta_direccion': lineaExactaDireccion,
     }..removeWhere(
       (key, value) =>
           value == null || (value is String && value.trim().isEmpty),

@@ -21,6 +21,8 @@ String formatTimeOfDay(TimeOfDay time) {
 class LawyerProfileInfo {
   final double? tarifaBase;
   final String? direccionAtencion;
+  final String? direccionUbigeoCodigo;
+  final String? lineaExactaDireccion;
   final String? bio;
   final ArchivoReference? avatarArchivo;
 final double? ratingPromedio;
@@ -29,6 +31,8 @@ final double? ratingPromedio;
   const LawyerProfileInfo({
     this.tarifaBase,
     this.direccionAtencion,
+    this.direccionUbigeoCodigo,
+    this.lineaExactaDireccion,
     this.bio,
     this.avatarArchivo,
     this.ratingPromedio,
@@ -37,7 +41,8 @@ final double? ratingPromedio;
 
   bool get hasBasicInfo =>
       (tarifaBase != null && tarifaBase! > 0) &&
-      (direccionAtencion?.trim().isNotEmpty ?? false) &&
+      (lineaExactaDireccion?.trim().isNotEmpty ??
+          direccionAtencion?.trim().isNotEmpty ?? false) &&
       (bio?.trim().isNotEmpty ?? false);
 
   factory LawyerProfileInfo.fromJson(Map<String, dynamic>? json) {
@@ -48,6 +53,11 @@ final double? ratingPromedio;
       tarifaBase = tarifaValue.toDouble();
     } else if (tarifaValue is String) {
       tarifaBase = double.tryParse(tarifaValue);
+    }
+    String? parseString(dynamic value) {
+      if (value is String) return value;
+      if (value is num) return value.toString();
+      return null;
     }
 
     ArchivoReference? _normalizeArchivo(dynamic value) {
@@ -69,26 +79,39 @@ final double? ratingPromedio;
       if (value is String) return int.tryParse(value) ?? 0;
       return 0;
     }
+    final direccionAtencion = parseString(json['direccion_atencion']);
+
     return LawyerProfileInfo(
       tarifaBase: tarifaBase,
-      direccionAtencion: json['direccion_atencion'] as String?,
-      bio: json['bio'] as String?,
+  direccionAtencion:
+          direccionAtencion ?? parseString(json['linea_exacta_direccion']),
+      direccionUbigeoCodigo: parseString(
+        json['direccion_ubigeo_codigo'] ??
+            json['direccion_id'] ??
+            json['direccionUbigeoCodigo'],
+      ),
+      lineaExactaDireccion: parseString(
+        json['linea_exacta_direccion'] ??
+            json['lineaExactaDireccion'],
+      ),      bio: json['bio'] as String?,
       avatarArchivo: _normalizeArchivo(
         json['avatarArchivo'] ??
             json['avatar_archivo'] ??
             json['avatar'],
       ),
-        ratingPromedio: parseDouble(json['rating_promedio']),
+      ratingPromedio: parseDouble(json['rating_promedio']),
       ratingCantidad: parseInt(json['rating_cantidad']),
     );
   }
 
   Map<String, dynamic> toPayload() => {
         'tarifa_base': tarifaBase,
-        'direccion_atencion': direccionAtencion,
         'bio': bio,
+        'direccion_atencion': direccionAtencion,
+        'direccion_id': direccionUbigeoCodigo,
+        'linea_exacta_direccion': lineaExactaDireccion,
       }..removeWhere((key, value) => value == null);
-      bool get hasRatings => (ratingPromedio ?? 0) > 0 && ratingCantidad > 0;
+  bool get hasRatings => (ratingPromedio ?? 0) > 0 && ratingCantidad > 0;
 
   double get ratingPromedioOrZero => ratingPromedio ?? 0;
 
@@ -152,6 +175,9 @@ class LawFirmSummary {
   final String? correoContacto;
   final String? telefono;
   final String? direccion;
+  
+  final String? direccionUbigeoCodigo;
+  final String? lineaExactaDireccion;
   final bool? activo;
 
   const LawFirmSummary({
@@ -163,10 +189,20 @@ class LawFirmSummary {
     this.correoContacto,
     this.telefono,
     this.direccion,
+    this.direccionUbigeoCodigo,
+    this.lineaExactaDireccion,
     this.activo,
   });
 
   factory LawFirmSummary.fromJson(Map<String, dynamic> json) {
+    String? parseString(dynamic value) {
+      if (value is String) return value;
+      if (value is num) return value.toString();
+      return null;
+    }
+
+    final direccion = json['direccion'] as String?;
+
     return LawFirmSummary(
       id: (json['id'] as num).toInt(),
       ruc: json['ruc'] as String?,
@@ -175,7 +211,16 @@ class LawFirmSummary {
       ciudad: json['ciudad'] as String?,
       correoContacto: json['correo_contacto'] as String?,
       telefono: json['telefono'] as String?,
-      direccion: json['direccion'] as String?,
+      direccion: direccion ?? parseString(json['linea_exacta_direccion']),
+      direccionUbigeoCodigo: parseString(
+        json['direccion_ubigeo_codigo'] ??
+            json['direccion_id'] ??
+            json['direccionUbigeoCodigo'],
+      ),
+      lineaExactaDireccion: parseString(
+        json['linea_exacta_direccion'] ??
+            json['lineaExactaDireccion'],
+      ),
       activo: json['activo'] as bool?,
     );
   }
