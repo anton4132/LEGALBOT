@@ -12,36 +12,101 @@ String? _normalizeText(dynamic value) {
   return null;
 }
 
-class LawyerLocationOption {
-  final String? pais;
-  final String? ciudad;
+class LawyerLocationDistrict {
+  final String distrito;
+  final String? ubigeoCodigo;
 
-  const LawyerLocationOption({
-    this.pais,
-    this.ciudad,
+  const LawyerLocationDistrict({
+    required this.distrito,
+    this.ubigeoCodigo,
   });
 
-  factory LawyerLocationOption.fromJson(Map<String, dynamic> json) {
-    return LawyerLocationOption(
-      pais: _normalizeText(json['pais']),
-      ciudad: _normalizeText(json['ciudad']),
+  factory LawyerLocationDistrict.fromJson(Map<String, dynamic> json) {
+    final distrito = _normalizeText(json['distrito']);
+    return LawyerLocationDistrict(
+      distrito: distrito ?? '',
+      ubigeoCodigo: _normalizeText(
+        json['ubigeo_codigo'] ?? json['ubigeoCodigo'],
+      ),
     );
   }
 
-  String get displayLabel {
-    final hasCity = ciudad != null && ciudad!.isNotEmpty;
-    final hasCountry = pais != null && pais!.isNotEmpty;
-    if (hasCity && hasCountry) {
-      return '${ciudad!}, ${pais!}';
+  String get key => distrito.toLowerCase();
+}
+
+class LawyerLocationProvince {
+  final String provincia;
+  final List<LawyerLocationDistrict> distritos;
+
+  const LawyerLocationProvince({
+    required this.provincia,
+    required this.distritos,
+  });
+
+  factory LawyerLocationProvince.fromJson(Map<String, dynamic> json) {
+    final provincia = _normalizeText(json['provincia']) ?? '';
+    final distritosRaw = json['distritos'];
+    final distritosList = <LawyerLocationDistrict>[];
+    if (distritosRaw is List) {
+      for (final entry in distritosRaw) {
+        if (entry is Map<String, dynamic>) {
+          final distrito = LawyerLocationDistrict.fromJson(entry);
+          if (distrito.distrito.isNotEmpty) {
+            distritosList.add(distrito);
+          }
+        }
+      }
     }
-    if (hasCity) return ciudad!;
-    if (hasCountry) return pais!;
-    return 'Ubicación no especificada';
+    return LawyerLocationProvince(
+      provincia: provincia,
+      distritos: List.unmodifiable(distritosList),
+    );
   }
 
-  String? get countryKey => pais?.toLowerCase();
+  String get key => provincia.toLowerCase();
 
-  String? get cityKey => ciudad?.toLowerCase();
+  List<LawyerLocationDistrict> get sortedDistricts {
+    final list = distritos.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return list;
+  }
+}
+
+class LawyerLocationOption {
+   final String departamento;
+  final List<LawyerLocationProvince> provincias;
+
+  const LawyerLocationOption({
+      required this.departamento,
+    required this.provincias,
+  });
+
+  factory LawyerLocationOption.fromJson(Map<String, dynamic> json) {
+    final departamento = _normalizeText(json['departamento']) ?? '';
+    final provinciasRaw = json['provincias'];
+    final provinciasList = <LawyerLocationProvince>[];
+    if (provinciasRaw is List) {
+      for (final entry in provinciasRaw) {
+        if (entry is Map<String, dynamic>) {
+          final province = LawyerLocationProvince.fromJson(entry);
+          if (province.provincia.isNotEmpty && province.distritos.isNotEmpty) {
+            provinciasList.add(province);
+          }
+        }
+      }
+    }
+    return LawyerLocationOption(
+      departamento: departamento,
+      provincias: List.unmodifiable(provinciasList),
+    );
+  }
+  String get key => departamento.toLowerCase();
+  List<LawyerLocationProvince> get sortedProvinces {
+    final list = provincias.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return list;
+  }
+
 }
 
 class LawyerSearchResult {

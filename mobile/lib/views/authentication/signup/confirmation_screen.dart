@@ -274,16 +274,17 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                         _buildInfoRow('Apellido Paterno', widget.personalInfo['apellidoPaterno'] ?? ''),
                         _buildInfoRow('Apellido Materno', widget.personalInfo['apellidoMaterno'] ?? ''),
                         
-                        // Especialidad solo para abogados
-                        if (widget.userType == 'abogado')
-                          _buildInfoRow('Especialidad', 
-                          widget.contactInfo['especialidadNombre'] ?? ''),                        
+                                             
                         // Información de contacto
                         _buildInfoRow('DNI', widget.contactInfo['dni'] ?? ''),
                         _buildInfoRow('Teléfono', widget.contactInfo['phone'] ?? ''),
                         _buildInfoRow('Email', widget.contactInfo['email'] ?? ''),
-                        _buildInfoRow('Dirección', widget.contactInfo['direccion'] ?? ''),
-                      ],
+                        _buildInfoRow('Dirección exacta',
+                            widget.contactInfo['lineaExactaDireccion'] ?? ''),
+                        _buildInfoRow(
+                          'Código Ubigeo',
+                          widget.contactInfo['ubigeoCodigo'] ?? '',
+                        ),                      ],
                     ),
                   ),
                 ),

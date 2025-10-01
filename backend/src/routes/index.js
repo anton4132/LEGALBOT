@@ -10,6 +10,8 @@ const serviceRoutes = require('./serviceRoutes');
 const especialidadRoutes = require('./especialidadRoute');
 const estudioRoutes = require('./estudioRoute');
 const lawyerRoutes = require('./lawyerRoutes');
+const ubigeoRoutes = require('./UbigeoRoute');
+
 
 // Importar controlador SOLO para endpoints sueltos como /dni
 const userController = require('../controllers/userController');
@@ -25,6 +27,7 @@ router.use('/especialidades', especialidadRoutes);
 router.use('/estudios', estudioRoutes);
 router.use('/lawyers', lawyerRoutes);
 router.use('/lawyers', lawyerRoutes); // incluye rutas públicas (/api/lawyers/public/*) y privadas
+router.use('/ubigeo', ubigeoRoutes);
 
 /**
  * @swagger

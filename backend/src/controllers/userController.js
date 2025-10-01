@@ -336,14 +336,27 @@ function buildPersonaNombreCompleto(persona) {
 
 function mapEstudioPublicSummary(estudio) {
   if (!estudio) return null;
+  const direccionRelacion = estudio.direccion || null;
+  const departamento = sanitizeString(direccionRelacion?.departamento);
+  const provincia = sanitizeString(direccionRelacion?.provincia);
+  const distrito = sanitizeString(direccionRelacion?.distrito);
+  const direccionUbigeoCodigo = sanitizeString(
+    estudio.direccion_id
+    ?? direccionRelacion?.ubigeo_codigo,
+  );
   return {
     id: estudio.id,
     nombre_comercial: estudio.nombre_comercial,
     pais: estudio.pais,
     ciudad: estudio.ciudad,
-    direccion: estudio.direccion,
+    direccion: estudio.linea_exacta_direccion,
     telefono: estudio.telefono,
     correo_contacto: estudio.correo_contacto,
+    direccion_ubigeo_codigo: direccionUbigeoCodigo,
+    linea_exacta_direccion: estudio.linea_exacta_direccion,
+    departamento,
+    provincia,
+    distrito,
   };
 }
 
@@ -357,14 +370,11 @@ const searchPublicLawyers = async (req, res) => {
       specialtyId,
       especialidadId,
       especialidad_id: especialidadIdAlt,
-      especialidad,
-      specialty,
-      especialidadNombre,
-      specialtyName,
-      country,
-      pais,
-      city,
-      ciudad,
+      departamento,
+      province,
+      provincia,
+      district,
+      distrito,
     } = req.query || {};
 
     const resolvedSpecialtyId = toIntOrNull(
@@ -372,14 +382,22 @@ const searchPublicLawyers = async (req, res) => {
       ?? especialidadId
       ?? especialidadIdAlt,
     );
-    const specialtyTerm = sanitizeString(
-      especialidad
-      ?? specialty
-      ?? especialidadNombre
-      ?? specialtyName,
-    );
-    const resolvedCountry = sanitizeString(country ?? pais);
-    const resolvedCity = sanitizeString(city ?? ciudad);
+    const resolvedDepartamento = sanitizeString(departamento);
+    const resolvedProvincia = sanitizeString(provincia ?? province);
+    const resolvedDistrito = sanitizeString(distrito ?? district);
+
+    const missingParams = [];
+    if (resolvedSpecialtyId == null) missingParams.push('especialidadId');
+    if (!resolvedDepartamento) missingParams.push('departamento');
+    if (!resolvedProvincia) missingParams.push('provincia');
+    if (!resolvedDistrito) missingParams.push('distrito');
+
+    if (missingParams.length) {
+      return res.status(400).json({
+        message: `Faltan parámetros obligatorios: ${missingParams.join(', ')}`,
+      });
+    }
+  
 
     const where = {
       usuario: {
@@ -388,43 +406,25 @@ const searchPublicLawyers = async (req, res) => {
       },
     };
 
-    if (resolvedSpecialtyId != null) {
-      where.especialidades = {
-        some: { especialidad_id: resolvedSpecialtyId },
-      };
-    } else if (specialtyTerm) {
-      where.especialidades = {
-        some: {
-          especialidad: {
-            nombre: { contains: specialtyTerm, mode: 'insensitive' },
-          },
-        },
-      };
-    }
+    where.especialidades = {
+      some: { especialidad_id: resolvedSpecialtyId },
+    };
 
-    if (resolvedCountry || resolvedCity) {
-      where.usuario.abogadoestudios = {
-        some: {
+    where.usuario.abogadoestudios = {
+      some: {
+        activo: true,
+        estudio: {
           activo: true,
-          estudio: {
-            activo: true,
-            ...(resolvedCountry
-              ? { pais: { equals: resolvedCountry, mode: 'insensitive' } }
-              : {}),
-            ...(resolvedCity
-              ? { ciudad: { equals: resolvedCity, mode: 'insensitive' } }
-              : {}),
+          direccion: {
+            is: {
+              departamento: { equals: resolvedDepartamento, mode: 'insensitive' },
+              provincia: { equals: resolvedProvincia, mode: 'insensitive' },
+              distrito: { equals: resolvedDistrito, mode: 'insensitive' },
+            },
           },
         },
-      };
-    } else {
-      where.usuario.abogadoestudios = {
-        some: {
-          activo: true,
-          estudio: { activo: true },
-        },
-      };
-    }
+      },
+    };
 
     const perfiles = await prisma.perfilabogado.findMany({
       where,
@@ -435,7 +435,7 @@ const searchPublicLawyers = async (req, res) => {
             persona: true,
             abogadoestudios: {
               where: { activo: true, estudio: { activo: true } },
-              include: { estudio: true },
+              include: { estudio: { include: { direccion: true } } },
             },
           },
         },
@@ -506,7 +506,7 @@ const getPublicLawyerProfile = async (req, res) => {
             persona: true,
             abogadoestudios: {
               where: { activo: true, estudio: { activo: true } },
-              include: { estudio: true },
+              include: { estudio: { include: { direccion: true } } },
             },
           },
         },
@@ -659,33 +659,91 @@ const listLawyerLocations = async (_req, res) => {
           activo: true,
           role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
         },
-        estudio: { activo: true },
+        estudio: {
+          activo: true,
+          direccion: { isNot: null },
+        },
       },
-      select: { estudio: { select: { pais: true, ciudad: true } } },
+      select: {
+        estudio: {
+          select: {
+            direccion: {
+              select: {
+                departamento: true,
+                provincia: true,
+                distrito: true,
+                ubigeo_codigo: true,
+              },
+            },
+          },
+        },  
+      },
     });
 
-    const seen = new Set();
-    const locations = [];
+    const departamentosMap = new Map();
+
     rows.forEach((row) => {
-      const pais = sanitizeString(row.estudio?.pais);
-      const ciudad = sanitizeString(row.estudio?.ciudad);
-      const key = `${pais || ''}||${ciudad || ''}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      locations.push({ pais, ciudad });
+      const direccion = row.estudio?.direccion;
+      const departamento = sanitizeString(direccion?.departamento);
+      const provincia = sanitizeString(direccion?.provincia);
+      const distrito = sanitizeString(direccion?.distrito);
+      const ubigeoCodigo = sanitizeString(direccion?.ubigeo_codigo);
+
+      if (!departamento || !provincia || !distrito) return;
+
+      const departamentoKey = departamento.toLowerCase();
+      if (!departamentosMap.has(departamentoKey)) {
+        departamentosMap.set(departamentoKey, {
+          departamento,
+          provincias: new Map(),
+        });
+      }
+
+      const departamentoEntry = departamentosMap.get(departamentoKey);
+      const provinciasMap = departamentoEntry.provincias;
+
+      const provinciaKey = provincia.toLowerCase();
+      if (!provinciasMap.has(provinciaKey)) {
+        provinciasMap.set(provinciaKey, {
+          provincia,
+          distritos: new Map(),
+        });
+      }
+
+      const provinciaEntry = provinciasMap.get(provinciaKey);
+      const distritosMap = provinciaEntry.distritos;
+      const distritoKey = distrito.toLowerCase();
+
+    if (!distritosMap.has(distritoKey)) {
+      distritosMap.set(distritoKey, {
+        distrito,
+        ubigeo_codigo: ubigeoCodigo || null,
+      });
+    }
+    
     });
 
-    locations.sort((a, b) => {
-      const paisA = (a.pais || '').toLowerCase();
-      const paisB = (b.pais || '').toLowerCase();
-      if (paisA !== paisB) return paisA.localeCompare(paisB);
-      const ciudadA = (a.ciudad || '').toLowerCase();
-      const ciudadB = (b.ciudad || '').toLowerCase();
-      return ciudadA.localeCompare(ciudadB);
-    });
+    const response = Array.from(departamentosMap.values())
+    .map((departamentoEntry) => {
+      const provincias = Array.from(departamentoEntry.provincias.values())
+        .map((provinciaEntry) => {
+          const distritos = Array.from(provinciaEntry.distritos.values())
+            .sort((a, b) => a.distrito.toLowerCase().localeCompare(b.distrito.toLowerCase()));
+          return {
+            provincia: provinciaEntry.provincia,
+            distritos,
+          };
+        })
+        .sort((a, b) => a.provincia.toLowerCase().localeCompare(b.provincia.toLowerCase()));
 
-    res.json(locations);
-  } catch (error) {
+      return {
+        departamento: departamentoEntry.departamento,
+        provincias,
+      };
+    })
+    .sort((a, b) => a.departamento.toLowerCase().localeCompare(b.departamento.toLowerCase()));
+
+  res.json(response);  } catch (error) {
     console.error('Error listando ubicaciones de abogados:', error);
     res.status(500).json({ message: 'Error obteniendo ubicaciones disponibles' });
   }
@@ -926,7 +984,7 @@ const getAllUsers = async (_req, res) => {
           }
         },
         abogadoestudios: {
-          include: { estudio: true },
+          include: { estudio: { include: { direccion: true } } },
           where: { activo: true },
           orderBy: { principal: 'desc' }
         }
@@ -971,7 +1029,7 @@ const getUserById = async (req, res) => {
             avatar: true,          }
         },
         abogadoestudios: {
-          include: { estudio: true },
+          include: { estudio: { include: { direccion: true } } },
           where: { activo: true },
           orderBy: { principal: 'desc' }
         }
@@ -1186,7 +1244,7 @@ const createUser = async (req, res) => {
                 avatar: true,              }
             },
             abogadoestudios: {
-              include: { estudio: true },
+              include: { estudio: { include: { direccion: true } } },
               where: { activo: true },
               orderBy: { principal: 'desc' }
             }
@@ -1408,7 +1466,7 @@ const createUser = async (req, res) => {
               avatar: true,            }
           },
           abogadoestudios: {
-            include: { estudio: true },
+            include: { estudio: { include: { direccion: true } } },
             where: { activo: true },
             orderBy: { principal: 'desc' }
           }
@@ -1695,7 +1753,7 @@ const updateUser = async (req, res) => {
               avatar: true,            }
           },
           abogadoestudios: {
-            include: { estudio: true },
+            include: { estudio: { include: { direccion: true } } },
             where: { activo: true },
             orderBy: { principal: 'desc' }
           }
@@ -1887,7 +1945,7 @@ const getUserEstudios = async (req, res) => {
     const userId = parseInt(req.params.id, 10);
     const rows = await prisma.abogadoestudio.findMany({
       where: { usuario_id: userId, activo: true },
-      include: { estudio: true },
+      include: { estudio: { include: { direccion: true } } },
       orderBy: { principal: 'desc' }
     });
     res.json(rows);
@@ -1908,7 +1966,7 @@ const upsertUserEstudio = async (req, res) => {
         where: { usuario_id_estudio_id: { usuario_id: userId, estudio_id } },
         update: { principal, rol_en_estudio, activo: true },
         create: { usuario_id: userId, estudio_id, principal, rol_en_estudio },
-        include: { estudio: true }
+        include: { estudio: { include: { direccion: true } } }
       });
       if (principal) {
         await tx.abogadoestudio.updateMany({

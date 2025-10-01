@@ -5,6 +5,7 @@ import '../models/lawyer_profile_models.dart';
 import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
 import '../models/lawyer_search_result.dart';
+import '../models/ubigeo_option.dart';
 
 class UnauthorizedException implements Exception {
   final String message;
@@ -57,6 +58,80 @@ class ApiClient {
     throw Exception('Error obteniendo especialidades');
   }
 
+
+   static List<Map<String, dynamic>> _extractUbigeoList(Object? decoded) {
+    if (decoded is List) {
+      return _asJsonMapList(decoded);
+    }
+    if (decoded is Map<String, dynamic>) {
+      for (final key in const [
+        'results',
+        'data',
+        'items',
+        'departamentos',
+        'provincias',
+        'distritos',
+        'rows',
+      ]) {
+        final list = _asJsonMapList(decoded[key]);
+        if (list.isNotEmpty) {
+          return list;
+        }
+      }
+    }
+    return const [];
+  }
+
+  static Future<List<UbigeoOption>> fetchDepartamentos() async {
+    final uri = Uri.parse('$_baseUrl/ubigeo/departamentos');
+    final http.Response response = await http.get(uri);
+    final decoded = _tryDecodeJson(response.body);
+    if (response.statusCode == 200) {
+      final rows = _extractUbigeoList(decoded);
+      return UbigeoOption.listFromJson(rows);
+    }
+    final data = _asJsonMap(decoded);
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron cargar los departamentos';
+    throw Exception(message);
+  }
+
+  static Future<List<UbigeoOption>> fetchProvincias(String parentCodigo) async {
+    final uri =
+        Uri.parse('$_baseUrl/ubigeo/departamentos/$parentCodigo/provincias');
+    final http.Response response = await http.get(uri);
+    final decoded = _tryDecodeJson(response.body);
+    if (response.statusCode == 200) {
+      final rows = _extractUbigeoList(decoded);
+      return UbigeoOption.listFromJson(rows);
+    }
+    final data = _asJsonMap(decoded);
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron cargar las provincias';
+    throw Exception(message);
+  }
+
+  static Future<List<UbigeoOption>> fetchDistritos(String parentCodigo) async {
+    final uri =
+        Uri.parse('$_baseUrl/ubigeo/provincias/$parentCodigo/distritos');
+    final http.Response response = await http.get(uri);
+    final decoded = _tryDecodeJson(response.body);
+    if (response.statusCode == 200) {
+      final rows = _extractUbigeoList(decoded);
+      return UbigeoOption.listFromJson(rows);
+    }
+    final data = _asJsonMap(decoded);
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudieron cargar los distritos';
+    throw Exception(message);
+  }
+
   static Future<void> signup({
     required String userType,
     required Map<String, String> personalInfo,
@@ -77,17 +152,18 @@ class ApiClient {
       return digits.isEmpty ? null : digits;
     }
 
-    final persona = <String, dynamic>{
-      'dni': trimOrNull(contactInfo['dni']),
-      'telefono': digitsOrNull(contactInfo['phone']),
-      'correo': trimOrNull(contactInfo['email']),
-      'primer_nombre': trimOrNull(personalInfo['primerNombre']),
-      'segundo_nombre': trimOrNull(personalInfo['segundoNombre']),
-      'apellido_paterno': trimOrNull(personalInfo['apellidoPaterno']),
-      'apellido_materno': trimOrNull(personalInfo['apellidoMaterno']),
-      'direccion_id': digitsOrNull(contactInfo['ubigeoCodigo']),
-      'linea_exacta_direccion':
-          trimOrNull(contactInfo['lineaExactaDireccion']),    };
+     final persona = <String, dynamic>{
+        'dni': trimOrNull(contactInfo['dni']),
+        'telefono': digitsOrNull(contactInfo['phone']),
+        'correo': trimOrNull(contactInfo['email']),
+        'primer_nombre': trimOrNull(personalInfo['primerNombre']),
+        'segundo_nombre': trimOrNull(personalInfo['segundoNombre']),
+        'apellido_paterno': trimOrNull(personalInfo['apellidoPaterno']),
+        'apellido_materno': trimOrNull(personalInfo['apellidoMaterno']),
+        'direccion_id': digitsOrNull(contactInfo['ubigeoCodigo']),
+        'linea_exacta_direccion':
+            trimOrNull(contactInfo['lineaExactaDireccion']),
+      };
     persona.removeWhere((key, value) => value == null);
 
     final Map<String, dynamic> payload = {
@@ -345,7 +421,7 @@ class ApiClient {
 
   static Future<LawyerProfileInfo> saveLawyerProfileInfo({
     required String token,
-    required int userId,
+    required int userId,  
     required LawyerProfileInfo info,
     ArchivoReference? avatarArchivo,
     int? avatarArchivoId,
@@ -433,26 +509,19 @@ class ApiClient {
 
   static Future<List<LawyerSearchResult>> searchLawyers({
     String? token,
-    int? specialtyId,
-    String? country,
-    String? city,
+   required int specialtyId,
+    required String departamento,
+    required String provincia,
+    required String distrito,
   }) async {
-    final queryParameters = <String, String>{};
-    if (specialtyId != null) {
-      queryParameters['especialidadId'] = specialtyId.toString();
-    }
-    if (country != null && country.trim().isNotEmpty) {
-      queryParameters['pais'] = country.trim();
-    }
-    if (city != null && city.trim().isNotEmpty) {
-      queryParameters['ciudad'] = city.trim();
-    }
-
-    Uri uri = Uri.parse('$_baseUrl/lawyers/public/search');
-    if (queryParameters.isNotEmpty) {
-      uri = uri.replace(queryParameters: queryParameters);
-    }
-
+    final queryParameters = <String, String>{
+      'especialidadId': specialtyId.toString(),
+      'departamento': departamento.trim(),
+      'provincia': provincia.trim(),
+      'distrito': distrito.trim(),
+    };
+    final uri = Uri.parse('$_baseUrl/lawyers/public/search')
+        .replace(queryParameters: queryParameters);
     final headers = token != null ? _authHeaders(token) : <String, String>{};
     final response = await http.get(uri, headers: headers);
     final decoded = _tryDecodeJson(response.body);
@@ -465,6 +534,15 @@ class ApiClient {
               : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
+     if (response.statusCode == 400) {
+      final data = _asJsonMap(decoded);
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Parámetros de búsqueda inválidos';
+      throw Exception(message);
+    }
+
 
     if (response.statusCode == 200) {
       List<Map<String, dynamic>> rows;

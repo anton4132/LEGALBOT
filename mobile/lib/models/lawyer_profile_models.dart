@@ -172,6 +172,9 @@ class LawFirmSummary {
   final String? nombreComercial;
   final String? pais;
   final String? ciudad;
+  final String? departamento;
+  final String? provincia;
+  final String? distrito;
   final String? correoContacto;
   final String? telefono;
   final String? direccion;
@@ -186,6 +189,9 @@ class LawFirmSummary {
     this.nombreComercial,
     this.pais,
     this.ciudad,
+    this.departamento,
+    this.provincia,
+    this.distrito,
     this.correoContacto,
     this.telefono,
     this.direccion,
@@ -209,6 +215,9 @@ class LawFirmSummary {
       nombreComercial: json['nombre_comercial'] as String?,
       pais: json['pais'] as String?,
       ciudad: json['ciudad'] as String?,
+      departamento: parseString(json['departamento']),
+      provincia: parseString(json['provincia']),
+      distrito: parseString(json['distrito']),
       correoContacto: json['correo_contacto'] as String?,
       telefono: json['telefono'] as String?,
       direccion: direccion ?? parseString(json['linea_exacta_direccion']),

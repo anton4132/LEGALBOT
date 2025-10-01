@@ -1,4 +1,4 @@
-import 'dart:io' as io;
+import 'dart:io' as io; 
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -13,6 +13,7 @@ import '../../../services/blob_storage_service.dart';
 import '../../../services/session_service.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
+import '../../../models/ubigeo_option.dart';
 
 class LawyerProfileScreen extends StatefulWidget {
   const LawyerProfileScreen({super.key});
@@ -24,15 +25,16 @@ class LawyerProfileScreen extends StatefulWidget {
 class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   final TextEditingController _bioController = TextEditingController();
   final TextEditingController _baseRateController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
 
+  // Estudios
   final TextEditingController _lawFirmRucController = TextEditingController();
   final TextEditingController _lawFirmNameController = TextEditingController();
   final TextEditingController _lawFirmCountryController = TextEditingController();
   final TextEditingController _lawFirmCityController = TextEditingController();
   final TextEditingController _lawFirmEmailController = TextEditingController();
   final TextEditingController _lawFirmPhoneController = TextEditingController();
-  final TextEditingController _lawFirmAddressController = TextEditingController();
+  final TextEditingController _lawFirmExactAddressController =
+      TextEditingController();
   final TextEditingController _lawFirmRoleController = TextEditingController();
 
   bool _loading = true;
@@ -41,11 +43,25 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   bool _addingAvailability = false;
   bool _savingLawFirm = false;
   static const int _maxAvatarFileSizeBytes = 5 * 1024 * 1024;
+
   LawyerProfileInfo? _profileInfo;
-  List<LawyerSpecialty> _catalogSpecialties = const [];
+  List<LawyerSpecialty> _catalogSpecialties = const <LawyerSpecialty>[];
   Set<int> _selectedSpecialties = <int>{};
-  List<LawyerAvailabilitySlot> _availability = const [];
-  List<LawyerStudyAssignment> _studies = const [];
+  List<LawyerAvailabilitySlot> _availability = const <LawyerAvailabilitySlot>[];
+  List<LawyerStudyAssignment> _studies = const <LawyerStudyAssignment>[];
+
+  // Catálogos y estado para ESTUDIOS (se quedan)
+  List<UbigeoOption> _departamentos = const <UbigeoOption>[];
+  List<UbigeoOption> _lawFirmProvincias = const <UbigeoOption>[];
+  List<UbigeoOption> _lawFirmDistritos = const <UbigeoOption>[];
+
+  String? _lawFirmDepartamentoCodigo;
+  String? _lawFirmProvinciaCodigo;
+  String? _lawFirmDistritoCodigo;
+
+  bool _loadingDepartamentos = false;
+  bool _loadingLawFirmProvincias = false;
+  bool _loadingLawFirmDistritos = false;
 
   int _newSlotDay = 1;
   TimeOfDay? _newSlotStart;
@@ -62,6 +78,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _loadDepartamentosCatalog();
     _loadInitialData();
   }
 
@@ -69,17 +86,144 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   void dispose() {
     _bioController.dispose();
     _baseRateController.dispose();
-    _addressController.dispose();
+
+    // Estudios
     _lawFirmRucController.dispose();
     _lawFirmNameController.dispose();
     _lawFirmCountryController.dispose();
     _lawFirmCityController.dispose();
     _lawFirmEmailController.dispose();
     _lawFirmPhoneController.dispose();
-    _lawFirmAddressController.dispose();
+    _lawFirmExactAddressController.dispose();
     _lawFirmRoleController.dispose();
+
     super.dispose();
   }
+
+  Future<void> _loadDepartamentosCatalog() async {
+    setState(() => _loadingDepartamentos = true);
+    try {
+      final options = await ApiClient.fetchDepartamentos();
+      if (!mounted) return;
+      setState(() {
+        _departamentos = options;
+      });
+      // Solo restauramos selección para ESTUDIOS
+      _restoreLawFirmUbigeoSelections();
+    } catch (error) {
+      if (!mounted) return;
+      _showSnack(
+        'No se pudieron cargar los departamentos. Verifica tu conexión.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loadingDepartamentos = false);
+      }
+    }
+  }
+
+  // ======= ESTUDIOS: carga de provincias/distritos =========
+
+  Future<void> _loadLawFirmProvincias(
+    String departamentoCodigo, {
+    String? preselectProvincia,
+    String? preselectDistrito,
+  }) async {
+    setState(() {
+      _loadingLawFirmProvincias = true;
+      _lawFirmProvincias = const <UbigeoOption>[];
+      _lawFirmDistritos = const <UbigeoOption>[];
+      _lawFirmProvinciaCodigo = null;
+      _lawFirmDistritoCodigo = null;
+    });
+    try {
+      final options = await ApiClient.fetchProvincias(departamentoCodigo);
+      if (!mounted) return;
+      setState(() {
+        _lawFirmProvincias = options;
+        if (preselectProvincia != null &&
+            options.any((option) => option.codigo == preselectProvincia)) {
+          _lawFirmProvinciaCodigo = preselectProvincia;
+        }
+      });
+      final selectedProvincia = preselectProvincia ?? _lawFirmProvinciaCodigo;
+      if (selectedProvincia != null) {
+        await _loadLawFirmDistritos(
+          selectedProvincia,
+          preselectDistrito: preselectDistrito,
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _showSnack('No se pudieron cargar las provincias del estudio.');
+      setState(() {
+        if (_lawFirmDepartamentoCodigo == departamentoCodigo) {
+          _lawFirmDepartamentoCodigo = null;
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingLawFirmProvincias = false);
+      }
+    }
+  }
+
+  Future<void> _loadLawFirmDistritos(
+    String provinciaCodigo, {
+    String? preselectDistrito,
+  }) async {
+    setState(() {
+      _loadingLawFirmDistritos = true;
+      _lawFirmDistritos = const <UbigeoOption>[];
+      _lawFirmDistritoCodigo = null;
+    });
+    try {
+      final options = await ApiClient.fetchDistritos(provinciaCodigo);
+      if (!mounted) return;
+      setState(() {
+        _lawFirmDistritos = options;
+        if (preselectDistrito != null &&
+            options.any((option) => option.codigo == preselectDistrito)) {
+          _lawFirmDistritoCodigo = preselectDistrito;
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      _showSnack('No se pudieron cargar los distritos del estudio.');
+      setState(() {
+        if (_lawFirmProvinciaCodigo == provinciaCodigo) {
+          _lawFirmProvinciaCodigo = null;
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingLawFirmDistritos = false);
+      }
+    }
+  }
+
+  void _restoreLawFirmUbigeoSelections() {
+    if (!mounted) return;
+    final departamento = _lawFirmDepartamentoCodigo;
+    if (departamento == null) {
+      setState(() {
+        _lawFirmProvincias = const <UbigeoOption>[];
+        _lawFirmDistritos = const <UbigeoOption>[];
+        _lawFirmProvinciaCodigo = null;
+        _lawFirmDistritoCodigo = null;
+      });
+      return;
+    }
+    if (_departamentos.any((option) => option.codigo == departamento)) {
+      _loadLawFirmProvincias(
+        departamento,
+        preselectProvincia: _lawFirmProvinciaCodigo,
+        preselectDistrito: _lawFirmDistritoCodigo,
+      );
+    }
+  }
+
+  // =========================================================
 
   Future<void> _loadInitialData() async {
     final session = SessionService.instance.session;
@@ -139,9 +283,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       _handleUnauthorized(error.message);
     } catch (error) {
       setState(() => _loading = false);
-      _showSnack(
-        error.toString().replaceFirst('Exception: ', ''),
-      );
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -149,14 +291,11 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     if (info == null) {
       _bioController.clear();
       _baseRateController.clear();
-      _addressController.clear();
       return;
     }
     _bioController.text = info.bio ?? '';
-
     _baseRateController.text =
         info.tarifaBase != null ? info.tarifaBase!.toStringAsFixed(2) : '';
-    _addressController.text = info.direccionAtencion ?? '';
   }
 
   void _applyPrimaryStudy(List<LawyerStudyAssignment> studies) {
@@ -177,7 +316,34 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     _lawFirmCityController.text = primary.estudio.ciudad ?? '';
     _lawFirmEmailController.text = primary.estudio.correoContacto ?? '';
     _lawFirmPhoneController.text = primary.estudio.telefono ?? '';
-    _lawFirmAddressController.text = primary.estudio.direccion ?? '';
+    _lawFirmExactAddressController.text =
+        (primary.estudio.lineaExactaDireccion ?? primary.estudio.direccion ?? '')
+            .trim();
+
+    final distrito = primary.estudio.direccionUbigeoCodigo;
+    setState(() {
+      if (distrito == null || distrito.isEmpty) {
+        _lawFirmDepartamentoCodigo = null;
+        _lawFirmProvinciaCodigo = null;
+        _lawFirmDistritoCodigo = null;
+        _lawFirmProvincias = const <UbigeoOption>[];
+        _lawFirmDistritos = const <UbigeoOption>[];
+      } else {
+        _lawFirmDistritoCodigo = distrito;
+        _lawFirmProvinciaCodigo =
+            distrito.length >= 4 ? distrito.substring(0, 4) : null;
+        _lawFirmDepartamentoCodigo =
+            distrito.length >= 2 ? distrito.substring(0, 2) : null;
+      }
+    });
+
+    if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
+      _loadLawFirmProvincias(
+        _lawFirmDepartamentoCodigo!,
+        preselectProvincia: _lawFirmProvinciaCodigo,
+        preselectDistrito: _lawFirmDistritoCodigo,
+      );
+    }
   }
 
   void _clearLawFirmForm() {
@@ -190,10 +356,17 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     _lawFirmCityController.clear();
     _lawFirmEmailController.clear();
     _lawFirmPhoneController.clear();
-    _lawFirmAddressController.clear();
+    _lawFirmExactAddressController.clear();
+    setState(() {
+      _lawFirmDepartamentoCodigo = null;
+      _lawFirmProvinciaCodigo = null;
+      _lawFirmDistritoCodigo = null;
+      _lawFirmProvincias = const <UbigeoOption>[];
+      _lawFirmDistritos = const <UbigeoOption>[];
+    });
   }
 
-   Future<void> _pickAvatarFile() async {
+  Future<void> _pickAvatarFile() async {
     if (_savingProfile) return;
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -245,7 +418,8 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       _existingAvatarArchivo = null;
     });
   }
-void _showAvatarViewer(ImageProvider<Object> provider) {
+
+  void _showAvatarViewer(ImageProvider<Object> provider) {
     showDialog<void>(
       context: context,
       builder: (context) {
@@ -325,6 +499,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
       child: avatar,
     );
   }
+
   Widget _buildAvatarPicker(bool canInteract) {
     final Uint8List? previewBytes = _avatarPreviewBytes;
     final String? remoteUrl =
@@ -338,7 +513,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
 
     final bool hasExisting =
         _retainExistingAvatar && _existingAvatarArchivo != null;
-          final avatarWidget = imageProvider != null
+    final avatarWidget = imageProvider != null
         ? _buildAvatarImage(imageProvider, true)
         : _buildAvatarPlaceholder();
 
@@ -354,17 +529,16 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
               ElevatedButton.icon(
                 onPressed: canInteract ? _pickAvatarFile : null,
                 icon: const Icon(Icons.camera_alt_rounded),
-                label:
-                    Text(canInteract ? 'Cambiar foto' : 'Foto de perfil'),
+                label: Text(canInteract ? 'Cambiar foto' : 'Foto de perfil'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.buttonColor,
                   foregroundColor: Colors.white,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
+              const Text(
                 'Usa una imagen cuadrada de buena calidad (máx. 5 MB).',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.text2Color,
                 ),
@@ -421,8 +595,11 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
 
     final info = LawyerProfileInfo(
       tarifaBase: tarifaBase,
-      direccionAtencion: _addressController.text.trim(),
       bio: _bioController.text.trim(),
+      // Perfil: sin dirección ni UBIGEO
+      direccionAtencion: null,
+      direccionUbigeoCodigo: null,
+      lineaExactaDireccion: null,
       avatarArchivo: _retainExistingAvatar ? _existingAvatarArchivo : null,
     );
 
@@ -430,16 +607,16 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
     ArchivoReference? avatarArchivoUpload;
     int? avatarArchivoId =
         _retainExistingAvatar ? _existingAvatarArchivo?.id : null;
+
     setState(() => _savingProfile = true);
     try {
       if (avatarFile != null) {
-         final String? previousPath = _existingAvatarArchivo?.ruta;
+        final String? previousPath = _existingAvatarArchivo?.ruta;
         if (previousPath != null && previousPath.trim().isNotEmpty) {
           try {
             await BlobStorageService.delete(previousPath);
           } catch (error, stackTrace) {
-            debugPrint(
-                'No se pudo eliminar el avatar anterior: $error\n$stackTrace');
+            debugPrint('No se pudo eliminar el avatar anterior: $error\n$stackTrace');
           }
         }
         final Uint8List bytes;
@@ -465,6 +642,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         );
         avatarArchivoId = _existingAvatarArchivo?.id;
       }
+
       final saved = await ApiClient.saveLawyerProfileInfo(
         token: session.token,
         userId: session.usuarioId,
@@ -472,6 +650,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         avatarArchivo: avatarArchivoUpload,
         avatarArchivoId: avatarArchivoId,
       );
+
       setState(() {
         _savingProfile = false;
         final savedAvatar = saved.avatarArchivo;
@@ -486,16 +665,16 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
           _existingAvatarArchivo = mergedAvatar;
           _profileInfo = LawyerProfileInfo(
             tarifaBase: saved.tarifaBase,
-            direccionAtencion: saved.direccionAtencion,
             bio: saved.bio,
+            direccionAtencion: saved.direccionAtencion,
             avatarArchivo: mergedAvatar,
           );
         } else {
           _existingAvatarArchivo = null;
           _profileInfo = LawyerProfileInfo(
             tarifaBase: saved.tarifaBase,
-            direccionAtencion: saved.direccionAtencion,
             bio: saved.bio,
+            direccionAtencion: saved.direccionAtencion,
             avatarArchivo: null,
           );
         }
@@ -503,19 +682,15 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         _selectedAvatarFile = null;
         _avatarPreviewBytes = null;
       });
+
       _applyProfileToControllers(saved);
-      _showSnack(
-        'Perfil actualizado correctamente',
-        color: AppColors.button2Color,
-      );
+      _showSnack('Perfil actualizado correctamente', color: AppColors.button2Color);
     } on UnauthorizedException catch (error) {
       setState(() => _savingProfile = false);
       _handleUnauthorized(error.message);
     } catch (error) {
       setState(() => _savingProfile = false);
-      _showSnack(
-        error.toString().replaceFirst('Exception: ', ''),
-      );
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -531,19 +706,22 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         specialtyIds: _selectedSpecialties.toList(),
       );
       setState(() => _savingSpecialties = false);
-      _showSnack(
-        'Especialidades guardadas',
-        color: AppColors.button2Color,
-      );
+      _showSnack('Especialidades guardadas', color: AppColors.button2Color);
     } on UnauthorizedException catch (error) {
       setState(() => _savingSpecialties = false);
       _handleUnauthorized(error.message);
     } catch (error) {
       setState(() => _savingSpecialties = false);
-      _showSnack(
-        error.toString().replaceFirst('Exception: ', ''),
-      );
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
     }
+  }
+
+  // Helper faltante que ya estabas usando
+  String formatTimeOfDay(TimeOfDay t) {
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+    // Si tu backend espera "HH:mm:ss", usa: return '$h:$m:00';
   }
 
   Future<void> _addAvailabilitySlot() async {
@@ -587,18 +765,13 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         _newSlotStart = null;
         _newSlotEnd = null;
       });
-      _showSnack(
-        'Disponibilidad registrada',
-        color: AppColors.button2Color,
-      );
+      _showSnack('Disponibilidad registrada', color: AppColors.button2Color);
     } on UnauthorizedException catch (error) {
       setState(() => _addingAvailability = false);
       _handleUnauthorized(error.message);
     } catch (error) {
       setState(() => _addingAvailability = false);
-      _showSnack(
-        error.toString().replaceFirst('Exception: ', ''),
-      );
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -616,16 +789,11 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         _availability =
             _availability.where((element) => element.id != slot.id).toList();
       });
-      _showSnack(
-        'Disponibilidad eliminada',
-        color: AppColors.text3Color,
-      );
+      _showSnack('Disponibilidad eliminada', color: AppColors.text3Color);
     } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
     } catch (error) {
-      _showSnack(
-        error.toString().replaceFirst('Exception: ', ''),
-      );
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -639,7 +807,16 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
       _showSnack('Ingresa el nombre comercial del estudio.');
       return;
     }
-
+    final direccionCodigo = _lawFirmDistritoCodigo;
+    final direccionExacta = _lawFirmExactAddressController.text.trim();
+    if (direccionCodigo == null || direccionCodigo.isEmpty) {
+      _showSnack('Selecciona el distrito del estudio.');
+      return;
+    }
+    if (direccionExacta.isEmpty) {
+      _showSnack('Ingresa la dirección exacta del estudio.');
+      return;
+    }
     setState(() => _savingLawFirm = true);
     try {
       LawFirmSummary? firm = _selectedLawFirm;
@@ -652,7 +829,8 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
           ciudad: _lawFirmCityController.text.trim(),
           correoContacto: _lawFirmEmailController.text.trim(),
           telefono: _lawFirmPhoneController.text.trim(),
-          direccion: _lawFirmAddressController.text.trim(),
+          direccionUbigeoCodigo: direccionCodigo,
+          lineaExactaDireccion: direccionExacta,       
         );
       }
 
@@ -664,26 +842,43 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         role: _lawFirmRoleController.text.trim().isEmpty
             ? null
             : _lawFirmRoleController.text.trim(),
+        direccionUbigeoCodigo: direccionCodigo,
+        lineaExactaDireccion: direccionExacta,
       );
 
       setState(() {
         _savingLawFirm = false;
         _selectedLawFirm = assignment.estudio;
         _studies = _mergeStudyAssignment(_studies, assignment);
+        final distrito = assignment.estudio.direccionUbigeoCodigo;
+        if (distrito != null && distrito.isNotEmpty) {
+          _lawFirmDistritoCodigo = distrito;
+          _lawFirmProvinciaCodigo =
+              distrito.length >= 4 ? distrito.substring(0, 4) : null;
+          _lawFirmDepartamentoCodigo =
+              distrito.length >= 2 ? distrito.substring(0, 2) : null;
+          _lawFirmExactAddressController.text =
+              (assignment.estudio.lineaExactaDireccion ??
+                      assignment.estudio.direccion ??
+                      direccionExacta)
+                  .trim();
+          if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
+            _loadLawFirmProvincias(
+              _lawFirmDepartamentoCodigo!,
+              preselectProvincia: _lawFirmProvinciaCodigo,
+              preselectDistrito: _lawFirmDistritoCodigo,
+            );
+          }
+        }
       });
 
-      _showSnack(
-        'Estudio actualizado',
-        color: AppColors.button2Color,
-      );
+      _showSnack('Estudio actualizado', color: AppColors.button2Color);
     } on UnauthorizedException catch (error) {
       setState(() => _savingLawFirm = false);
       _handleUnauthorized(error.message);
     } catch (error) {
       setState(() => _savingLawFirm = false);
-      _showSnack(
-        error.toString().replaceFirst('Exception: ', ''),
-      );
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -734,16 +929,11 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
           _clearLawFirmForm();
         }
       });
-      _showSnack(
-        'Estudio eliminado',
-        color: AppColors.text3Color,
-      );
+      _showSnack('Estudio eliminado', color: AppColors.text3Color);
     } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
     } catch (error) {
-      _showSnack(
-        error.toString().replaceFirst('Exception: ', ''),
-      );
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -794,7 +984,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
     if (session == null) return;
 
     final TextEditingController searchController = TextEditingController();
-    List<LawFirmSummary> results = const [];
+    List<LawFirmSummary> results = const <LawFirmSummary>[];
     bool isSearching = false;
 
     final LawFirmSummary? selected = await showDialog<LawFirmSummary>(
@@ -805,7 +995,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
             Future<void> performSearch() async {
               final query = searchController.text.trim();
               if (query.isEmpty) {
-                setState(() => results = const []);
+                setState(() => results = const <LawFirmSummary>[]);
                 return;
               }
               setState(() => isSearching = true);
@@ -823,9 +1013,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
                 _handleUnauthorized(error.message);
               } catch (error) {
                 setState(() => isSearching = false);
-                _showSnack(
-                  error.toString().replaceFirst('Exception: ', ''),
-                );
+                _showSnack(error.toString().replaceFirst('Exception: ', ''));
               }
             }
 
@@ -867,7 +1055,9 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
                           return ListTile(
                             title: Text(item.nombreComercial ?? 'Sin nombre'),
                             subtitle: Text(
-                              [item.ruc, item.ciudad].where((value) => (value?.isNotEmpty ?? false)).join(' • '),
+                              [item.ruc, item.ciudad]
+                                  .where((value) => (value?.isNotEmpty ?? false))
+                                  .join(' • '),
                             ),
                             onTap: () => Navigator.of(context).pop(item),
                           );
@@ -906,8 +1096,32 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         _lawFirmCityController.text = selected.ciudad ?? '';
         _lawFirmEmailController.text = selected.correoContacto ?? '';
         _lawFirmPhoneController.text = selected.telefono ?? '';
-        _lawFirmAddressController.text = selected.direccion ?? '';
+        _lawFirmExactAddressController.text =
+            (selected.lineaExactaDireccion ?? selected.direccion ?? '').trim();
+
+        final distrito = selected.direccionUbigeoCodigo;
+        if (distrito == null || distrito.isEmpty) {
+          _lawFirmDepartamentoCodigo = null;
+          _lawFirmProvinciaCodigo = null;
+          _lawFirmDistritoCodigo = null;
+          _lawFirmProvincias = const <UbigeoOption>[];
+          _lawFirmDistritos = const <UbigeoOption>[];
+        } else {
+          _lawFirmDistritoCodigo = distrito;
+          _lawFirmProvinciaCodigo =
+              distrito.length >= 4 ? distrito.substring(0, 4) : null;
+          _lawFirmDepartamentoCodigo =
+              distrito.length >= 2 ? distrito.substring(0, 2) : null;
+        }
       });
+
+      if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
+        _loadLawFirmProvincias(
+          _lawFirmDepartamentoCodigo!,
+          preselectProvincia: _lawFirmProvinciaCodigo,
+          preselectDistrito: _lawFirmDistritoCodigo,
+        );
+      }
     }
   }
 
@@ -959,6 +1173,108 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
     );
   }
 
+  Widget _buildUbigeoDropdown({
+    required String label,
+    required String? value,
+    required List<UbigeoOption> options,
+    required bool isLoading,
+    required bool enabled,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return DropdownButtonFormField<String>(
+      value: options.any((option) => option.codigo == value) ? value : null,
+      items: options
+          .map(
+            (option) => DropdownMenuItem<String>(
+              value: option.codigo,
+              child: Text(option.nombre),
+            ),
+          )
+          .toList(),
+      onChanged: enabled && !isLoading ? onChanged : null,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        suffixIcon: isLoading
+            ? const Padding(
+                padding: EdgeInsets.all(12.0),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildLawFirmUbigeoFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildUbigeoDropdown(
+          label: 'Departamento del estudio *',
+          value: _lawFirmDepartamentoCodigo,
+          options: _departamentos,
+          isLoading: _loadingDepartamentos,
+          enabled: !_loadingDepartamentos,
+          onChanged: (value) {
+            if (value == null) {
+              setState(() {
+                _lawFirmDepartamentoCodigo = null;
+                _lawFirmProvinciaCodigo = null;
+                _lawFirmDistritoCodigo = null;
+                _lawFirmProvincias = const <UbigeoOption>[];
+                _lawFirmDistritos = const <UbigeoOption>[];
+              });
+            } else {
+              setState(() {
+                _lawFirmDepartamentoCodigo = value;
+              });
+              _loadLawFirmProvincias(value);
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _buildUbigeoDropdown(
+          label: 'Provincia del estudio *',
+          value: _lawFirmProvinciaCodigo,
+          options: _lawFirmProvincias,
+          isLoading: _loadingLawFirmProvincias,
+          enabled: _lawFirmDepartamentoCodigo != null,
+          onChanged: (value) {
+            if (value == null) {
+              setState(() {
+                _lawFirmProvinciaCodigo = null;
+                _lawFirmDistritoCodigo = null;
+                _lawFirmDistritos = const <UbigeoOption>[];
+              });
+            } else {
+              setState(() {
+                _lawFirmProvinciaCodigo = value;
+              });
+              _loadLawFirmDistritos(value);
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _buildUbigeoDropdown(
+          label: 'Distrito del estudio *',
+          value: _lawFirmDistritoCodigo,
+          options: _lawFirmDistritos,
+          isLoading: _loadingLawFirmDistritos,
+          enabled: _lawFirmProvinciaCodigo != null,
+          onChanged: (value) {
+            setState(() {
+              _lawFirmDistritoCodigo = value;
+            });
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildProfileSection() {
     return ShadowCard(
       padding: const EdgeInsets.all(16),
@@ -967,8 +1283,10 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
         children: [
           _buildSectionTitle('Información profesional', icon: Icons.badge),
           const SizedBox(height: 12),
+
           _buildAvatarPicker(!_savingProfile),
           const SizedBox(height: 16),
+
           TextField(
             controller: _baseRateController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -977,13 +1295,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _addressController,
-            decoration: const InputDecoration(
-              labelText: 'Dirección de atención',
-            ),
-          ),
-          const SizedBox(height: 12),
+
           TextField(
             controller: _bioController,
             maxLines: 4,
@@ -1024,9 +1336,7 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
           _buildSectionTitle('Especialidades', icon: Icons.gavel),
           const SizedBox(height: 12),
           if (_catalogSpecialties.isEmpty)
-            const Text(
-              'No hay especialidades registradas en el catálogo.',
-            )
+            const Text('No hay especialidades registradas en el catálogo.')
           else
             Wrap(
               spacing: 8,
@@ -1061,8 +1371,8 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save_alt),
-              label:
-                  Text(_savingSpecialties ? 'Guardando...' : 'Guardar especialidades'),
+              label: Text(
+                  _savingSpecialties ? 'Guardando...' : 'Guardar especialidades'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.buttonColor,
                 foregroundColor: Colors.white,
@@ -1153,7 +1463,8 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.add),
-              label: Text(_addingAvailability ? 'Agregando...' : 'Agregar horario'),
+              label:
+                  Text(_addingAvailability ? 'Agregando...' : 'Agregar horario'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.buttonColor,
                 foregroundColor: Colors.white,
@@ -1197,8 +1508,10 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
                     setState(() {
                       _selectedLawFirm = assignment.estudio;
                       _lawFirmPrincipal = assignment.principal;
-                      _lawFirmRoleController.text = assignment.rolEnEstudio ?? '';
-                      _lawFirmRucController.text = assignment.estudio.ruc ?? '';
+                      _lawFirmRoleController.text =
+                          assignment.rolEnEstudio ?? '';
+                      _lawFirmRucController.text =
+                          assignment.estudio.ruc ?? '';
                       _lawFirmNameController.text =
                           assignment.estudio.nombreComercial ?? '';
                       _lawFirmCountryController.text =
@@ -1209,9 +1522,38 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
                           assignment.estudio.correoContacto ?? '';
                       _lawFirmPhoneController.text =
                           assignment.estudio.telefono ?? '';
-                      _lawFirmAddressController.text =
-                          assignment.estudio.direccion ?? '';
+                      _lawFirmExactAddressController.text =
+                          (assignment.estudio.lineaExactaDireccion ??
+                                  assignment.estudio.direccion ??
+                                  '')
+                              .trim();
+
+                      final distrito =
+                          assignment.estudio.direccionUbigeoCodigo;
+                      if (distrito == null || distrito.isEmpty) {
+                        _lawFirmDepartamentoCodigo = null;
+                        _lawFirmProvinciaCodigo = null;
+                        _lawFirmDistritoCodigo = null;
+                        _lawFirmProvincias = const <UbigeoOption>[];
+                        _lawFirmDistritos = const <UbigeoOption>[];
+                      } else {
+                        _lawFirmDistritoCodigo = distrito;
+                        _lawFirmProvinciaCodigo = distrito.length >= 4
+                            ? distrito.substring(0, 4)
+                            : null;
+                        _lawFirmDepartamentoCodigo = distrito.length >= 2
+                            ? distrito.substring(0, 2)
+                            : null;
+                      }
                     });
+                    if (_departamentos.isNotEmpty &&
+                        _lawFirmDepartamentoCodigo != null) {
+                      _loadLawFirmProvincias(
+                        _lawFirmDepartamentoCodigo!,
+                        preselectProvincia: _lawFirmProvinciaCodigo,
+                        preselectDistrito: _lawFirmDistritoCodigo,
+                      );
+                    }
                   },
                 );
               }).toList(),
@@ -1261,22 +1603,28 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
             decoration: const InputDecoration(labelText: 'Ciudad'),
           ),
           const SizedBox(height: 12),
+          _buildLawFirmUbigeoFields(),
+          const SizedBox(height: 12),
           TextField(
-            controller: _lawFirmAddressController,
-            decoration: const InputDecoration(labelText: 'Dirección'),
+            controller: _lawFirmExactAddressController,
+            enabled:
+                _lawFirmDistritoCodigo != null && !_loadingLawFirmDistritos,
+            decoration: const InputDecoration(
+                labelText: 'Dirección exacta del estudio *'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _lawFirmEmailController,
             keyboardType: TextInputType.emailAddress,
-            decoration:
-                const InputDecoration(labelText: 'Correo de contacto (opcional)'),
+            decoration: const InputDecoration(
+                labelText: 'Correo de contacto (opcional)'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _lawFirmPhoneController,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Teléfono (opcional)'),
+            decoration:
+                const InputDecoration(labelText: 'Teléfono (opcional)'),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -1295,7 +1643,12 @@ void _showAvatarViewer(ImageProvider<Object> provider) {
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
-              onPressed: _savingLawFirm ? null : _saveLawFirm,
+              onPressed: (_savingLawFirm ||
+                      _loadingDepartamentos ||
+                      _loadingLawFirmProvincias ||
+                      _loadingLawFirmDistritos)
+                  ? null
+                  : _saveLawFirm,
               icon: _savingLawFirm
                   ? const SizedBox(
                       width: 16,

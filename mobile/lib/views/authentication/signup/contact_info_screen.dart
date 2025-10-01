@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../constants/colors.dart';
 import '../../../widgets/custombtn.dart';
 import '../../../services/api_client.dart';
+import '../../../models/ubigeo_option.dart';
 import 'security_screen.dart';
 
 class ContactInfoScreen extends StatefulWidget {
@@ -23,31 +24,104 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _direccionController = TextEditingController();
-  List<Map<String, dynamic>> _especialidades = [];
-  int? _selectedEspecialidadId;
-  String? _selectedEspecialidadNombre;
-  bool _loadingEspecialidades = false;
+  final TextEditingController _direccionExactaController =
+      TextEditingController();
+
+  List<UbigeoOption> _departamentos = const <UbigeoOption>[];
+  List<UbigeoOption> _provincias = const <UbigeoOption>[];
+  List<UbigeoOption> _distritos = const <UbigeoOption>[];
+
+  String? _selectedDepartamentoCodigo;
+  String? _selectedProvinciaCodigo;
+  String? _selectedDistritoCodigo;
+
+  bool _loadingDepartamentos = false;
+  bool _loadingProvincias = false;
+  bool _loadingDistritos = false;
 
 
   @override
   void initState() {
     super.initState();
-    if (widget.userType == 'abogado') {
-      _fetchEspecialidades();
+    _loadDepartamentos();
+  }
+
+  bool get _isLoadingUbigeo =>
+      _loadingDepartamentos || _loadingProvincias || _loadingDistritos;
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  Future<void> _loadDepartamentos() async {
+    setState(() => _loadingDepartamentos = true);
+    try {
+      final options = await ApiClient.fetchDepartamentos();
+      if (!mounted) return;
+      setState(() {
+        _departamentos = options;
+      });
+    } catch (error) {
+      _showSnack('No se pudieron cargar los departamentos.');
+    } finally {
+      if (mounted) {
+        setState(() => _loadingDepartamentos = false);
+      }
     }
   }
 
-  Future<void> _fetchEspecialidades() async {
-    setState(() => _loadingEspecialidades = true);
+   Future<void> _loadProvincias(String departamentoCodigo) async {
+    setState(() {
+      _loadingProvincias = true;
+      _provincias = const <UbigeoOption>[];
+      _distritos = const <UbigeoOption>[];
+      _selectedProvinciaCodigo = null;
+      _selectedDistritoCodigo = null;
+    });
     try {
-      final data = await ApiClient.fetchEspecialidades();
-      setState(() => _especialidades = data);
-    } catch (_) {
-      // ignore error
+      final options = await ApiClient.fetchProvincias(departamentoCodigo);
+      if (!mounted) return;
+      setState(() {
+        _provincias = options;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _selectedDepartamentoCodigo = null;
+      });
+      _showSnack('No se pudieron cargar las provincias.');
     } finally {
-      setState(() => _loadingEspecialidades = false);
+      if (mounted) {
+        setState(() => _loadingProvincias = false);
+      }
     }
+  }
+
+  Future<void> _loadDistritos(String provinciaCodigo) async {
+    setState(() {
+      _loadingDistritos = true;
+      _distritos = const <UbigeoOption>[];
+      _selectedDistritoCodigo = null;
+    });
+    try {
+      final options = await ApiClient.fetchDistritos(provinciaCodigo);
+      if (!mounted) return;
+      setState(() {
+        _distritos = options;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _selectedProvinciaCodigo = null;
+      });
+      _showSnack('No se pudieron cargar los distritos.');
+    } finally {
+      if (mounted) {
+        setState(() => _loadingDistritos = false);
+      }    }
   }
   Widget _buildCustomTextField({
     required TextEditingController controller,
@@ -55,6 +129,8 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     int? maxLength,
+    bool enabled = true,
+
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -63,6 +139,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
         maxLength: maxLength,
+        enabled: enabled,
         decoration: InputDecoration(
           labelText: label,
           border: OutlineInputBorder(
@@ -85,89 +162,30 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     );
   }
 
-  void _nextStep() {
-    if (_validateFields()) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => SecurityScreen(
-            userType: widget.userType,
-            personalInfo: widget.personalInfo,
-            contactInfo: {
-              'dni': _dniController.text,
-              'phone': _phoneController.text,
-              'email': _emailController.text,
-              'direccion': _direccionController.text,
-              'especialidadId': widget.userType == 'abogado'
-                  ? (_selectedEspecialidadId?.toString() ?? '')
-                  : '',
-              'especialidadNombre': widget.userType == 'abogado'
-                  ? (_selectedEspecialidadNombre ?? '')
-                  : '',
-            },
-          ),
-        ),
-      );
-    }
-  }
-
-  bool _validateFields() {
-    if (_dniController.text.isEmpty ||
-        _phoneController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _direccionController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor completa todos los campos obligatorios'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return false;
-    }
-
-        if (widget.userType == 'abogado' && _selectedEspecialidadId == null) {     
-        ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor selecciona tu especialidad legal'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return false;
-    }
-
-    return true;
-  }
-
-  @override
-  void dispose() {
-    _dniController.dispose();
-    _phoneController.dispose();
-    _emailController.dispose();
-    _direccionController.dispose();
-    super.dispose();
-  }
-  Widget _buildEspecialidadDropdown() {
-    if (_loadingEspecialidades) {
-      return const Center(child: CircularProgressIndicator());
-    }
+   Widget _buildUbigeoDropdown({
+    required String label,
+    required String? value,
+    required List<UbigeoOption> options,
+    required bool isLoading,
+    required ValueChanged<String?> onChanged,
+    bool enabled = true,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
-      child: DropdownButtonFormField<int>(
-        value: _selectedEspecialidadId,
-        items: _especialidades
-            .map<DropdownMenuItem<int>>((e) => DropdownMenuItem<int>(
-                  value: e['id'] as int,
-                  child: Text(e['nombre'] as String),
-                ))
+      child: DropdownButtonFormField<String>(
+        value: options.any((option) => option.codigo == value) ? value : null,
+        items: options
+            .map(
+              (option) => DropdownMenuItem<String>(
+                value: option.codigo,
+                child: Text(option.nombre),
+              ),
+            )
             .toList(),
-          onChanged: (value) => setState(() {
-              _selectedEspecialidadId = value;
-              _selectedEspecialidadNombre =
-                  _especialidades.firstWhere((e) => e['id'] == value)['nombre']
-                      as String;
-            }),
-          decoration: InputDecoration(
-          labelText: 'Especialidad',
+        onChanged: !enabled || isLoading ? null : onChanged,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: label,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -183,11 +201,72 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
           filled: true,
           fillColor: Colors.grey.shade50,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          suffixIcon: isLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : null,
         ),
       ),
     );
   }
+  
+  void _nextStep() {
+    if (_validateFields()) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SecurityScreen(
+            userType: widget.userType,
+            personalInfo: widget.personalInfo,
+            contactInfo: {
+              'dni': _dniController.text,
+              'phone': _phoneController.text,
+              'email': _emailController.text,
+              'ubigeoCodigo': _selectedDistritoCodigo ?? '',
+              'lineaExactaDireccion': _direccionExactaController.text.trim(),
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  bool _validateFields() {
+    if (_dniController.text.isEmpty ||
+        _phoneController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _selectedDepartamentoCodigo == null ||
+        _selectedProvinciaCodigo == null ||
+        _selectedDistritoCodigo == null ||
+        _direccionExactaController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor completa todos los campos obligatorios'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  @override
+  void dispose() {
+    _dniController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _direccionExactaController.dispose();
+    super.dispose();
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -283,48 +362,6 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                 
                 const SizedBox(height: 40),
                 
-                // Especialidad solo para abogados
-                if (widget.userType == 'abogado') ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.2),
-                          spreadRadius: 1,
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.work, color: AppColors.buttonColor, size: 24),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Información Profesional',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.buttonColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildEspecialidadDropdown(),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                ],
-                
                 // Información de Contacto
                 Container(
                   width: double.infinity,
@@ -391,10 +428,72 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         keyboardType: TextInputType.emailAddress,
                       ),
                       
-                      // Dirección
+                      // Departamento
+                      _buildUbigeoDropdown(
+                        label: 'Departamento *',
+                        value: _selectedDepartamentoCodigo,
+                        options: _departamentos,
+                        isLoading: _loadingDepartamentos,
+                        onChanged: (value) {
+                          if (value == null) {
+                            setState(() {
+                              _selectedDepartamentoCodigo = null;
+                              _provincias = const <UbigeoOption>[];
+                              _distritos = const <UbigeoOption>[];
+                              _selectedProvinciaCodigo = null;
+                              _selectedDistritoCodigo = null;
+                            });
+                          } else {
+                            setState(() {
+                              _selectedDepartamentoCodigo = value;
+                            });
+                            _loadProvincias(value);
+                          }
+                        },
+                      ),
+
+                      // Provincia
+                      _buildUbigeoDropdown(
+                        label: 'Provincia *',
+                        value: _selectedProvinciaCodigo,
+                        options: _provincias,
+                        isLoading: _loadingProvincias,
+                        enabled: _selectedDepartamentoCodigo != null,
+                        onChanged: (value) {
+                          if (value == null) {
+                            setState(() {
+                              _selectedProvinciaCodigo = null;
+                              _distritos = const <UbigeoOption>[];
+                              _selectedDistritoCodigo = null;
+                            });
+                          } else {
+                            setState(() {
+                              _selectedProvinciaCodigo = value;
+                            });
+                            _loadDistritos(value);
+                          }
+                        },
+                      ),
+
+                      // Distrito
+                      _buildUbigeoDropdown(
+                        label: 'Distrito *',
+                        value: _selectedDistritoCodigo,
+                        options: _distritos,
+                        isLoading: _loadingDistritos,
+                        enabled: _selectedProvinciaCodigo != null,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedDistritoCodigo = value;
+                          });
+                        },
+                      ),
+
+                      // Dirección exacta
                       _buildCustomTextField(
-                        controller: _direccionController,
-                        label: 'Dirección *',
+                        controller: _direccionExactaController,
+                        label: 'Dirección exacta *',
+                        enabled: _selectedDistritoCodigo != null,
                       ),
                     ],
                   ),
@@ -407,8 +506,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                   width: double.infinity,
                   height: 55,
                   child: CustomButton(
-                    text: 'Siguiente',
-                    onTap: _nextStep,
+                     text: _isLoadingUbigeo ? 'Cargando ubicaciones...' : 'Siguiente',
+                    onTap: _isLoadingUbigeo ? null : _nextStep,
+                    color: _isLoadingUbigeo
+                        ? Colors.grey.shade400
+                        : AppColors.buttonColor,
                   ),
                 ),
                 

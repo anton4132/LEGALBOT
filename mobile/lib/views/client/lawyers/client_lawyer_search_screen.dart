@@ -23,10 +23,12 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
   List<LawyerSearchResult> _results = const [];
   bool _loadingFilters = true;
   bool _loadingResults = false;
+  bool _hasAttemptedSearch = false;
   String? _errorMessage;
   int? _selectedSpecialtyId;
-  String? _selectedCountry;
-  String? _selectedCity;
+   LawyerLocationOption? _selectedDepartamento;
+  LawyerLocationProvince? _selectedProvincia;
+  LawyerLocationDistrict? _selectedDistrito;
 
   @override
   void initState() {
@@ -49,8 +51,19 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
       ]);
       if (!mounted) return;
       setState(() {
-        _specialties = results[0] as List<LawyerSpecialty>;
-        _locations = results[1] as List<LawyerLocationOption>;
+         final specialties = results[0] as List<LawyerSpecialty>;
+        final locationsResult = List<LawyerLocationOption>.from(
+          results[1] as List<LawyerLocationOption>,
+        )
+          ..sort((a, b) => a.key.compareTo(b.key));
+        _specialties = specialties;
+        _locations = List.unmodifiable(locationsResult);
+        _selectedDepartamento = null;
+        _selectedProvincia = null;
+        _selectedDistrito = null;
+        _selectedSpecialtyId = null;
+        _results = const [];
+        _hasAttemptedSearch = false;
         _loadingFilters = false;
       });
     } on UnauthorizedException catch (error) {
@@ -65,18 +78,32 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
   }
 
   Future<void> _searchLawyers() async {
+     final specialtyId = _selectedSpecialtyId;
+    final departamento = _selectedDepartamento?.departamento;
+    final provincia = _selectedProvincia?.provincia;
+    final distrito = _selectedDistrito?.distrito;
+
+    if (specialtyId == null ||
+        departamento == null ||
+        provincia == null ||
+        distrito == null) {
+      return;
+    }
     final token = SessionService.instance.session?.token;
     setState(() {
       _loadingResults = true;
       _errorMessage = null;
+      _hasAttemptedSearch = true;
+
     });
 
     try {
       final results = await ApiClient.searchLawyers(
         token: token,
-        specialtyId: _selectedSpecialtyId,
-        country: _selectedCountry,
-        city: _selectedCity,
+        specialtyId: specialtyId,
+        departamento: departamento,
+        provincia: provincia,
+        distrito: distrito,
       );
       if (!mounted) return;
       setState(() {
@@ -89,51 +116,36 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
       if (!mounted) return;
       setState(() {
         _loadingResults = false;
+        _hasAttemptedSearch = true;
         _errorMessage = 'Error realizando la búsqueda: ${error.toString()}';
       });
       _showSnackBar('No se pudo completar la búsqueda. Inténtalo nuevamente.');
     }
   }
 
-  List<String?> get _uniqueCountries {
-    final set = <String?>{null};
-    for (final location in _locations) {
-      final country = location.pais?.trim();
-      if (country != null && country.isNotEmpty) {
-        set.add(country);
-      }
-    }
-    final sorted = set.toList();
-    sorted.sort((a, b) {
-      final textA = (a ?? '').toLowerCase();
-      final textB = (b ?? '').toLowerCase();
-      return textA.compareTo(textB);
-    });
-    return sorted;
+  List<LawyerLocationOption> get _departamentosOrdenados {
+    final list = _locations.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return list;
   }
 
-  List<String?> get _filteredCities {
-    if (_selectedCountry == null || _selectedCountry!.isEmpty) {
-      return const [null];
+   List<LawyerLocationProvince> get _provinciasDisponibles {
+    final seleccionado = _selectedDepartamento;
+    if (seleccionado == null) {
+      return const [];
     }
-    final cities = <String?>{null};
-    for (final location in _locations) {
-      if ((location.pais ?? '').toLowerCase() ==
-          _selectedCountry!.toLowerCase()) {
-        final city = location.ciudad?.trim();
-        if (city != null && city.isNotEmpty) {
-          cities.add(city);
-        }
-      }
-    }
-    final sorted = cities.toList();
-    sorted.sort((a, b) {
-      final textA = (a ?? '').toLowerCase();
-      final textB = (b ?? '').toLowerCase();
-      return textA.compareTo(textB);
-    });
-    return sorted;
+    return seleccionado.sortedProvinces;
   }
+
+  List<LawyerLocationDistrict> get _distritosDisponibles {
+    final provincia = _selectedProvincia;
+    if (provincia == null) {
+      return const [];
+
+     }
+    return provincia.sortedDistricts;
+
+    }
 
   void _handleUnauthorized(String? message) {
     SessionService.instance.clear();
@@ -163,8 +175,20 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final countries = _uniqueCountries;
-    final cities = _filteredCities;
+     final departamentos = _departamentosOrdenados
+        .where((option) => option.departamento.isNotEmpty)
+        .toList();
+    final provincias = _provinciasDisponibles
+        .where((province) => province.provincia.isNotEmpty)
+        .toList();
+    final distritos = _distritosDisponibles
+        .where((district) => district.distrito.isNotEmpty)
+        .toList();
+    final canSearch = !_loadingResults &&
+        _selectedSpecialtyId != null &&
+        _selectedDepartamento != null &&
+        _selectedProvincia != null &&
+        _selectedDistrito != null;
 
     return Scaffold(
       appBar: const CustomAppBar(title: 'Buscar Abogados'),
@@ -191,81 +215,111 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                       key: _formKey,
                       child: Column(
                         children: [
-                          DropdownButtonFormField<int?>(
+                          DropdownButtonFormField<int>(
                             value: _selectedSpecialtyId,
                             decoration: const InputDecoration(
                               labelText: 'Especialidad',
                               border: OutlineInputBorder(),
                             ),
-                            items: [
-                              const DropdownMenuItem<int?>(
-                                value: null,
-                                child: Text('Todas las especialidades'),
-                              ),
-                              ..._specialties.map(
-                                (specialty) => DropdownMenuItem<int?>(
-                                  value: specialty.id,
-                                  child: Text(specialty.nombre),
-                                ),
-                              ),
-                            ],
+                             hint: const Text('Selecciona una especialidad'),
+                            menuMaxHeight: 260,
+                            items: _specialties
+                                .map(
+                                  (specialty) => DropdownMenuItem<int>(
+                                    value: specialty.id,
+                                    child: Text(specialty.nombre),
+                                  ),
+                                )
+                                .toList(),
                             onChanged: (value) {
                               setState(() {
                                 _selectedSpecialtyId = value;
+                                _hasAttemptedSearch = false;
+                                _results = const [];
                               });
                             },
                           ),
                           const SizedBox(height: 12),
-                          DropdownButtonFormField<String?>(
-                            value: _selectedCountry,
+                          DropdownButtonFormField<LawyerLocationOption>(
+                            value: _selectedDepartamento,
                             decoration: const InputDecoration(
-                              labelText: 'País',
+                              labelText: 'Departamento',
                               border: OutlineInputBorder(),
                             ),
-                            items: countries
-                                .map(
-                                  (country) => DropdownMenuItem<String?>(
-                                    value: country,
-                                    child: Text(
-                                      country?.isNotEmpty == true
-                                          ? country!
-                                          : 'Todos los países',
-                                    ),
+                            hint: const Text('Selecciona un departamento'),
+                            menuMaxHeight: 260,
+                            items: departamentos
+                              .map(
+                                  (option) => DropdownMenuItem<LawyerLocationOption>(
+                                    value: option,
+                                    child: Text(option.departamento),
+
                                   ),
                                 )
                                 .toList(),
                             onChanged: (value) {
                               setState(() {
-                                _selectedCountry = value;
-                                _selectedCity = null;
+                                 _selectedDepartamento = value;
+                                _selectedProvincia = null;
+                                _selectedDistrito = null;
+                                _results = const [];
+                                _hasAttemptedSearch = false;
                               });
                             },
                           ),
                           const SizedBox(height: 12),
-                          DropdownButtonFormField<String?>(
-                            value: _selectedCity,
+                          DropdownButtonFormField<LawyerLocationProvince>(
+                            value: _selectedProvincia,
                             decoration: const InputDecoration(
-                              labelText: 'Ciudad',
+                              labelText: 'Provincia',
                               border: OutlineInputBorder(),
                             ),
-                            items: cities
-                                .map(
-                                  (city) => DropdownMenuItem<String?>(
-                                    value: city,
-                                    child: Text(
-                                      city?.isNotEmpty == true
-                                          ? city!
-                                          : 'Todas las ciudades',
-                                    ),
+                            hint: const Text('Selecciona una provincia'),
+                            menuMaxHeight: 260,
+                            items: provincias                                
+                            .map(
+                                  (province) => DropdownMenuItem<LawyerLocationProvince>(
+                                    value: province,
+                                    child: Text(province.provincia),
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (_selectedCountry == null ||
-                                    _selectedCountry!.isEmpty)
+                                onChanged: _selectedDepartamento == null
+
                                 ? null
                                 : (value) {
                                     setState(() {
-                                      _selectedCity = value;
+                                       _selectedProvincia = value;
+                                      _selectedDistrito = null;
+                                      _results = const [];
+                                      _hasAttemptedSearch = false;
+                                    });
+                                  },
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<LawyerLocationDistrict>(
+                            value: _selectedDistrito,
+                            decoration: const InputDecoration(
+                              labelText: 'Distrito',
+                              border: OutlineInputBorder(),
+                            ),
+                            hint: const Text('Selecciona un distrito'),
+                            menuMaxHeight: 260,
+                            items: distritos
+                                .map(
+                                  (district) => DropdownMenuItem<LawyerLocationDistrict>(
+                                    value: district,
+                                    child: Text(district.distrito),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: _selectedProvincia == null
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      _selectedDistrito = value;
+                                      _results = const [];
+                                      _hasAttemptedSearch = false;
                                     });
                                   },
                           ),
@@ -273,7 +327,7 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: _loadingResults ? null : _searchLawyers,
+                              onPressed: canSearch ? _searchLawyers : null,
                               icon: const Icon(Icons.search),
                               label: Text(
                                 _loadingResults ? 'Buscando...' : 'Buscar',
@@ -298,6 +352,14 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
     if (_loadingResults) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (!_hasAttemptedSearch) {
+      return const Center(
+        child: Text(
+          'Selecciona una especialidad y completa la ubicación para iniciar la búsqueda.',
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
 
     if (_results.isEmpty) {
       return const Center(
@@ -314,11 +376,18 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
       itemBuilder: (context, index) {
         final result = _results[index];
         final avatarProvider = result.avatarImageProvider;
-        final locationLabel = result.estudioPrincipal != null
-            ? result.estudioPrincipal!.ciudad != null &&
-                    result.estudioPrincipal!.ciudad!.isNotEmpty
-                ? '${result.estudioPrincipal!.ciudad!}${result.estudioPrincipal!.pais != null && result.estudioPrincipal!.pais!.isNotEmpty ? ', ' + result.estudioPrincipal!.pais! : ''}'
-                : (result.estudioPrincipal!.pais ?? 'Ubicación no disponible')
+        final estudio = result.estudioPrincipal;
+        final locationParts = <String?>[
+          estudio?.distrito,
+          estudio?.provincia,
+          estudio?.departamento,
+        ]
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
+        final locationLabel = locationParts.isNotEmpty
+            ? locationParts.join(', ')
             : 'Ubicación no disponible';
 
         return Card(
