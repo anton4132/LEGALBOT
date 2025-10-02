@@ -8,32 +8,29 @@ const DEFAULT_BLOB_PUBLIC_BASE_URL = BLOB_BASE_URL;
 
 const DEFAULT_BLOB_RW_TOKEN = 'vercel_blob_rw_w2ZXDcCJ4vCxIR4r_IXP5uJAzwiSiY17yZ2uUbMrIUdVx5H';
 
-const resolveBlobToken = () =>
-  process.env.BLOB_READ_WRITE_TOKEN
-  || process.env.VERCEL_BLOB_RW_TOKEN
-  || DEFAULT_BLOB_RW_TOKEN;
-  const resolveBlobPublicBaseUrl = () => {
-    const configured = process.env.BLOB_PUBLIC_BASE_URL
-      || process.env.VERCEL_BLOB_PUBLIC_BASE_URL
-      || process.env.VERCEL_BLOB_PUBLIC_URL;
-    if (configured) {
-      return configured.replace(/\/$/, '');
-    }
-    return DEFAULT_BLOB_PUBLIC_BASE_URL;
-  };
-  
-  function resolveBlobPublicUrl(pathOrUrl) {
-    const sanitized = sanitizeString(pathOrUrl);
-    if (!sanitized) return null;
-    if (sanitized.startsWith('http://') || sanitized.startsWith('https://')) {
-      return sanitized;
-    }
-    const normalizedPath = sanitized.startsWith('/')
-      ? sanitized
-      : `/${sanitized}`;
-    const base = resolveBlobPublicBaseUrl();
-    return `${base}${normalizedPath}`;
+const resolveBlobPublicBaseUrl = () => {
+  const configured = process.env.BLOB_PUBLIC_BASE_URL
+    || process.env.VERCEL_BLOB_PUBLIC_BASE_URL
+    || process.env.VERCEL_BLOB_PUBLIC_URL;
+  if (configured) {
+    return configured.replace(/\/$/, '');  
+}
+return DEFAULT_BLOB_PUBLIC_BASE_URL;
+};
+
+function resolveBlobPublicUrl(pathOrUrl) {
+  const sanitized = sanitizeString(pathOrUrl);
+  if (!sanitized) return null;
+  if (sanitized.startsWith('http://') || sanitized.startsWith('https://')) {
+    return sanitized;
   }
+  const normalizedPath = sanitized.startsWith('/')
+    ? sanitized
+    : `/${sanitized}`;
+  const base = resolveBlobPublicBaseUrl();
+  return `${base}${normalizedPath}`;
+}
+
 function createHttpError(statusCode, message, code) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -666,14 +663,10 @@ const listLawyerLocations = async (_req, res) => {
         },
         direccion: {
           is: {
-            AND: [
-              { departamento: { not: null } },
-              { departamento: { not: '' } },
-              { provincia: { not: null } },
-              { provincia: { not: '' } },
-              { distrito: { not: null } },
-              { distrito: { not: '' } },
-            ],
+            departamento: { not: '' },
+            provincia: { not: '' },
+            distrito: { not: '' },
+
           },
         },
       },
@@ -697,7 +690,7 @@ const listLawyerLocations = async (_req, res) => {
       .join('|');
 
       estudios.forEach(({ direccion }) => {
-        const departamento = sanitizeString(direccion?.departamento);
+      const departamento = sanitizeString(direccion?.departamento);
       const provincia = sanitizeString(direccion?.provincia);
       const distrito = sanitizeString(direccion?.distrito);
       const ubigeoCodigo = sanitizeString(direccion?.ubigeo_codigo);
@@ -767,7 +760,7 @@ const listLawyerLocations = async (_req, res) => {
           undefined,
           { sensitivity: 'base' },
         ));
-          return {
+      return {
           departamento: departamentoEntry.departamento,
           departamento_codigo: departamentoEntry.departamento_codigo,
           provincias,
