@@ -123,8 +123,11 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
   }
 
   List<LawyerLocationOption> get _departamentosOrdenados {
-    final list = _locations.toList()..sort((a, b) => a.key.compareTo(b.key));
-    return list;
+    final list = _locations
+        .where((option) => option.hasNombre && option.provincias.isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+      return list;
   }
 
   List<LawyerLocationProvince> get _provinciasDisponibles {
@@ -132,16 +135,20 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
     if (seleccionado == null) {
       return const [];
     }
-    return seleccionado.sortedProvinces;
-  }
+   return seleccionado.sortedProvinces
+        .where((province) => province.hasNombre && province.distritos.isNotEmpty)
+        .toList();
+    }
 
   List<LawyerLocationDistrict> get _distritosDisponibles {
     final provincia = _selectedProvincia;
     if (provincia == null) {
       return const [];
     }
-    return provincia.sortedDistricts;
-  }
+    return provincia.sortedDistricts
+        .where((district) => district.hasNombre)
+        .toList();
+      }
 
   void _handleUnauthorized(String? message) {
     SessionService.instance.clear();
@@ -171,18 +178,9 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final departamentos =
-        _departamentosOrdenados
-            .where((option) => option.departamento.isNotEmpty)
-            .toList();
-    final provincias =
-        _provinciasDisponibles
-            .where((province) => province.provincia.isNotEmpty)
-            .toList();
-    final distritos =
-        _distritosDisponibles
-            .where((district) => district.distrito.isNotEmpty)
-            .toList();
+    final departamentos = _departamentosOrdenados;
+    final provincias = _provinciasDisponibles;
+    final distritos = _distritosDisponibles;
     final canSearch =
         !_loadingResults &&
         _selectedSpecialtyId != null &&
@@ -224,15 +222,14 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                               ),
                               hint: const Text('Selecciona una especialidad'),
                               menuMaxHeight: 260,
-                              items:
-                                  _specialties
-                                      .map(
-                                        (specialty) => DropdownMenuItem<int>(
-                                          value: specialty.id,
-                                          child: Text(specialty.nombre),
-                                        ),
-                                      )
-                                      .toList(),
+                              items: _specialties
+                                  .map(
+                                    (specialty) => DropdownMenuItem<int>(
+                                      value: specialty.id,
+                                      child: Text(specialty.nombre),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: (value) {
                                 setState(() {
                                   _selectedSpecialtyId = value;
@@ -250,17 +247,16 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                               ),
                               hint: const Text('Selecciona un departamento'),
                               menuMaxHeight: 260,
-                              items:
-                                  departamentos
-                                      .map(
-                                        (option) => DropdownMenuItem<
-                                          LawyerLocationOption
-                                        >(
-                                          value: option,
-                                          child: Text(option.departamento),
-                                        ),
-                                      )
-                                      .toList(),
+                              items: departamentos
+                                  .map(
+                                    (option) => DropdownMenuItem<
+                                      LawyerLocationOption
+                                    >(
+                                      value: option,
+                                      child: Text(option.departamento),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: (value) {
                                 setState(() {
                                   _selectedDepartamento = value;
@@ -280,18 +276,17 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                               ),
                               hint: const Text('Selecciona una provincia'),
                               menuMaxHeight: 260,
-                              items:
-                                  provincias
-                                      .map(
-                                        (province) => DropdownMenuItem<
-                                          LawyerLocationProvince
-                                        >(
-                                          value: province,
-                                          child: Text(province.provincia),
-                                        ),
-                                      )
-                                      .toList(),
-                              onChanged:
+                               items: provincias
+                                  .map(
+                                    (province) => DropdownMenuItem<
+                                      LawyerLocationProvince
+                                    >(
+                                      value: province,
+                                      child: Text(province.provincia),
+                                    ),
+                                  )
+                                  .toList(),
+                                  onChanged:
                                   _selectedDepartamento == null
                                       ? null
                                       : (value) {
@@ -312,17 +307,17 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                               ),
                               hint: const Text('Selecciona un distrito'),
                               menuMaxHeight: 260,
-                              items:
-                                  distritos
-                                      .map(
-                                        (district) => DropdownMenuItem<
-                                          LawyerLocationDistrict
-                                        >(
-                                          value: district,
-                                          child: Text(district.distrito),
-                                        ),
-                                      )
-                                      .toList(),
+                               items: distritos
+                                  .map(
+                                    (district) => DropdownMenuItem<
+                                      LawyerLocationDistrict
+                                    >(
+                                      value: district,
+                                      child: Text(district.distrito),
+                                    ),
+                                  )
+                                  .toList(),
+
                               onChanged:
                                   _selectedProvincia == null
                                       ? null

@@ -496,16 +496,37 @@ class ApiClient {
       } else {
         rows = const [];
       }
-final options = rows
+      final options = rows
           .map(LawyerLocationOption.fromJson)
-          .where(
-            (option) =>
-                option.departamento.isNotEmpty && option.provincias.isNotEmpty,
-          )
+          .where((option) => option.hasNombre && option.provincias.isNotEmpty)
+          .map((option) {
+            final filteredProvinces = option.provincias
+                .where((province) =>
+                    province.hasNombre && province.distritos.isNotEmpty)
+                .map((province) {
+              final filteredDistricts = province.distritos
+                  .where((district) => district.hasNombre)
+                  .toList()
+                ..sort((a, b) => a.key.compareTo(b.key));
+              return LawyerLocationProvince(
+                provincia: province.provincia,
+                codigo: province.codigo,
+                distritos: List.unmodifiable(filteredDistricts),
+              );
+            }).toList()
+              ..sort((a, b) => a.key.compareTo(b.key));
+
+            return LawyerLocationOption(
+              departamento: option.departamento,
+              codigo: option.codigo,
+              provincias: List.unmodifiable(filteredProvinces),
+            );
+          })
+          .where((option) => option.provincias.isNotEmpty)
           .toList()
         ..sort((a, b) => a.key.compareTo(b.key));
-      return List.unmodifiable(options);    }
-
+      return List.unmodifiable(options);
+    }
     final data = _asJsonMap(decoded);
     final message =
         data != null && data['message'] is String
@@ -516,7 +537,7 @@ final options = rows
 
   static Future<List<LawyerSearchResult>> searchLawyers({
     String? token,
-   required int specialtyId,
+    required int specialtyId,
     required String departamento,
     required String provincia,
     required String distrito,
@@ -541,7 +562,7 @@ final options = rows
               : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(message);
     }
-     if (response.statusCode == 400) {
+    if (response.statusCode == 400) {
       final data = _asJsonMap(decoded);
       final message =
           data != null && data['message'] is String

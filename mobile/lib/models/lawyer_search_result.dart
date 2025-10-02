@@ -12,6 +12,7 @@ String? _normalizeText(dynamic value) {
   return null;
 }
 
+
 class LawyerLocationDistrict {
   final String distrito;
   final String? codigo;
@@ -24,19 +25,21 @@ class LawyerLocationDistrict {
   });
 
   factory LawyerLocationDistrict.fromJson(Map<String, dynamic> json) {
-    final distrito = _normalizeText(json['distrito']);
     final codigo = _normalizeText(
       json['distrito_codigo'] ?? json['codigo'] ?? json['ubigeo_codigo'],
     );
     final ubigeoCodigo = _normalizeText(
-      json['ubigeo_codigo'] ?? json['ubigeoCodigo'] ?? codigo,
+      json['ubigeo_codigo'] ?? json['ubigeoCodigo'],
     );
+    final distrito = _normalizeText(json['distrito']) ?? '';
+
     return LawyerLocationDistrict(
-      distrito: distrito ?? '',
+      distrito: distrito,
       codigo: codigo,
       ubigeoCodigo: ubigeoCodigo,
     );
   }
+   bool get hasNombre => distrito.isNotEmpty;
 
   String get key => (codigo ?? distrito).toLowerCase();
 }
@@ -53,15 +56,15 @@ class LawyerLocationProvince {
   });
 
   factory LawyerLocationProvince.fromJson(Map<String, dynamic> json) {
-    final provincia = _normalizeText(json['provincia']) ?? '';
     final codigo = _normalizeText(json['provincia_codigo'] ?? json['codigo']);
+    final provincia = _normalizeText(json['provincia']) ?? '';
     final distritosRaw = json['distritos'];
     final distritosList = <LawyerLocationDistrict>[];
     if (distritosRaw is List) {
       for (final entry in distritosRaw) {
         if (entry is Map<String, dynamic>) {
           final distrito = LawyerLocationDistrict.fromJson(entry);
-          if (distrito.distrito.isNotEmpty) {
+          if (distrito.hasNombre) {
             distritosList.add(distrito);
           }
         }
@@ -73,6 +76,7 @@ class LawyerLocationProvince {
       distritos: List.unmodifiable(distritosList),
     );
   }
+  bool get hasNombre => provincia.isNotEmpty;
 
   String get key => (codigo ?? provincia).toLowerCase();
 
@@ -95,17 +99,17 @@ class LawyerLocationOption {
   });
 
   factory LawyerLocationOption.fromJson(Map<String, dynamic> json) {
-    final departamento = _normalizeText(json['departamento']) ?? '';
     final codigo = _normalizeText(
       json['departamento_codigo'] ?? json['codigo'],
     );
+    final departamento = _normalizeText(json['departamento']) ?? '';
     final provinciasRaw = json['provincias'];
     final provinciasList = <LawyerLocationProvince>[];
     if (provinciasRaw is List) {
       for (final entry in provinciasRaw) {
         if (entry is Map<String, dynamic>) {
           final province = LawyerLocationProvince.fromJson(entry);
-          if (province.provincia.isNotEmpty && province.distritos.isNotEmpty) {
+ if (province.hasNombre && province.distritos.isNotEmpty) {
             provinciasList.add(province);
           }
         }
@@ -117,6 +121,8 @@ class LawyerLocationOption {
       provincias: List.unmodifiable(provinciasList),
     );
   }
+    bool get hasNombre => departamento.isNotEmpty;
+
   String get key => (codigo ?? departamento).toLowerCase();
   List<LawyerLocationProvince> get sortedProvinces {
     final list = provincias.toList()
