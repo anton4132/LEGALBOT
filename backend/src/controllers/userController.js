@@ -652,23 +652,40 @@ const getLawyerAvailabilityWithBookings = async (req, res) => {
  */
 const listLawyerLocations = async (_req, res) => {
   try {
-    const direcciones = await prisma.direccion.findMany({
+    const estudios = await prisma.estudio.findMany({
       where: {
-        AND: [
-          { departamento: { not: null } },
-          { departamento: { not: '' } },
-          { provincia: { not: null } },
-          { provincia: { not: '' } },
-          { distrito: { not: null } },
-          { distrito: { not: '' } },
-        ],
-        estudio: { some: { activo: true } },
+        activo: true,
+        abogadoestudios: {
+          some: {
+            activo: true,
+            usuario: {
+              activo: true,
+              role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+            },
+          },
+        },
+        direccion: {
+          is: {
+            AND: [
+              { departamento: { not: null } },
+              { departamento: { not: '' } },
+              { provincia: { not: null } },
+              { provincia: { not: '' } },
+              { distrito: { not: null } },
+              { distrito: { not: '' } },
+            ],
+          },
+        },
       },
       select: {
-        departamento: true,
-        provincia: true,
-        distrito: true,
-        ubigeo_codigo: true,
+        direccion: {
+          select: {
+            departamento: true,
+            provincia: true,
+            distrito: true,
+            ubigeo_codigo: true,
+          },
+        },
       },
     });
 
@@ -679,8 +696,8 @@ const listLawyerLocations = async (_req, res) => {
       .map((part) => part.toString().toLowerCase())
       .join('|');
 
-    direcciones.forEach((direccion) => {
-      const departamento = sanitizeString(direccion?.departamento);
+      estudios.forEach(({ direccion }) => {
+        const departamento = sanitizeString(direccion?.departamento);
       const provincia = sanitizeString(direccion?.provincia);
       const distrito = sanitizeString(direccion?.distrito);
       const ubigeoCodigo = sanitizeString(direccion?.ubigeo_codigo);
@@ -734,23 +751,36 @@ const listLawyerLocations = async (_req, res) => {
       const provincias = Array.from(departamentoEntry.provincias.values())
         .map((provinciaEntry) => {
           const distritos = Array.from(provinciaEntry.distritos.values())
-            .sort((a, b) => (a.distrito || '').localeCompare(b.distrito || '', undefined, { sensitivity: 'base' }));
+            .sort((a, b) => (a.distrito || '').localeCompare(
+              b.distrito || '',
+              undefined,
+              { sensitivity: 'base' },
+            ));
           return {
             provincia: provinciaEntry.provincia,
             provincia_codigo: provinciaEntry.provincia_codigo,
             distritos,
           };
         })
-        .sort((a, b) => (a.provincia || '').localeCompare(b.provincia || '', undefined, { sensitivity: 'base' }));
-        return {
+        .sort((a, b) => (a.provincia || '').localeCompare(
+          b.provincia || '',
+          undefined,
+          { sensitivity: 'base' },
+        ));
+          return {
           departamento: departamentoEntry.departamento,
           departamento_codigo: departamentoEntry.departamento_codigo,
           provincias,
         };
       })
-      .sort((a, b) => (a.departamento || '').localeCompare(b.departamento || '', undefined, { sensitivity: 'base' }));
-      res.json(response);
-    } catch (error) {
+      .sort((a, b) => (a.departamento || '').localeCompare(
+        b.departamento || '',
+        undefined,
+        { sensitivity: 'base' },
+      ));
+
+    res.json(response);
+  } catch (error) {
     console.error('Error listando ubicaciones de abogados:', error);
     res.status(500).json({ message: 'Error obteniendo ubicaciones disponibles' });
   }
