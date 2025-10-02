@@ -695,12 +695,16 @@ const listLawyerLocations = async (_req, res) => {
       
       if (!departamentosMap.has(departamentoKey)) {
         departamentosMap.set(departamentoKey, {
+          departamento,
           departamento_codigo: departamentoCodigo,
           provincias: new Map(),
         });
       }
 
       const departamentoEntry = departamentosMap.get(departamentoKey);
+      if (!departamentoEntry.departamento && departamento) {
+        departamentoEntry.departamento = departamento;
+      }
       const provinciasMap = departamentoEntry.provincias;
 
       const provinciaKey = buildKey(provinciaCodigo, provincia);
