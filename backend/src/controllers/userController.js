@@ -652,38 +652,34 @@ const getLawyerAvailabilityWithBookings = async (req, res) => {
  */
 const listLawyerLocations = async (_req, res) => {
   try {
-    const rows = await prisma.abogadoestudio.findMany({
+    const direcciones = await prisma.direccion.findMany({
       where: {
-        activo: true,
-        usuario: {
-          activo: true,
-          role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
-        },
-        estudio: {
-          activo: true,
-          direccion: { isNot: null },
-        },
+        AND: [
+          { departamento: { not: null } },
+          { departamento: { not: '' } },
+          { provincia: { not: null } },
+          { provincia: { not: '' } },
+          { distrito: { not: null } },
+          { distrito: { not: '' } },
+        ],
+        estudio: { some: { activo: true } },
       },
       select: {
-        estudio: {
-          select: {
-            direccion: {
-              select: {
-                departamento: true,
-                provincia: true,
-                distrito: true,
-                ubigeo_codigo: true,
-              },
-            },
-          },
-        },  
+        departamento: true,
+        provincia: true,
+        distrito: true,
+        ubigeo_codigo: true,
       },
     });
 
     const departamentosMap = new Map();
 
-    rows.forEach((row) => {
-      const direccion = row.estudio?.direccion;
+    const buildKey = (...parts) => parts
+      .filter(Boolean)
+      .map((part) => part.toString().toLowerCase())
+      .join('|');
+
+    direcciones.forEach((direccion) => {
       const departamento = sanitizeString(direccion?.departamento);
       const provincia = sanitizeString(direccion?.provincia);
       const distrito = sanitizeString(direccion?.distrito);
@@ -691,10 +687,15 @@ const listLawyerLocations = async (_req, res) => {
 
       if (!departamento || !provincia || !distrito) return;
 
-      const departamentoKey = departamento.toLowerCase();
+      const departamentoCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 2) : null;
+      const provinciaCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 4) : null;
+      const distritoCodigo = ubigeoCodigo || null;
+
+      const departamentoKey = buildKey(departamentoCodigo, departamento);
+      
       if (!departamentosMap.has(departamentoKey)) {
         departamentosMap.set(departamentoKey, {
-          departamento,
+          departamento_codigo: departamentoCodigo,
           provincias: new Map(),
         });
       }
@@ -702,25 +703,26 @@ const listLawyerLocations = async (_req, res) => {
       const departamentoEntry = departamentosMap.get(departamentoKey);
       const provinciasMap = departamentoEntry.provincias;
 
-      const provinciaKey = provincia.toLowerCase();
+      const provinciaKey = buildKey(provinciaCodigo, provincia);
       if (!provinciasMap.has(provinciaKey)) {
         provinciasMap.set(provinciaKey, {
           provincia,
+          provincia_codigo: provinciaCodigo,
           distritos: new Map(),
         });
       }
 
       const provinciaEntry = provinciasMap.get(provinciaKey);
       const distritosMap = provinciaEntry.distritos;
-      const distritoKey = distrito.toLowerCase();
 
-    if (!distritosMap.has(distritoKey)) {
-      distritosMap.set(distritoKey, {
-        distrito,
-        ubigeo_codigo: ubigeoCodigo || null,
-      });
-    }
-    
+      const distritoKey = buildKey(distritoCodigo, distrito);
+      if (!distritosMap.has(distritoKey)) {
+        distritosMap.set(distritoKey, {
+          distrito,
+          distrito_codigo: distritoCodigo,
+          ubigeo_codigo: ubigeoCodigo || distritoCodigo,
+        });
+      }
     });
 
     const response = Array.from(departamentosMap.values())
@@ -728,22 +730,23 @@ const listLawyerLocations = async (_req, res) => {
       const provincias = Array.from(departamentoEntry.provincias.values())
         .map((provinciaEntry) => {
           const distritos = Array.from(provinciaEntry.distritos.values())
-            .sort((a, b) => a.distrito.toLowerCase().localeCompare(b.distrito.toLowerCase()));
+            .sort((a, b) => (a.distrito || '').localeCompare(b.distrito || '', undefined, { sensitivity: 'base' }));
           return {
             provincia: provinciaEntry.provincia,
+            provincia_codigo: provinciaEntry.provincia_codigo,
             distritos,
           };
         })
-        .sort((a, b) => a.provincia.toLowerCase().localeCompare(b.provincia.toLowerCase()));
-
-      return {
-        departamento: departamentoEntry.departamento,
-        provincias,
-      };
-    })
-    .sort((a, b) => a.departamento.toLowerCase().localeCompare(b.departamento.toLowerCase()));
-
-  res.json(response);  } catch (error) {
+        .sort((a, b) => (a.provincia || '').localeCompare(b.provincia || '', undefined, { sensitivity: 'base' }));
+        return {
+          departamento: departamentoEntry.departamento,
+          departamento_codigo: departamentoEntry.departamento_codigo,
+          provincias,
+        };
+      })
+      .sort((a, b) => (a.departamento || '').localeCompare(b.departamento || '', undefined, { sensitivity: 'base' }));
+      res.json(response);
+    } catch (error) {
     console.error('Error listando ubicaciones de abogados:', error);
     res.status(500).json({ message: 'Error obteniendo ubicaciones disponibles' });
   }

@@ -14,37 +14,47 @@ String? _normalizeText(dynamic value) {
 
 class LawyerLocationDistrict {
   final String distrito;
+  final String? codigo;
   final String? ubigeoCodigo;
 
   const LawyerLocationDistrict({
     required this.distrito,
+    this.codigo,
     this.ubigeoCodigo,
   });
 
   factory LawyerLocationDistrict.fromJson(Map<String, dynamic> json) {
     final distrito = _normalizeText(json['distrito']);
+    final codigo = _normalizeText(
+      json['distrito_codigo'] ?? json['codigo'] ?? json['ubigeo_codigo'],
+    );
+    final ubigeoCodigo = _normalizeText(
+      json['ubigeo_codigo'] ?? json['ubigeoCodigo'] ?? codigo,
+    );
     return LawyerLocationDistrict(
       distrito: distrito ?? '',
-      ubigeoCodigo: _normalizeText(
-        json['ubigeo_codigo'] ?? json['ubigeoCodigo'],
-      ),
+      codigo: codigo,
+      ubigeoCodigo: ubigeoCodigo,
     );
   }
 
-  String get key => distrito.toLowerCase();
+  String get key => (codigo ?? distrito).toLowerCase();
 }
 
 class LawyerLocationProvince {
   final String provincia;
+  final String? codigo;
   final List<LawyerLocationDistrict> distritos;
 
   const LawyerLocationProvince({
     required this.provincia,
+    this.codigo,
     required this.distritos,
   });
 
   factory LawyerLocationProvince.fromJson(Map<String, dynamic> json) {
     final provincia = _normalizeText(json['provincia']) ?? '';
+    final codigo = _normalizeText(json['provincia_codigo'] ?? json['codigo']);
     final distritosRaw = json['distritos'];
     final distritosList = <LawyerLocationDistrict>[];
     if (distritosRaw is List) {
@@ -59,11 +69,12 @@ class LawyerLocationProvince {
     }
     return LawyerLocationProvince(
       provincia: provincia,
+      codigo: codigo,
       distritos: List.unmodifiable(distritosList),
     );
   }
 
-  String get key => provincia.toLowerCase();
+  String get key => (codigo ?? provincia).toLowerCase();
 
   List<LawyerLocationDistrict> get sortedDistricts {
     final list = distritos.toList()
@@ -73,16 +84,21 @@ class LawyerLocationProvince {
 }
 
 class LawyerLocationOption {
-   final String departamento;
+ final String departamento;
+  final String? codigo;
   final List<LawyerLocationProvince> provincias;
 
   const LawyerLocationOption({
-      required this.departamento,
+    required this.departamento,
+    this.codigo,
     required this.provincias,
   });
 
   factory LawyerLocationOption.fromJson(Map<String, dynamic> json) {
     final departamento = _normalizeText(json['departamento']) ?? '';
+    final codigo = _normalizeText(
+      json['departamento_codigo'] ?? json['codigo'],
+    );
     final provinciasRaw = json['provincias'];
     final provinciasList = <LawyerLocationProvince>[];
     if (provinciasRaw is List) {
@@ -97,10 +113,11 @@ class LawyerLocationOption {
     }
     return LawyerLocationOption(
       departamento: departamento,
+      codigo: codigo,
       provincias: List.unmodifiable(provinciasList),
     );
   }
-  String get key => departamento.toLowerCase();
+  String get key => (codigo ?? departamento).toLowerCase();
   List<LawyerLocationProvince> get sortedProvinces {
     final list = provincias.toList()
       ..sort((a, b) => a.key.compareTo(b.key));

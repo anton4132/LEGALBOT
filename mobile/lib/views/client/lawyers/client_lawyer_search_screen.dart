@@ -26,7 +26,7 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
   bool _hasAttemptedSearch = false;
   String? _errorMessage;
   int? _selectedSpecialtyId;
-   LawyerLocationOption? _selectedDepartamento;
+  LawyerLocationOption? _selectedDepartamento;
   LawyerLocationProvince? _selectedProvincia;
   LawyerLocationDistrict? _selectedDistrito;
 
@@ -51,11 +51,10 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
       ]);
       if (!mounted) return;
       setState(() {
-         final specialties = results[0] as List<LawyerSpecialty>;
+        final specialties = results[0] as List<LawyerSpecialty>;
         final locationsResult = List<LawyerLocationOption>.from(
           results[1] as List<LawyerLocationOption>,
-        )
-          ..sort((a, b) => a.key.compareTo(b.key));
+        )..sort((a, b) => a.key.compareTo(b.key));
         _specialties = specialties;
         _locations = List.unmodifiable(locationsResult);
         _selectedDepartamento = null;
@@ -72,13 +71,14 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
       if (!mounted) return;
       setState(() {
         _loadingFilters = false;
-        _errorMessage = 'No se pudieron cargar los filtros: ${error.toString()}';
+        _errorMessage =
+            'No se pudieron cargar los filtros: ${error.toString()}';
       });
     }
   }
 
   Future<void> _searchLawyers() async {
-     final specialtyId = _selectedSpecialtyId;
+    final specialtyId = _selectedSpecialtyId;
     final departamento = _selectedDepartamento?.departamento;
     final provincia = _selectedProvincia?.provincia;
     final distrito = _selectedDistrito?.distrito;
@@ -94,7 +94,6 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
       _loadingResults = true;
       _errorMessage = null;
       _hasAttemptedSearch = true;
-
     });
 
     try {
@@ -124,12 +123,11 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
   }
 
   List<LawyerLocationOption> get _departamentosOrdenados {
-    final list = _locations.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final list = _locations.toList()..sort((a, b) => a.key.compareTo(b.key));
     return list;
   }
 
-   List<LawyerLocationProvince> get _provinciasDisponibles {
+  List<LawyerLocationProvince> get _provinciasDisponibles {
     final seleccionado = _selectedDepartamento;
     if (seleccionado == null) {
       return const [];
@@ -141,11 +139,9 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
     final provincia = _selectedProvincia;
     if (provincia == null) {
       return const [];
-
-     }
-    return provincia.sortedDistricts;
-
     }
+    return provincia.sortedDistricts;
+  }
 
   void _handleUnauthorized(String? message) {
     SessionService.instance.clear();
@@ -168,23 +164,27 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
 
   void _showSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-     final departamentos = _departamentosOrdenados
-        .where((option) => option.departamento.isNotEmpty)
-        .toList();
-    final provincias = _provinciasDisponibles
-        .where((province) => province.provincia.isNotEmpty)
-        .toList();
-    final distritos = _distritosDisponibles
-        .where((district) => district.distrito.isNotEmpty)
-        .toList();
-    final canSearch = !_loadingResults &&
+    final departamentos =
+        _departamentosOrdenados
+            .where((option) => option.departamento.isNotEmpty)
+            .toList();
+    final provincias =
+        _provinciasDisponibles
+            .where((province) => province.provincia.isNotEmpty)
+            .toList();
+    final distritos =
+        _distritosDisponibles
+            .where((district) => district.distrito.isNotEmpty)
+            .toList();
+    final canSearch =
+        !_loadingResults &&
         _selectedSpecialtyId != null &&
         _selectedDepartamento != null &&
         _selectedProvincia != null &&
@@ -193,157 +193,166 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
     return Scaffold(
       appBar: const CustomAppBar(title: 'Buscar Abogados'),
       body: SafeArea(
-        child: _loadingFilters
-            ? const Center(child: CircularProgressIndicator())
-            : Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_errorMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
+        child:
+            _loadingFilters
+                ? const Center(child: CircularProgressIndicator())
+                : Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
-                      ),
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          DropdownButtonFormField<int>(
-                            value: _selectedSpecialtyId,
-                            decoration: const InputDecoration(
-                              labelText: 'Especialidad',
-                              border: OutlineInputBorder(),
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<int>(
+                              value: _selectedSpecialtyId,
+                              decoration: const InputDecoration(
+                                labelText: 'Especialidad',
+                                border: OutlineInputBorder(),
+                              ),
+                              hint: const Text('Selecciona una especialidad'),
+                              menuMaxHeight: 260,
+                              items:
+                                  _specialties
+                                      .map(
+                                        (specialty) => DropdownMenuItem<int>(
+                                          value: specialty.id,
+                                          child: Text(specialty.nombre),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedSpecialtyId = value;
+                                  _hasAttemptedSearch = false;
+                                  _results = const [];
+                                });
+                              },
                             ),
-                             hint: const Text('Selecciona una especialidad'),
-                            menuMaxHeight: 260,
-                            items: _specialties
-                                .map(
-                                  (specialty) => DropdownMenuItem<int>(
-                                    value: specialty.id,
-                                    child: Text(specialty.nombre),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedSpecialtyId = value;
-                                _hasAttemptedSearch = false;
-                                _results = const [];
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          DropdownButtonFormField<LawyerLocationOption>(
-                            value: _selectedDepartamento,
-                            decoration: const InputDecoration(
-                              labelText: 'Departamento',
-                              border: OutlineInputBorder(),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<LawyerLocationOption>(
+                              value: _selectedDepartamento,
+                              decoration: const InputDecoration(
+                                labelText: 'Departamento',
+                                border: OutlineInputBorder(),
+                              ),
+                              hint: const Text('Selecciona un departamento'),
+                              menuMaxHeight: 260,
+                              items:
+                                  departamentos
+                                      .map(
+                                        (option) => DropdownMenuItem<
+                                          LawyerLocationOption
+                                        >(
+                                          value: option,
+                                          child: Text(option.departamento),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedDepartamento = value;
+                                  _selectedProvincia = null;
+                                  _selectedDistrito = null;
+                                  _results = const [];
+                                  _hasAttemptedSearch = false;
+                                });
+                              },
                             ),
-                            hint: const Text('Selecciona un departamento'),
-                            menuMaxHeight: 260,
-                            items: departamentos
-                              .map(
-                                  (option) => DropdownMenuItem<LawyerLocationOption>(
-                                    value: option,
-                                    child: Text(option.departamento),
-
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                 _selectedDepartamento = value;
-                                _selectedProvincia = null;
-                                _selectedDistrito = null;
-                                _results = const [];
-                                _hasAttemptedSearch = false;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          DropdownButtonFormField<LawyerLocationProvince>(
-                            value: _selectedProvincia,
-                            decoration: const InputDecoration(
-                              labelText: 'Provincia',
-                              border: OutlineInputBorder(),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<LawyerLocationProvince>(
+                              value: _selectedProvincia,
+                              decoration: const InputDecoration(
+                                labelText: 'Provincia',
+                                border: OutlineInputBorder(),
+                              ),
+                              hint: const Text('Selecciona una provincia'),
+                              menuMaxHeight: 260,
+                              items:
+                                  provincias
+                                      .map(
+                                        (province) => DropdownMenuItem<
+                                          LawyerLocationProvince
+                                        >(
+                                          value: province,
+                                          child: Text(province.provincia),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged:
+                                  _selectedDepartamento == null
+                                      ? null
+                                      : (value) {
+                                        setState(() {
+                                          _selectedProvincia = value;
+                                          _selectedDistrito = null;
+                                          _results = const [];
+                                          _hasAttemptedSearch = false;
+                                        });
+                                      },
                             ),
-                            hint: const Text('Selecciona una provincia'),
-                            menuMaxHeight: 260,
-                            items: provincias                                
-                            .map(
-                                  (province) => DropdownMenuItem<LawyerLocationProvince>(
-                                    value: province,
-                                    child: Text(province.provincia),
-                                  ),
-                                )
-                                .toList(),
-                                onChanged: _selectedDepartamento == null
-
-                                ? null
-                                : (value) {
-                                    setState(() {
-                                       _selectedProvincia = value;
-                                      _selectedDistrito = null;
-                                      _results = const [];
-                                      _hasAttemptedSearch = false;
-                                    });
-                                  },
-                          ),
-                          const SizedBox(height: 12),
-                          DropdownButtonFormField<LawyerLocationDistrict>(
-                            value: _selectedDistrito,
-                            decoration: const InputDecoration(
-                              labelText: 'Distrito',
-                              border: OutlineInputBorder(),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<LawyerLocationDistrict>(
+                              value: _selectedDistrito,
+                              decoration: const InputDecoration(
+                                labelText: 'Distrito',
+                                border: OutlineInputBorder(),
+                              ),
+                              hint: const Text('Selecciona un distrito'),
+                              menuMaxHeight: 260,
+                              items:
+                                  distritos
+                                      .map(
+                                        (district) => DropdownMenuItem<
+                                          LawyerLocationDistrict
+                                        >(
+                                          value: district,
+                                          child: Text(district.distrito),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged:
+                                  _selectedProvincia == null
+                                      ? null
+                                      : (value) {
+                                        setState(() {
+                                          _selectedDistrito = value;
+                                          _results = const [];
+                                          _hasAttemptedSearch = false;
+                                        });
+                                      },
                             ),
-                            hint: const Text('Selecciona un distrito'),
-                            menuMaxHeight: 260,
-                            items: distritos
-                                .map(
-                                  (district) => DropdownMenuItem<LawyerLocationDistrict>(
-                                    value: district,
-                                    child: Text(district.distrito),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: _selectedProvincia == null
-                                ? null
-                                : (value) {
-                                    setState(() {
-                                      _selectedDistrito = value;
-                                      _results = const [];
-                                      _hasAttemptedSearch = false;
-                                    });
-                                  },
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: canSearch ? _searchLawyers : null,
-                              icon: const Icon(Icons.search),
-                              label: Text(
-                                _loadingResults ? 'Buscando...' : 'Buscar',
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: canSearch ? _searchLawyers : null,
+                                icon: const Icon(Icons.search),
+                                label: Text(
+                                  _loadingResults ? 'Buscando...' : 'Buscar',
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: _buildResults(),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Expanded(child: _buildResults()),
+                    ],
+                  ),
                 ),
-              ),
       ),
     );
   }
@@ -363,10 +372,7 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
 
     if (_results.isEmpty) {
       return const Center(
-        child: Text(
-          'Utiliza los filtros para encontrar abogados disponibles.',
-          textAlign: TextAlign.center,
-        ),
+        child: Text('uppssss no se encontró nada', textAlign: TextAlign.center),
       );
     }
 
@@ -377,21 +383,25 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
         final result = _results[index];
         final avatarProvider = result.avatarImageProvider;
         final estudio = result.estudioPrincipal;
-        final locationParts = <String?>[
-          estudio?.distrito,
-          estudio?.provincia,
-          estudio?.departamento,
-        ]
-            .whereType<String>()
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty)
-            .toList();
-        final locationLabel = locationParts.isNotEmpty
-            ? locationParts.join(', ')
-            : 'Ubicación no disponible';
+        final locationParts =
+            <String?>[
+                  estudio?.distrito,
+                  estudio?.provincia,
+                  estudio?.departamento,
+                ]
+                .whereType<String>()
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toList();
+        final locationLabel =
+            locationParts.isNotEmpty
+                ? locationParts.join(', ')
+                : 'Ubicación no disponible';
 
         return Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(
@@ -399,9 +409,7 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                 CircleAvatar(
                   radius: 28,
                   backgroundImage: avatarProvider,
-                  child: avatarProvider == null
-                      ? Text(result.initials)
-                      : null,
+                  child: avatarProvider == null ? Text(result.initials) : null,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -418,12 +426,18 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                       const SizedBox(height: 4),
                       Text(
                         result.ratingLabel,
-                        style: const TextStyle(fontSize: 13, color: Colors.black54),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black54,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         locationLabel,
-                        style: const TextStyle(fontSize: 12, color: Colors.black45),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black45,
+                        ),
                       ),
                     ],
                   ),
@@ -432,10 +446,11 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => ClientLawyerDetailScreen(
-                          lawyerId: result.usuarioId,
-                          initialResult: result,
-                        ),
+                        builder:
+                            (_) => ClientLawyerDetailScreen(
+                              lawyerId: result.usuarioId,
+                              initialResult: result,
+                            ),
                       ),
                     );
                   },

@@ -496,8 +496,15 @@ class ApiClient {
       } else {
         rows = const [];
       }
-      return rows.map(LawyerLocationOption.fromJson).toList();
-    }
+final options = rows
+          .map(LawyerLocationOption.fromJson)
+          .where(
+            (option) =>
+                option.departamento.isNotEmpty && option.provincias.isNotEmpty,
+          )
+          .toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      return List.unmodifiable(options);    }
 
     final data = _asJsonMap(decoded);
     final message =
