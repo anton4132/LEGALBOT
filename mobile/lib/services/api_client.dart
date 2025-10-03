@@ -885,28 +885,27 @@ class ApiClient {
     required String token,
     String? ruc,
     String? nombreComercial,
-    String? pais,
-    String? ciudad,
     String? correoContacto,
     String? telefono,
-    String? direccionUbigeoCodigo,
-    String? lineaExactaDireccion, 
-   }) async {
+    required String direccionId,
+    String? lineaExactaDireccion,
+  }) async {
     final uri = Uri.parse('$_baseUrl/estudios');
+    final resolvedDireccionId = direccionId.trim();
+    if (resolvedDireccionId.isEmpty) {
+      throw Exception('El distrito del estudio es obligatorio.');
+    }
     final payload = {
       'ruc': ruc,
       'nombre_comercial': nombreComercial,
-      'pais': pais,
-      'ciudad': ciudad,
       'correo_contacto': correoContacto,
       'telefono': telefono,
-      'direccion_id': direccionUbigeoCodigo,
+      'direccion_id': resolvedDireccionId,
       'linea_exacta_direccion': lineaExactaDireccion,
     }..removeWhere(
       (key, value) =>
           value == null || (value is String && value.trim().isEmpty),
     );
-
     final response = await http.post(
       uri,
       headers: _authHeaders(token, json: true),

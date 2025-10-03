@@ -170,15 +170,11 @@ class LawFirmSummary {
   final int id;
   final String? ruc;
   final String? nombreComercial;
-  final String? pais;
-  final String? ciudad;
   final String? departamento;
   final String? provincia;
   final String? distrito;
   final String? correoContacto;
   final String? telefono;
-  final String? direccion;
-  
   final String? direccionUbigeoCodigo;
   final String? lineaExactaDireccion;
   final bool? activo;
@@ -187,14 +183,11 @@ class LawFirmSummary {
     required this.id,
     this.ruc,
     this.nombreComercial,
-    this.pais,
-    this.ciudad,
     this.departamento,
     this.provincia,
     this.distrito,
     this.correoContacto,
     this.telefono,
-    this.direccion,
     this.direccionUbigeoCodigo,
     this.lineaExactaDireccion,
     this.activo,
@@ -207,31 +200,48 @@ class LawFirmSummary {
       return null;
     }
 
-    final direccion = json['direccion'] as String?;
+    final direccionRelacion = json['direccion'];
+    final direccionMap =
+        direccionRelacion is Map<String, dynamic> ? direccionRelacion : null;
 
     return LawFirmSummary(
       id: (json['id'] as num).toInt(),
       ruc: json['ruc'] as String?,
       nombreComercial: json['nombre_comercial'] as String?,
-      pais: json['pais'] as String?,
-      ciudad: json['ciudad'] as String?,
-      departamento: parseString(json['departamento']),
-      provincia: parseString(json['provincia']),
-      distrito: parseString(json['distrito']),
+      departamento: parseString(
+        json['departamento'] ?? direccionMap?['departamento'],
+      ),
+      provincia: parseString(
+        json['provincia'] ?? direccionMap?['provincia'],
+      ),
+      distrito:
+          parseString(json['distrito'] ?? direccionMap?['distrito']),
+
+
       correoContacto: json['correo_contacto'] as String?,
       telefono: json['telefono'] as String?,
-      direccion: direccion ?? parseString(json['linea_exacta_direccion']),
       direccionUbigeoCodigo: parseString(
         json['direccion_ubigeo_codigo'] ??
             json['direccion_id'] ??
-            json['direccionUbigeoCodigo'],
-      ),
+            json['direccionUbigeoCodigo'] ??
+            direccionMap?['ubigeo_codigo'],      
+          ),
       lineaExactaDireccion: parseString(
         json['linea_exacta_direccion'] ??
-            json['lineaExactaDireccion'],
+            json['lineaExactaDireccion'] ??
+            direccionMap?['linea_exacta_direccion'],
       ),
       activo: json['activo'] as bool?,
     );
+  }
+  String? get formattedLocation {
+    final parts = <String?>[departamento, provincia, distrito]
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) return null;
+    return parts.join(' • ');
   }
 }
 

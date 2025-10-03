@@ -1,4 +1,4 @@
-import 'dart:io' as io; 
+import 'dart:io' as io;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -29,8 +29,6 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   // Estudios
   final TextEditingController _lawFirmRucController = TextEditingController();
   final TextEditingController _lawFirmNameController = TextEditingController();
-  final TextEditingController _lawFirmCountryController = TextEditingController();
-  final TextEditingController _lawFirmCityController = TextEditingController();
   final TextEditingController _lawFirmEmailController = TextEditingController();
   final TextEditingController _lawFirmPhoneController = TextEditingController();
   final TextEditingController _lawFirmExactAddressController =
@@ -90,8 +88,6 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     // Estudios
     _lawFirmRucController.dispose();
     _lawFirmNameController.dispose();
-    _lawFirmCountryController.dispose();
-    _lawFirmCityController.dispose();
     _lawFirmEmailController.dispose();
     _lawFirmPhoneController.dispose();
     _lawFirmExactAddressController.dispose();
@@ -257,8 +253,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       final LawyerProfileInfo? info = results[0] as LawyerProfileInfo?;
       final List<LawyerSpecialty> specialties =
           results[1] as List<LawyerSpecialty>;
-      final List<LawyerSpecialty> catalog =
-          results[2] as List<LawyerSpecialty>;
+      final List<LawyerSpecialty> catalog = results[2] as List<LawyerSpecialty>;
       final List<LawyerAvailabilitySlot> availability =
           results[3] as List<LawyerAvailabilitySlot>;
       final List<LawyerStudyAssignment> studies =
@@ -312,13 +307,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     _lawFirmRoleController.text = primary.rolEnEstudio ?? '';
     _lawFirmRucController.text = primary.estudio.ruc ?? '';
     _lawFirmNameController.text = primary.estudio.nombreComercial ?? '';
-    _lawFirmCountryController.text = primary.estudio.pais ?? '';
-    _lawFirmCityController.text = primary.estudio.ciudad ?? '';
     _lawFirmEmailController.text = primary.estudio.correoContacto ?? '';
     _lawFirmPhoneController.text = primary.estudio.telefono ?? '';
     _lawFirmExactAddressController.text =
-        (primary.estudio.lineaExactaDireccion ?? primary.estudio.direccion ?? '')
-            .trim();
+        (primary.estudio.lineaExactaDireccion ?? '').trim();
 
     final distrito = primary.estudio.direccionUbigeoCodigo;
     setState(() {
@@ -352,8 +344,6 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     _lawFirmRoleController.clear();
     _lawFirmRucController.clear();
     _lawFirmNameController.clear();
-    _lawFirmCountryController.clear();
-    _lawFirmCityController.clear();
     _lawFirmEmailController.clear();
     _lawFirmPhoneController.clear();
     _lawFirmExactAddressController.clear();
@@ -427,10 +417,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           insetPadding: const EdgeInsets.all(16),
           backgroundColor: Colors.black,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: 600,
-              maxHeight: 600,
-            ),
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
             child: InteractiveViewer(
               maxScale: 5,
               child: Center(
@@ -513,9 +500,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
     final bool hasExisting =
         _retainExistingAvatar && _existingAvatarArchivo != null;
-    final avatarWidget = imageProvider != null
-        ? _buildAvatarImage(imageProvider, true)
-        : _buildAvatarPlaceholder();
+    final avatarWidget =
+        imageProvider != null
+            ? _buildAvatarImage(imageProvider, true)
+            : _buildAvatarPlaceholder();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -538,16 +526,14 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
               const SizedBox(height: 4),
               const Text(
                 'Usa una imagen cuadrada de buena calidad (máx. 5 MB).',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.text2Color,
-                ),
+                style: TextStyle(fontSize: 12, color: AppColors.text2Color),
               ),
               if ((_selectedAvatarFile != null || hasExisting) && canInteract)
                 TextButton.icon(
-                  onPressed: _selectedAvatarFile != null
-                      ? _clearAvatarSelection
-                      : _removeExistingAvatar,
+                  onPressed:
+                      _selectedAvatarFile != null
+                          ? _clearAvatarSelection
+                          : _removeExistingAvatar,
                   icon: const Icon(Icons.delete_outline),
                   label: Text(
                     _selectedAvatarFile != null
@@ -564,9 +550,9 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
   void _showSnack(String message, {Color color = Colors.red}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   void _handleUnauthorized(String? message) {
@@ -574,9 +560,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
     if (!mounted) {
       return;
     }
-    final resolvedMessage = (message?.trim().isNotEmpty ?? false)
-        ? message!.trim()
-        : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+    final resolvedMessage =
+        (message?.trim().isNotEmpty ?? false)
+            ? message!.trim()
+            : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(resolvedMessage), backgroundColor: Colors.red),
     );
@@ -616,13 +603,17 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           try {
             await BlobStorageService.delete(previousPath);
           } catch (error, stackTrace) {
-            debugPrint('No se pudo eliminar el avatar anterior: $error\n$stackTrace');
+            debugPrint(
+              'No se pudo eliminar el avatar anterior: $error\n$stackTrace',
+            );
           }
         }
         final Uint8List bytes;
         if (avatarFile.bytes != null) {
           bytes = avatarFile.bytes!;
-        } else if (!kIsWeb && avatarFile.path != null && avatarFile.path!.isNotEmpty) {
+        } else if (!kIsWeb &&
+            avatarFile.path != null &&
+            avatarFile.path!.isNotEmpty) {
           bytes = await io.File(avatarFile.path!).readAsBytes();
         } else {
           throw Exception('No se pudo leer la foto seleccionada.');
@@ -660,7 +651,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             ruta: savedAvatar?.ruta ?? avatarArchivoUpload?.ruta,
             tamano: savedAvatar?.tamano ?? avatarArchivoUpload?.tamano,
             tipo: savedAvatar?.tipo ?? avatarArchivoUpload?.tipo,
-            url: savedAvatar?.url ?? avatarArchivoUpload?.url ?? savedAvatar?.resolvedUrl,
+            url:
+                savedAvatar?.url ??
+                avatarArchivoUpload?.url ??
+                savedAvatar?.resolvedUrl,
           );
           _existingAvatarArchivo = mergedAvatar;
           _profileInfo = LawyerProfileInfo(
@@ -684,7 +678,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       });
 
       _applyProfileToControllers(saved);
-      _showSnack('Perfil actualizado correctamente', color: AppColors.button2Color);
+      _showSnack(
+        'Perfil actualizado correctamente',
+        color: AppColors.button2Color,
+      );
     } on UnauthorizedException catch (error) {
       setState(() => _savingProfile = false);
       _handleUnauthorized(error.message);
@@ -751,16 +748,20 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         endTime: formatTimeOfDay(_newSlotEnd!),
       );
       setState(() {
-        _availability = List<LawyerAvailabilitySlot>.from(_availability)
-          ..add(slot)
-          ..sort((a, b) {
-            final dayComparison = a.diaSemana.compareTo(b.diaSemana);
-            if (dayComparison != 0) return dayComparison;
-            final startA = a.horaInicio ?? const TimeOfDay(hour: 0, minute: 0);
-            final startB = b.horaInicio ?? const TimeOfDay(hour: 0, minute: 0);
-            return (startA.hour * 60 + startA.minute)
-                .compareTo(startB.hour * 60 + startB.minute);
-          });
+        _availability =
+            List<LawyerAvailabilitySlot>.from(_availability)
+              ..add(slot)
+              ..sort((a, b) {
+                final dayComparison = a.diaSemana.compareTo(b.diaSemana);
+                if (dayComparison != 0) return dayComparison;
+                final startA =
+                    a.horaInicio ?? const TimeOfDay(hour: 0, minute: 0);
+                final startB =
+                    b.horaInicio ?? const TimeOfDay(hour: 0, minute: 0);
+                return (startA.hour * 60 + startA.minute).compareTo(
+                  startB.hour * 60 + startB.minute,
+                );
+              });
         _addingAvailability = false;
         _newSlotStart = null;
         _newSlotEnd = null;
@@ -825,12 +826,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           token: session.token,
           ruc: _lawFirmRucController.text.trim(),
           nombreComercial: name,
-          pais: _lawFirmCountryController.text.trim(),
-          ciudad: _lawFirmCityController.text.trim(),
           correoContacto: _lawFirmEmailController.text.trim(),
           telefono: _lawFirmPhoneController.text.trim(),
-          direccionUbigeoCodigo: direccionCodigo,
-          lineaExactaDireccion: direccionExacta,       
+          direccionId: direccionCodigo,
+          lineaExactaDireccion: direccionExacta,
         );
       }
 
@@ -839,9 +838,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         userId: session.usuarioId,
         studyId: firm.id,
         principal: _lawFirmPrincipal,
-        role: _lawFirmRoleController.text.trim().isEmpty
-            ? null
-            : _lawFirmRoleController.text.trim(),
+        role:
+            _lawFirmRoleController.text.trim().isEmpty
+                ? null
+                : _lawFirmRoleController.text.trim(),
         direccionUbigeoCodigo: direccionCodigo,
         lineaExactaDireccion: direccionExacta,
       );
@@ -858,9 +858,8 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           _lawFirmDepartamentoCodigo =
               distrito.length >= 2 ? distrito.substring(0, 2) : null;
           _lawFirmExactAddressController.text =
-              (assignment.estudio.lineaExactaDireccion ??
-                      assignment.estudio.direccion ??
-                      direccionExacta)
+            (assignment.estudio.lineaExactaDireccion ?? direccionExacta)
+
                   .trim();
           if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
             _loadLawFirmProvincias(
@@ -888,7 +887,9 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   ) {
     final List<LawyerStudyAssignment> mutable =
         List<LawyerStudyAssignment>.from(current);
-    final index = mutable.indexWhere((item) => item.estudioId == updated.estudioId);
+    final index = mutable.indexWhere(
+      (item) => item.estudioId == updated.estudioId,
+    );
     if (index >= 0) {
       mutable[index] = updated;
     } else {
@@ -924,7 +925,9 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       );
       setState(() {
         _studies =
-            _studies.where((item) => item.estudioId != assignment.estudioId).toList();
+            _studies
+                .where((item) => item.estudioId != assignment.estudioId)
+                .toList();
         if (_selectedLawFirm?.id == assignment.estudioId) {
           _clearLawFirmForm();
         }
@@ -1055,8 +1058,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
                           return ListTile(
                             title: Text(item.nombreComercial ?? 'Sin nombre'),
                             subtitle: Text(
-                              [item.ruc, item.ciudad]
-                                  .where((value) => (value?.isNotEmpty ?? false))
+                              [item.ruc, item.formattedLocation]
+                                  .where(
+                                    (value) => (value?.isNotEmpty ?? false),
+                                  )
                                   .join(' • '),
                             ),
                             onTap: () => Navigator.of(context).pop(item),
@@ -1092,12 +1097,10 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         _selectedLawFirm = selected;
         _lawFirmRucController.text = selected.ruc ?? '';
         _lawFirmNameController.text = selected.nombreComercial ?? '';
-        _lawFirmCountryController.text = selected.pais ?? '';
-        _lawFirmCityController.text = selected.ciudad ?? '';
         _lawFirmEmailController.text = selected.correoContacto ?? '';
         _lawFirmPhoneController.text = selected.telefono ?? '';
         _lawFirmExactAddressController.text =
-            (selected.lineaExactaDireccion ?? selected.direccion ?? '').trim();
+            (selected.lineaExactaDireccion ?? '').trim();
 
         final distrito = selected.direccionUbigeoCodigo;
         if (distrito == null || distrito.isEmpty) {
@@ -1133,24 +1136,25 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
         backgroundColor: AppColors.buttonColor,
         foregroundColor: Colors.white,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadInitialData,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildProfileSection(),
-                  const SizedBox(height: 16),
-                  _buildSpecialtiesSection(),
-                  const SizedBox(height: 16),
-                  _buildAvailabilitySection(),
-                  const SizedBox(height: 16),
-                  _buildLawFirmSection(),
-                ],
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: _loadInitialData,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildProfileSection(),
+                    const SizedBox(height: 16),
+                    _buildSpecialtiesSection(),
+                    const SizedBox(height: 16),
+                    _buildAvailabilitySection(),
+                    const SizedBox(height: 16),
+                    _buildLawFirmSection(),
+                  ],
+                ),
               ),
-            ),
     );
   }
 
@@ -1183,28 +1187,30 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   }) {
     return DropdownButtonFormField<String>(
       value: options.any((option) => option.codigo == value) ? value : null,
-      items: options
-          .map(
-            (option) => DropdownMenuItem<String>(
-              value: option.codigo,
-              child: Text(option.nombre),
-            ),
-          )
-          .toList(),
+      items:
+          options
+              .map(
+                (option) => DropdownMenuItem<String>(
+                  value: option.codigo,
+                  child: Text(option.nombre),
+                ),
+              )
+              .toList(),
       onChanged: enabled && !isLoading ? onChanged : null,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
-        suffixIcon: isLoading
-            ? const Padding(
-                padding: EdgeInsets.all(12.0),
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              )
-            : null,
+        suffixIcon:
+            isLoading
+                ? const Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+                : null,
       ),
     );
   }
@@ -1290,9 +1296,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           TextField(
             controller: _baseRateController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Tarifa base (S/)',
-            ),
+            decoration: const InputDecoration(labelText: 'Tarifa base (S/)'),
           ),
           const SizedBox(height: 12),
 
@@ -1308,13 +1312,14 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
               onPressed: _savingProfile ? null : _saveProfileInfo,
-              icon: _savingProfile
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save),
+              icon:
+                  _savingProfile
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.save),
               label: Text(_savingProfile ? 'Guardando...' : 'Guardar cambios'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.buttonColor,
@@ -1341,38 +1346,43 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _catalogSpecialties.map((specialty) {
-                final selected = _selectedSpecialties.contains(specialty.id);
-                return FilterChip(
-                  label: Text(specialty.nombre),
-                  selected: selected,
-                  onSelected: (value) {
-                    setState(() {
-                      if (value) {
-                        _selectedSpecialties.add(specialty.id);
-                      } else {
-                        _selectedSpecialties.remove(specialty.id);
-                      }
-                    });
-                  },
-                  selectedColor: AppColors.buttonColor.withOpacity(0.2),
-                );
-              }).toList(),
+              children:
+                  _catalogSpecialties.map((specialty) {
+                    final selected = _selectedSpecialties.contains(
+                      specialty.id,
+                    );
+                    return FilterChip(
+                      label: Text(specialty.nombre),
+                      selected: selected,
+                      onSelected: (value) {
+                        setState(() {
+                          if (value) {
+                            _selectedSpecialties.add(specialty.id);
+                          } else {
+                            _selectedSpecialties.remove(specialty.id);
+                          }
+                        });
+                      },
+                      selectedColor: AppColors.buttonColor.withOpacity(0.2),
+                    );
+                  }).toList(),
             ),
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
               onPressed: _savingSpecialties ? null : _saveSpecialties,
-              icon: _savingSpecialties
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_alt),
+              icon:
+                  _savingSpecialties
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.save_alt),
               label: Text(
-                  _savingSpecialties ? 'Guardando...' : 'Guardar especialidades'),
+                _savingSpecialties ? 'Guardando...' : 'Guardar especialidades',
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.buttonColor,
                 foregroundColor: Colors.white,
@@ -1396,20 +1406,21 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             const Text('Aún no registras horarios de atención.'),
           if (_availability.isNotEmpty)
             Column(
-              children: _availability.map((slot) {
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${_dayName(slot.diaSemana)} · '
-                    '${_formatTimeForDisplay(slot.horaInicio)} - '
-                    '${_formatTimeForDisplay(slot.horaFin)}',
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => _deleteAvailabilitySlot(slot),
-                  ),
-                );
-              }).toList(),
+              children:
+                  _availability.map((slot) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${_dayName(slot.diaSemana)} · '
+                        '${_formatTimeForDisplay(slot.horaInicio)} - '
+                        '${_formatTimeForDisplay(slot.horaFin)}',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteAvailabilitySlot(slot),
+                      ),
+                    );
+                  }).toList(),
             ),
           const Divider(height: 32),
           const Text(
@@ -1439,7 +1450,9 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => _pickTime(isStart: true),
-                  child: Text('Inicio: ${_formatTimeForDisplay(_newSlotStart)}'),
+                  child: Text(
+                    'Inicio: ${_formatTimeForDisplay(_newSlotStart)}',
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1456,15 +1469,17 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
               onPressed: _addingAvailability ? null : _addAvailabilitySlot,
-              icon: _addingAvailability
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add),
-              label:
-                  Text(_addingAvailability ? 'Agregando...' : 'Agregar horario'),
+              icon:
+                  _addingAvailability
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.add),
+              label: Text(
+                _addingAvailability ? 'Agregando...' : 'Agregar horario',
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.buttonColor,
                 foregroundColor: Colors.white,
@@ -1488,75 +1503,76 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             const Text('No tienes estudios vinculados todavía.'),
           if (_studies.isNotEmpty)
             Column(
-              children: _studies.map((assignment) {
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title:
-                      Text(assignment.estudio.nombreComercial ?? 'Sin nombre'),
-                  subtitle: Text(
-                    [
-                      assignment.estudio.ruc,
-                      assignment.estudio.ciudad,
-                      assignment.rolEnEstudio
-                    ].where((value) => (value?.isNotEmpty ?? false)).join(' • '),
+              children:
+                  _studies.map((assignment) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                    assignment.estudio.nombreComercial ?? 'Sin nombre',
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => _deleteStudy(assignment),
-                  ),
-                  onTap: () {
-                    setState(() {
-                      _selectedLawFirm = assignment.estudio;
-                      _lawFirmPrincipal = assignment.principal;
-                      _lawFirmRoleController.text =
-                          assignment.rolEnEstudio ?? '';
-                      _lawFirmRucController.text =
-                          assignment.estudio.ruc ?? '';
-                      _lawFirmNameController.text =
-                          assignment.estudio.nombreComercial ?? '';
-                      _lawFirmCountryController.text =
-                          assignment.estudio.pais ?? '';
-                      _lawFirmCityController.text =
-                          assignment.estudio.ciudad ?? '';
-                      _lawFirmEmailController.text =
-                          assignment.estudio.correoContacto ?? '';
-                      _lawFirmPhoneController.text =
-                          assignment.estudio.telefono ?? '';
-                      _lawFirmExactAddressController.text =
-                          (assignment.estudio.lineaExactaDireccion ??
-                                  assignment.estudio.direccion ??
-                                  '')
-                              .trim();
+                      subtitle: Text(
+                        [
+                              assignment.estudio.ruc,
+                              assignment.estudio.formattedLocation,
+                              assignment.rolEnEstudio,
+                            ]
+                            .where((value) => (value?.isNotEmpty ?? false))
+                            .join(' • '),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteStudy(assignment),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          _selectedLawFirm = assignment.estudio;
+                          _lawFirmPrincipal = assignment.principal;
+                          _lawFirmRoleController.text =
+                              assignment.rolEnEstudio ?? '';
+                          _lawFirmRucController.text =
+                              assignment.estudio.ruc ?? '';
+                          _lawFirmNameController.text =
+                              assignment.estudio.nombreComercial ?? '';
+                          _lawFirmEmailController.text =
+                              assignment.estudio.correoContacto ?? '';
+                          _lawFirmPhoneController.text =
+                              assignment.estudio.telefono ?? '';
+                          _lawFirmExactAddressController.text =
+                                (assignment.estudio.lineaExactaDireccion ?? '')
 
-                      final distrito =
-                          assignment.estudio.direccionUbigeoCodigo;
-                      if (distrito == null || distrito.isEmpty) {
-                        _lawFirmDepartamentoCodigo = null;
-                        _lawFirmProvinciaCodigo = null;
-                        _lawFirmDistritoCodigo = null;
-                        _lawFirmProvincias = const <UbigeoOption>[];
-                        _lawFirmDistritos = const <UbigeoOption>[];
-                      } else {
-                        _lawFirmDistritoCodigo = distrito;
-                        _lawFirmProvinciaCodigo = distrito.length >= 4
-                            ? distrito.substring(0, 4)
-                            : null;
-                        _lawFirmDepartamentoCodigo = distrito.length >= 2
-                            ? distrito.substring(0, 2)
-                            : null;
-                      }
-                    });
-                    if (_departamentos.isNotEmpty &&
-                        _lawFirmDepartamentoCodigo != null) {
-                      _loadLawFirmProvincias(
-                        _lawFirmDepartamentoCodigo!,
-                        preselectProvincia: _lawFirmProvinciaCodigo,
-                        preselectDistrito: _lawFirmDistritoCodigo,
-                      );
-                    }
-                  },
-                );
-              }).toList(),
+                                  .trim();
+
+                          final distrito =
+                              assignment.estudio.direccionUbigeoCodigo;
+                          if (distrito == null || distrito.isEmpty) {
+                            _lawFirmDepartamentoCodigo = null;
+                            _lawFirmProvinciaCodigo = null;
+                            _lawFirmDistritoCodigo = null;
+                            _lawFirmProvincias = const <UbigeoOption>[];
+                            _lawFirmDistritos = const <UbigeoOption>[];
+                          } else {
+                            _lawFirmDistritoCodigo = distrito;
+                            _lawFirmProvinciaCodigo =
+                                distrito.length >= 4
+                                    ? distrito.substring(0, 4)
+                                    : null;
+                            _lawFirmDepartamentoCodigo =
+                                distrito.length >= 2
+                                    ? distrito.substring(0, 2)
+                                    : null;
+                          }
+                        });
+                        if (_departamentos.isNotEmpty &&
+                            _lawFirmDepartamentoCodigo != null) {
+                          _loadLawFirmProvincias(
+                            _lawFirmDepartamentoCodigo!,
+                            preselectProvincia: _lawFirmProvinciaCodigo,
+                            preselectDistrito: _lawFirmDistritoCodigo,
+                          );
+                        }
+                      },
+                    );
+                  }).toList(),
             ),
           const Divider(height: 32),
           const Text(
@@ -1592,17 +1608,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             controller: _lawFirmRucController,
             decoration: const InputDecoration(labelText: 'RUC'),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmCountryController,
-            decoration: const InputDecoration(labelText: 'País'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmCityController,
-            decoration: const InputDecoration(labelText: 'Ciudad'),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 12),    
           _buildLawFirmUbigeoFields(),
           const SizedBox(height: 12),
           TextField(
@@ -1610,27 +1616,29 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             enabled:
                 _lawFirmDistritoCodigo != null && !_loadingLawFirmDistritos,
             decoration: const InputDecoration(
-                labelText: 'Dirección exacta del estudio *'),
+              labelText: 'Dirección exacta del estudio *',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _lawFirmEmailController,
             keyboardType: TextInputType.emailAddress,
             decoration: const InputDecoration(
-                labelText: 'Correo de contacto (opcional)'),
+              labelText: 'Correo de contacto (opcional)',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _lawFirmPhoneController,
             keyboardType: TextInputType.phone,
-            decoration:
-                const InputDecoration(labelText: 'Teléfono (opcional)'),
+            decoration: const InputDecoration(labelText: 'Teléfono (opcional)'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _lawFirmRoleController,
-            decoration:
-                const InputDecoration(labelText: 'Rol dentro del estudio'),
+            decoration: const InputDecoration(
+              labelText: 'Rol dentro del estudio',
+            ),
           ),
           const SizedBox(height: 12),
           SwitchListTile.adaptive(
@@ -1643,21 +1651,22 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
-              onPressed: (_savingLawFirm ||
-                      _loadingDepartamentos ||
-                      _loadingLawFirmProvincias ||
-                      _loadingLawFirmDistritos)
-                  ? null
-                  : _saveLawFirm,
-              icon: _savingLawFirm
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_as),
-              label:
-                  Text(_savingLawFirm ? 'Guardando...' : 'Guardar estudio'),
+              onPressed:
+                  (_savingLawFirm ||
+                          _loadingDepartamentos ||
+                          _loadingLawFirmProvincias ||
+                          _loadingLawFirmDistritos)
+                      ? null
+                      : _saveLawFirm,
+              icon:
+                  _savingLawFirm
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.save_as),
+              label: Text(_savingLawFirm ? 'Guardando...' : 'Guardar estudio'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.buttonColor,
                 foregroundColor: Colors.white,

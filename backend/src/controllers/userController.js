@@ -649,39 +649,6 @@ const getLawyerAvailabilityWithBookings = async (req, res) => {
  */
 const listLawyerLocations = async (_req, res) => {
   try {
-    const estudios = await prisma.estudio.findMany({
-      where: {
-        activo: true,
-        abogadoestudios: {
-          some: {
-            activo: true,
-            usuario: {
-              activo: true,
-              role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
-            },
-          },
-        },
-        direccion: {
-          is: {
-            departamento: { not: '' },
-            provincia: { not: '' },
-            distrito: { not: '' },
-
-          },
-        },
-      },
-      select: {
-        direccion: {
-          select: {
-            departamento: true,
-            provincia: true,
-            distrito: true,
-            ubigeo_codigo: true,
-          },
-        },
-      },
-    });
-
     const departamentosMap = new Map();
 
     const buildKey = (...parts) => parts
@@ -689,55 +656,116 @@ const listLawyerLocations = async (_req, res) => {
       .map((part) => part.toString().toLowerCase())
       .join('|');
 
-      estudios.forEach(({ direccion }) => {
-      const departamento = sanitizeString(direccion?.departamento);
-      const provincia = sanitizeString(direccion?.provincia);
-      const distrito = sanitizeString(direccion?.distrito);
-      const ubigeoCodigo = sanitizeString(direccion?.ubigeo_codigo);
+    const upsertFromRows = (rows = []) => {
+      rows.forEach((direccion) => {
+        const departamento = sanitizeString(direccion?.departamento);
+        const provincia = sanitizeString(direccion?.provincia);
+        const distrito = sanitizeString(direccion?.distrito);
+        const ubigeoCodigo = sanitizeString(direccion?.ubigeo_codigo);
 
-      if (!departamento || !provincia || !distrito) return;
+        if (!departamento || !provincia || !distrito) return;
 
-      const departamentoCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 2) : null;
-      const provinciaCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 4) : null;
-      const distritoCodigo = ubigeoCodigo || null;
+        const departamentoCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 2) : null;
+        const provinciaCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 4) : null;
+        const distritoCodigo = ubigeoCodigo || null;
 
-      const departamentoKey = buildKey(departamentoCodigo, departamento);
-      
-      if (!departamentosMap.has(departamentoKey)) {
-        departamentosMap.set(departamentoKey, {
-          departamento,
-          departamento_codigo: departamentoCodigo,
-          provincias: new Map(),
-        });
-      }
+        const departamentoKey = buildKey(departamentoCodigo, departamento);
 
-      const departamentoEntry = departamentosMap.get(departamentoKey);
-      if (!departamentoEntry.departamento && departamento) {
-        departamentoEntry.departamento = departamento;
-      }
-      const provinciasMap = departamentoEntry.provincias;
+        if (!departamentosMap.has(departamentoKey)) {
+          departamentosMap.set(departamentoKey, {
+            departamento,
+            departamento_codigo: departamentoCodigo,
+            provincias: new Map(),
+          });
+        }
 
-      const provinciaKey = buildKey(provinciaCodigo, provincia);
-      if (!provinciasMap.has(provinciaKey)) {
-        provinciasMap.set(provinciaKey, {
-          provincia,
-          provincia_codigo: provinciaCodigo,
-          distritos: new Map(),
-        });
-      }
+        const departamentoEntry = departamentosMap.get(departamentoKey);
+        if (!departamentoEntry.departamento && departamento) {
+          departamentoEntry.departamento = departamento;
+        }
+        if (!departamentoEntry.departamento_codigo && departamentoCodigo) {
+          departamentoEntry.departamento_codigo = departamentoCodigo;
+        }
 
-      const provinciaEntry = provinciasMap.get(provinciaKey);
-      const distritosMap = provinciaEntry.distritos;
+        const provinciasMap = departamentoEntry.provincias;
 
-      const distritoKey = buildKey(distritoCodigo, distrito);
-      if (!distritosMap.has(distritoKey)) {
-        distritosMap.set(distritoKey, {
-          distrito,
-          distrito_codigo: distritoCodigo,
-          ubigeo_codigo: ubigeoCodigo || distritoCodigo,
-        });
-      }
+        const provinciaKey = buildKey(provinciaCodigo, provincia);
+        if (!provinciasMap.has(provinciaKey)) {
+          provinciasMap.set(provinciaKey, {
+            provincia,
+            provincia_codigo: provinciaCodigo,
+            distritos: new Map(),
+          });
+        }
+
+        const provinciaEntry = provinciasMap.get(provinciaKey);
+        if (!provinciaEntry.provincia && provincia) {
+          provinciaEntry.provincia = provincia;
+        }
+        if (!provinciaEntry.provincia_codigo && provinciaCodigo) {
+          provinciaEntry.provincia_codigo = provinciaCodigo;
+        }
+
+        const distritosMap = provinciaEntry.distritos;
+
+        const distritoKey = buildKey(distritoCodigo, distrito);
+        if (!distritosMap.has(distritoKey)) {
+          distritosMap.set(distritoKey, {
+            distrito,
+            distrito_codigo: distritoCodigo,
+            ubigeo_codigo: ubigeoCodigo || distritoCodigo,
+          });
+        }
+      });
+    };
+
+    const activeDirecciones = await prisma.direccion.findMany({
+        where: {
+          departamento: { not: '' },
+          provincia: { not: '' },
+          distrito: { not: '' },
+          estudio: {
+          some: {
+            activo: true,
+            abogadoestudios: {
+              some: {
+                activo: true,
+                usuario: {
+                  activo: true,
+                  role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+                },
+              },
+            },
+          },
+        },
+        
+      },
+      select: {
+        departamento: true,
+        provincia: true,
+        distrito: true,
+        ubigeo_codigo: true,
+      },
     });
+
+    upsertFromRows(activeDirecciones);
+
+    if (!departamentosMap.size) {
+      const fallbackDirecciones = await prisma.direccion.findMany({
+        where: {
+          departamento: { not: '' },
+          provincia: { not: '' },
+          distrito: { not: '' },
+        },
+        select: {
+          departamento: true,
+          provincia: true,
+          distrito: true,
+          ubigeo_codigo: true,
+        },
+      });
+      upsertFromRows(fallbackDirecciones);
+    }
 
     const response = Array.from(departamentosMap.values())
     .map((departamentoEntry) => {

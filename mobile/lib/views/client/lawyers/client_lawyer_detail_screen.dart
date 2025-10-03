@@ -481,10 +481,8 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
               ),
               subtitle: Text(
                 [
-                  if (study.estudio?.ciudad?.isNotEmpty == true)
-                    study.estudio!.ciudad!,
-                  if (study.estudio?.pais?.isNotEmpty == true)
-                    study.estudio!.pais!,
+                  if (study.estudio?.formattedLocation?.isNotEmpty == true)
+                    study.estudio!.formattedLocation!,
                 ].join(', '),
               ),
               trailing: study.principal
