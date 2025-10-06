@@ -67,6 +67,14 @@ function sanitizeString(value) {
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 }
+function normalizeOptionalStringInput(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') return sanitizeString(value);
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return sanitizeString(String(value));
+  }
+  return null;
+}
 
 function toIntOrNull(value) {
   if (value == null || value === '') return null;
@@ -546,6 +554,8 @@ const getPublicLawyerProfile = async (req, res) => {
           telefono: persona.telefono,
           correo: persona.correo,
           direccion: persona.direccion,
+          linea_exacta_direccion: persona.linea_exacta_direccion,
+
         }
         : null,
       perfil: perfilMapped,
@@ -1392,8 +1402,16 @@ const createUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Faltan datos de persona' });
     }
     const {
-      dni, telefono, correo, primer_nombre, segundo_nombre,
-      apellido_paterno, apellido_materno, direccion
+      dni,
+      telefono,
+      correo,
+      primer_nombre,
+      segundo_nombre,
+      apellido_paterno,
+      apellido_materno,
+      direccion,
+      direccion_id: direccionIdRaw,
+      linea_exacta_direccion: lineaExactaDireccionRaw,
     } = persona;
 
     if (!dni || !correo || !primer_nombre || !apellido_paterno) {
@@ -1429,18 +1447,29 @@ const createUser = async (req, res) => {
       if (personaExistente) {
         personaId = personaExistente.id;
       } else {
-        const personaCreated = await tx.persona.create({
-          data: {
-            dni: normalizedDni,
-            telefono: telefono || null,
-            correo,
-            primer_nombre,
-            segundo_nombre: segundo_nombre || null,
-            apellido_paterno,
-            apellido_materno: apellido_materno || null,
-            direccion: direccion || null
-          }
-        });
+        const personaData = {
+          dni: normalizedDni,
+          telefono: telefono || null,
+          correo,
+          primer_nombre,
+          segundo_nombre: segundo_nombre || null,
+          apellido_paterno,
+          apellido_materno: apellido_materno || null,
+        };
+
+        const hasLineaExacta = hasOwn(persona, 'linea_exacta_direccion') || hasOwn(persona, 'direccion');
+        if (hasLineaExacta) {
+          const resolvedLineaExacta = hasOwn(persona, 'linea_exacta_direccion')
+            ? normalizeOptionalStringInput(lineaExactaDireccionRaw)
+            : normalizeOptionalStringInput(direccion);
+          personaData.linea_exacta_direccion = resolvedLineaExacta;
+        }
+
+        if (hasOwn(persona, 'direccion_id')) {
+          personaData.direccion_id = normalizeOptionalStringInput(direccionIdRaw);
+        }
+
+        const personaCreated = await tx.persona.create({ data: personaData });
         personaId = personaCreated.id;
       }
 
@@ -1683,21 +1712,42 @@ const updateUser = async (req, res) => {
       // Actualizar persona
       if (persona) {
         const {
-          dni, telefono, correo, primer_nombre, segundo_nombre,
-          apellido_paterno, apellido_materno, direccion
+          dni,
+          telefono,
+          correo,
+          primer_nombre,
+          segundo_nombre,
+          apellido_paterno,
+          apellido_materno,
+          direccion,
+          direccion_id: direccionIdRaw,
+          linea_exacta_direccion: lineaExactaDireccionRaw,
         } = persona;
+        const personaUpdateData = {
+          dni: dni ?? undefined,
+          telefono: telefono ?? undefined,
+          correo: correo ?? undefined,
+          primer_nombre: primer_nombre ?? undefined,
+          segundo_nombre: segundo_nombre ?? undefined,
+          apellido_paterno: apellido_paterno ?? undefined,
+          apellido_materno: apellido_materno ?? undefined,
+        };
+
+        const hasLineaExacta = hasOwn(persona, 'linea_exacta_direccion') || hasOwn(persona, 'direccion');
+        if (hasLineaExacta) {
+          const resolvedLineaExacta = hasOwn(persona, 'linea_exacta_direccion')
+            ? normalizeOptionalStringInput(lineaExactaDireccionRaw)
+            : normalizeOptionalStringInput(direccion);
+          personaUpdateData.linea_exacta_direccion = resolvedLineaExacta;
+        }
+
+        if (hasOwn(persona, 'direccion_id')) {
+          personaUpdateData.direccion_id = normalizeOptionalStringInput(direccionIdRaw);
+        }
         await tx.persona.update({
           where: { id: usuarioActual.persona_id },
-          data: {
-            dni: dni ?? undefined,
-            telefono: telefono ?? undefined,
-            correo: correo ?? undefined,
-            primer_nombre: primer_nombre ?? undefined,
-            segundo_nombre: segundo_nombre ?? undefined,
-            apellido_paterno: apellido_paterno ?? undefined,
-            apellido_materno: apellido_materno ?? undefined,
-            direccion: direccion ?? undefined
-          }
+                    data: personaUpdateData
+
         });
       }
 

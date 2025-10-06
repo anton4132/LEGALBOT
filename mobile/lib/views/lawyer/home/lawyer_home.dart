@@ -6,7 +6,6 @@ import '../../../services/session_service.dart';
 import '../../../widgets/consultation_input.dart';
 import '../../../widgets/custom_app_bar.dart';
 import '../../../widgets/custom_drawer.dart';
-import '../../../widgets/custombtn.dart';
 import '../../../widgets/gradient_container.dart';
 import '../../../widgets/option_card.dart';
 import '../../../widgets/section_header.dart';
@@ -38,6 +37,7 @@ class _WarningDot extends StatelessWidget {
     );
   }
 }
+enum _LawyerHomeView { dashboard, profile }
 
 class _LawyerHomeState extends State<LawyerHome> {
   final TextEditingController _consultationController = TextEditingController();
@@ -47,6 +47,11 @@ class _LawyerHomeState extends State<LawyerHome> {
   bool _loadingProfileStatus = false;
   bool _profileStatusScheduled = false;
   int? _profileStatusLoadedFor;
+  _LawyerHomeView _currentView = _LawyerHomeView.dashboard;
+  LawyerProfileSubsection _currentProfileSubsection =
+      LawyerProfileSubsection.profile;
+  final GlobalKey<LawyerProfileScreenState> _profileScreenKey =
+      GlobalKey<LawyerProfileScreenState>();
 
   @override
   void dispose() {
@@ -227,12 +232,45 @@ class _LawyerHomeState extends State<LawyerHome> {
     }
   }
 
-  Future<void> _openLawyerProfile() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LawyerProfileScreen()),
-    );
-    if (!mounted) return;
-    await _updateProfileStatus(force: true);
+  void _navigateToProfileSection(
+    LawyerProfileSubsection subsection,
+  ) {
+    final bool shouldUpdateView =
+        _currentView != _LawyerHomeView.profile ||
+            _currentProfileSubsection != subsection;
+    if (shouldUpdateView) {
+      setState(() {
+        _currentView = _LawyerHomeView.profile;
+        _currentProfileSubsection = subsection;
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _profileScreenKey.currentState?.selectSubsection(subsection);
+    });
+  }
+
+  void _handleProfileSubsectionChanged(
+    LawyerProfileSubsection subsection,
+  ) {
+    if (_currentView == _LawyerHomeView.profile &&
+        _currentProfileSubsection == subsection) {
+      return;
+    }
+    setState(() {
+      _currentView = _LawyerHomeView.profile;
+      _currentProfileSubsection = subsection;
+    });
+  }
+
+  void _showDashboard() {
+    if (_currentView == _LawyerHomeView.dashboard) {
+      return;
+    }
+    setState(() {
+      _currentView = _LawyerHomeView.dashboard;
+    });
+    _updateProfileStatus(force: true);
   }
 
   Widget _buildProfileReminderCard(String name) {
@@ -266,7 +304,8 @@ class _LawyerHomeState extends State<LawyerHome> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: _openLawyerProfile,
+              onPressed: () =>
+                  _navigateToProfileSection(LawyerProfileSubsection.profile),
               icon: const Icon(Icons.edit, color: AppColors.buttonColor),
               label: const Text('Completar perfil'),
             ),
@@ -309,13 +348,56 @@ class _LawyerHomeState extends State<LawyerHome> {
             userName: displayName,
             subtitle: 'Panel de Control',
             items: [
-              const DrawerItem(icon: Icons.home, title: 'Inicio'),
-               DrawerItem(
+              DrawerItem(
+                icon: Icons.home,
+                title: 'Inicio',
+                selected: _currentView == _LawyerHomeView.dashboard,
+                onTap: _showDashboard, initiallyExpanded: null, children: [],
+              ),
+              DrawerItem(
                 icon: Icons.verified_user,
                 title: 'Perfil de Abogado',
-                trailing:
-                    _profileIncomplete ? const _WarningDot() : null,
-                onTap: _openLawyerProfile,
+                 trailing: _profileIncomplete ? const _WarningDot() : null,
+                selected: _currentView == _LawyerHomeView.profile,
+                initiallyExpanded: _currentView == _LawyerHomeView.profile,
+                children: [
+                  DrawerItem(
+                    title: 'Perfil de Abogado',
+                    selected: _currentView == _LawyerHomeView.profile &&
+                        _currentProfileSubsection ==
+                            LawyerProfileSubsection.profile,
+                    onTap: () => _navigateToProfileSection(
+                      LawyerProfileSubsection.profile,
+                    ), icon: null, initiallyExpanded: null, children: [],
+                  ),
+                  DrawerItem(
+                    title: 'Especialidades',
+                    selected: _currentView == _LawyerHomeView.profile &&
+                        _currentProfileSubsection ==
+                            LawyerProfileSubsection.specialties,
+                    onTap: () => _navigateToProfileSection(
+                      LawyerProfileSubsection.specialties,
+                    ),
+                  ),
+                  DrawerItem(
+                    title: 'Disponibilidad',
+                    selected: _currentView == _LawyerHomeView.profile &&
+                        _currentProfileSubsection ==
+                            LawyerProfileSubsection.acceptanceCriteria,
+                    onTap: () => _navigateToProfileSection(
+                      LawyerProfileSubsection.acceptanceCriteria,
+                    ),
+                  ),
+                  DrawerItem(
+                    title: 'Estudios asociados',
+                    selected: _currentView == _LawyerHomeView.profile &&
+                        _currentProfileSubsection ==
+                            LawyerProfileSubsection.studies,
+                    onTap: () => _navigateToProfileSection(
+                      LawyerProfileSubsection.studies,
+                    ),
+                  ),
+                ],
               ),
               DrawerItem(
                 icon: Icons.info,
@@ -370,133 +452,144 @@ class _LawyerHomeState extends State<LawyerHome> {
             ],
             onLogout: _handleLogout,
           ),
-          body: GradientContainer(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ShadowCard(
-                  padding: const EdgeInsets.all(15),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.gavel,
-                            color: AppColors.buttonColor,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '¡Bienvenido, $displayName!',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.buttonColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        'Gestiona tus casos y clientes de manera eficiente.',
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-                 if (_profileIncomplete) ...[
-                  const SizedBox(height: 16),
-                  _buildProfileReminderCard(displayName),
-                ],
-                const SizedBox(height: 20),
-                ShadowCard(
-                  padding: const EdgeInsets.all(15),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.chat_bubble_outline,
-                            color: AppColors.buttonColor,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Consulta Rápida',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.buttonColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Escribe tu consulta legal o usa el micrófono para dictar',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 10),
-                      ConsultationInput(
-                        controller: _consultationController,
-                        hintText: 'Escribe tu consulta legal aquí...',
-                        onSendPressed: _handleSendConsultation,
-                        onMicPressed: _handleMicPressed,
-                        isRecording: _isRecording,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const SectionHeader(title: 'Herramientas'),
-                const SizedBox(height: 15),
-                    GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 15,
-                  mainAxisSpacing: 15,
-                  childAspectRatio: 1.1,
-                  padding: const EdgeInsets.symmetric(horizontal: 15),
+          body: IndexedStack(
+            index: _currentView == _LawyerHomeView.dashboard ? 0 : 1,
+            children: [
+              GradientContainer(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    OptionCard(
-                      icon: Icons.info_outline,
-                      title: 'Información\nLegal',
-                      color: Colors.blue,
-                      onTap: () {
-                        // TODO: Navegar a la sección de información legal.
-                      },
+                    ShadowCard(
+                      padding: const EdgeInsets.all(15),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.gavel,
+                                color: AppColors.buttonColor,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '¡Bienvenido, $displayName!',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.buttonColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'Gestiona tus casos y clientes de manera eficiente.',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                          ),
+                        ],
+                      ),
                     ),
-                    OptionCard(
-                      icon: Icons.description,
-                      title: 'Formatos\ny Plantillas',
-                      color: Colors.orange,
-                      onTap: () {
-                        // TODO: Navegar a los formatos y plantilla disponibles
-                      },
+                    if (_profileIncomplete) ...[
+                      const SizedBox(height: 16),
+                      _buildProfileReminderCard(displayName),
+                    ],
+                    const SizedBox(height: 20),
+                    ShadowCard(
+                      padding: const EdgeInsets.all(15),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline,
+                                color: AppColors.buttonColor,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Consulta Rápida',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.buttonColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Escribe tu consulta legal o usa el micrófono para dictar',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 10),
+                          ConsultationInput(
+                            controller: _consultationController,
+                            hintText: 'Escribe tu consulta legal aquí...',
+                            onSendPressed: _handleSendConsultation,
+                            onMicPressed: _handleMicPressed,
+                            isRecording: _isRecording,
+                          ),
+                        ],
+                      ),
                     ),
-                    OptionCard(
-                      icon: Icons.people_alt,
-                      title: 'Clientes',
-                      color: Colors.green,
-                      onTap: () {
-                        // TODO: Mostrar la lista de clientes.
-                      },
-                    ),
-                    OptionCard(
-                      icon: Icons.calendar_today,
-                      title: 'Agenda',
-                      color: Colors.purple,
-                      onTap: () {
-                        // TODO: Abrir la agenda de citas.
-                      },
+                    const SizedBox(height: 20),
+                    const SectionHeader(title: 'Herramientas'),
+                    const SizedBox(height: 15),
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 15,
+                      mainAxisSpacing: 15,
+                      childAspectRatio: 1.1,
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      children: [
+                        OptionCard(
+                          icon: Icons.info_outline,
+                          title: 'Información\nLegal',
+                          color: Colors.blue,
+                          onTap: () {
+                            // TODO: Navegar a la sección de información legal.
+                          },
+                        ),
+                        OptionCard(
+                          icon: Icons.description,
+                          title: 'Formatos\ny Plantillas',
+                          color: Colors.orange,
+                          onTap: () {
+                            // TODO: Navegar a los formatos y plantilla disponibles
+                          },
+                        ),
+                        OptionCard(
+                          icon: Icons.people_alt,
+                          title: 'Clientes',
+                          color: Colors.green,
+                          onTap: () {
+                            // TODO: Mostrar la lista de clientes.
+                          },
+                        ),
+                        OptionCard(
+                          icon: Icons.calendar_today,
+                          title: 'Agenda',
+                          color: Colors.purple,
+                          onTap: () {
+                            // TODO: Abrir la agenda de citas.
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              LawyerProfileScreen(
+                key: _profileScreenKey,
+                embedded: true,
+                initialSubsection: _currentProfileSubsection,
+                onSubsectionChanged: _handleProfileSubsectionChanged,
+              ),
+            ],
           ),
         );
       },

@@ -56,17 +56,7 @@ class CustomDrawer extends StatelessWidget {
               ],
             ),
           ),
-             ...items.map(
-            (item) => ListTile(
-              leading: Icon(item.icon, color: AppColors.buttonColor),
-              title: Text(item.title),
-              trailing: item.trailing,
-              onTap: () {
-                Navigator.pop(context);
-                item.onTap?.call();
-              },
-            ),
-          ),
+            ..._buildDrawerItems(context, items),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
@@ -80,18 +70,102 @@ class CustomDrawer extends StatelessWidget {
       ),
     );
   }
+
+  List<Widget> _buildDrawerItems(
+    BuildContext context,
+    List<DrawerItem> drawerItems, {
+    bool isChild = false,
+  }) {
+    final List<Widget> tiles = <Widget>[];
+    for (final DrawerItem item in drawerItems) {
+      final bool hasChildren = item.children.isNotEmpty;
+      final EdgeInsetsGeometry padding = EdgeInsets.only(
+        left: isChild ? 32 : 16,
+        right: 16,
+      );
+
+      if (hasChildren) {
+        final bool highlight =
+            item.selected || item.children.any((child) => child.selected);
+        tiles.add(
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: padding,
+              childrenPadding: EdgeInsets.zero,
+              initiallyExpanded:
+                  item.initiallyExpanded || item.children.any((child) => child.selected),
+              leading: item.icon != null
+                  ? Icon(item.icon, color: AppColors.buttonColor)
+                  : null,
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.title,
+                      style: TextStyle(
+                        fontWeight: highlight ? FontWeight.w600 : FontWeight.w500,
+                        color: highlight ? AppColors.buttonColor : null,
+                      ),
+                    ),
+                  ),
+                  if (item.trailing != null) item.trailing!,
+                ],
+              ),
+              children:
+                  _buildDrawerItems(context, item.children, isChild: true),
+            ),
+          ),
+        );
+      } else {
+        tiles.add(
+          ListTile(
+            leading: item.icon != null
+                ? Icon(item.icon, color: AppColors.buttonColor)
+                : null,
+            title: Text(
+              item.title,
+              style: TextStyle(
+                fontWeight: item.selected ? FontWeight.w600 : FontWeight.w500,
+                color: item.selected ? AppColors.buttonColor : null,
+              ),
+            ),
+            trailing: item.trailing,
+            selected: item.selected,
+            selectedTileColor: AppColors.buttonColor.withOpacity(0.08),
+            hoverColor: AppColors.buttonColor.withOpacity(0.04),
+            enabled: item.onTap != null,
+            onTap: item.onTap == null
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    item.onTap!();
+                  },
+            contentPadding: padding,
+            dense: true,
+          ),
+        );
+      }
+    }
+    return tiles;
+  }
 }
 
 class DrawerItem {
-  final IconData icon;
+  final IconData? icon;
   final String title;
   final VoidCallback? onTap;
   final Widget? trailing;
+  final List<DrawerItem> children;
+  final bool selected;
+  final bool initiallyExpanded;
 
   const DrawerItem({
-    required this.icon,
     required this.title,
     this.onTap,
     this.trailing,
+    this.children = const <DrawerItem>[],
+    this.selected = false,
+    this.initiallyExpanded = false,
   });
-} 
+}

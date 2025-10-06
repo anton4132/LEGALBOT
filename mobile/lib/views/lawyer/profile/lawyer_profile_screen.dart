@@ -16,13 +16,28 @@ import '../../authentication/login_screen.dart';
 import '../../../models/ubigeo_option.dart';
 
 class LawyerProfileScreen extends StatefulWidget {
-  const LawyerProfileScreen({super.key});
+ const LawyerProfileScreen({
+    super.key,
+    this.initialSubsection = LawyerProfileSubsection.profile,
+    this.onSubsectionChanged,
+    this.embedded = false,
+  });
 
+  final LawyerProfileSubsection initialSubsection;
+  final ValueChanged<LawyerProfileSubsection>? onSubsectionChanged;
+  final bool embedded;
   @override
-  State<LawyerProfileScreen> createState() => _LawyerProfileScreenState();
+  State<LawyerProfileScreen> createState() => LawyerProfileScreenState();
 }
 
-class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
+enum LawyerProfileSubsection {
+  profile,
+  specialties,
+  acceptanceCriteria,
+  studies,
+}
+
+class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   final TextEditingController _bioController = TextEditingController();
   final TextEditingController _baseRateController = TextEditingController();
 
@@ -47,6 +62,8 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   Set<int> _selectedSpecialties = <int>{};
   List<LawyerAvailabilitySlot> _availability = const <LawyerAvailabilitySlot>[];
   List<LawyerStudyAssignment> _studies = const <LawyerStudyAssignment>[];
+  late LawyerProfileSubsection _currentSubsection;
+
 
   // Catálogos y estado para ESTUDIOS (se quedan)
   List<UbigeoOption> _departamentos = const <UbigeoOption>[];
@@ -76,6 +93,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _currentSubsection = widget.initialSubsection;
     _loadDepartamentosCatalog();
     _loadInitialData();
   }
@@ -95,7 +113,32 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
     super.dispose();
   }
+  @override
+  void didUpdateWidget(covariant LawyerProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSubsection != oldWidget.initialSubsection &&
+        widget.initialSubsection != _currentSubsection) {
+      selectSubsection(widget.initialSubsection);
+    }
+  }
 
+  void _setSubsection(
+    LawyerProfileSubsection subsection, {
+    bool notifyParent = true,
+  }) {
+    if (_currentSubsection == subsection) return;
+    setState(() {
+      _currentSubsection = subsection;
+    });
+    if (notifyParent) {
+      widget.onSubsectionChanged?.call(subsection);
+    }
+  }
+
+  void selectSubsection(LawyerProfileSubsection subsection) {
+    _setSubsection(subsection, notifyParent: false);
+  }
+  
   Future<void> _loadDepartamentosCatalog() async {
     setState(() => _loadingDepartamentos = true);
     try {
@@ -858,8 +901,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
           _lawFirmDepartamentoCodigo =
               distrito.length >= 2 ? distrito.substring(0, 2) : null;
           _lawFirmExactAddressController.text =
-            (assignment.estudio.lineaExactaDireccion ?? direccionExacta)
-
+              (assignment.estudio.lineaExactaDireccion ?? direccionExacta)
                   .trim();
           if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
             _loadLawFirmProvincias(
@@ -1130,32 +1172,159 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final Widget body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              final bool useNavigationRail = constraints.maxWidth >= 900;
+              final Widget content = _buildScrollableContent();
+
+              if (useNavigationRail) {
+                return Row(
+                  children: [
+                    _buildNavigationRail(),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: content),
+                  ],
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildMobileSectionSelector(),
+                  const Divider(height: 1),
+                  Expanded(child: content),
+                ],
+              );
+            },
+          );
+
+    if (widget.embedded) {
+      return body;
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Perfil de Abogado'),
         backgroundColor: AppColors.buttonColor,
         foregroundColor: Colors.white,
       ),
-      body:
-          _loading
-              ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
-                onRefresh: _loadInitialData,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildProfileSection(),
-                    const SizedBox(height: 16),
-                    _buildSpecialtiesSection(),
-                    const SizedBox(height: 16),
-                    _buildAvailabilitySection(),
-                    const SizedBox(height: 16),
-                    _buildLawFirmSection(),
-                  ],
-                ),
-              ),
+            body: body,
+
     );
+  }
+
+
+  Widget _buildNavigationRail() {
+    final List<LawyerProfileSubsection> subsections =
+        LawyerProfileSubsection.values;
+    return NavigationRail(
+      selectedIndex: subsections.indexOf(_currentSubsection),
+      onDestinationSelected: (index) {
+        if (index >= 0 && index < subsections.length) {
+          _setSubsection(subsections[index]);
+
+        }
+      },
+      labelType: NavigationRailLabelType.all,
+      selectedIconTheme: const IconThemeData(color: AppColors.buttonColor),
+      selectedLabelTextStyle: const TextStyle(
+        color: AppColors.buttonColor,
+        fontWeight: FontWeight.w600,
+      ),
+      destinations: subsections.map((subsection) {
+        return NavigationRailDestination(
+          icon: Icon(_iconForSubsection(subsection)),
+          selectedIcon: Icon(_iconForSubsection(subsection)),
+          label: Text(_labelForSubsection(subsection)),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildMobileSectionSelector() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: LawyerProfileSubsection.values.map((subsection) {
+          final bool selected = _currentSubsection == subsection;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(_labelForSubsection(subsection)),
+              selected: selected,
+              labelStyle: TextStyle(
+                color:
+                    selected ? Colors.white : AppColors.buttonColor,
+              ),
+              selectedColor: AppColors.buttonColor,
+              backgroundColor: AppColors.buttonColor.withOpacity(0.08),
+              onSelected: (_) {
+                if (!selected) {
+                  _setSubsection(subsection);
+                }
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildScrollableContent() {
+    return RefreshIndicator(
+      onRefresh: _loadInitialData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildCurrentSection(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentSection() {
+    switch (_currentSubsection) {
+      case LawyerProfileSubsection.profile:
+        return _buildProfileSection();
+      case LawyerProfileSubsection.specialties:
+        return _buildSpecialtiesSection();
+      case LawyerProfileSubsection.acceptanceCriteria:
+        return _buildAvailabilitySection();
+      case LawyerProfileSubsection.studies:
+        return _buildLawFirmSection();
+    }
+  }
+
+  IconData _iconForSubsection(LawyerProfileSubsection subsection) {
+    switch (subsection) {
+      case LawyerProfileSubsection.profile:
+        return Icons.badge;
+      case LawyerProfileSubsection.specialties:
+        return Icons.gavel;
+      case LawyerProfileSubsection.acceptanceCriteria:
+        return Icons.rule;
+      case LawyerProfileSubsection.studies:
+        return Icons.domain;
+    }
+  }
+
+  String _labelForSubsection(LawyerProfileSubsection subsection) {
+    switch (subsection) {
+      case LawyerProfileSubsection.profile:
+        return 'Perfil de Abogado';
+      case LawyerProfileSubsection.specialties:
+        return 'Especialidades';
+      case LawyerProfileSubsection.acceptanceCriteria:
+        return 'Disponibilidad';
+      case LawyerProfileSubsection.studies:
+        return 'Estudios asociados';
+    }
   }
 
   Widget _buildSectionTitle(String title, {IconData? icon}) {
@@ -1400,7 +1569,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Disponibilidad', icon: Icons.calendar_today),
+          _buildSectionTitle('Disponibilidad', icon: Icons.rule),
           const SizedBox(height: 12),
           if (_availability.isEmpty)
             const Text('Aún no registras horarios de atención.'),
@@ -1508,8 +1677,8 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                    assignment.estudio.nombreComercial ?? 'Sin nombre',
-                  ),
+                        assignment.estudio.nombreComercial ?? 'Sin nombre',
+                      ),
                       subtitle: Text(
                         [
                               assignment.estudio.ruc,
@@ -1538,8 +1707,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
                           _lawFirmPhoneController.text =
                               assignment.estudio.telefono ?? '';
                           _lawFirmExactAddressController.text =
-                                (assignment.estudio.lineaExactaDireccion ?? '')
-
+                              (assignment.estudio.lineaExactaDireccion ?? '')
                                   .trim();
 
                           final distrito =
@@ -1608,7 +1776,7 @@ class _LawyerProfileScreenState extends State<LawyerProfileScreen> {
             controller: _lawFirmRucController,
             decoration: const InputDecoration(labelText: 'RUC'),
           ),
-          const SizedBox(height: 12),    
+          const SizedBox(height: 12),
           _buildLawFirmUbigeoFields(),
           const SizedBox(height: 12),
           TextField(
