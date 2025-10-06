@@ -352,7 +352,7 @@ class _LawyerHomeState extends State<LawyerHome> {
                 icon: Icons.home,
                 title: 'Inicio',
                 selected: _currentView == _LawyerHomeView.dashboard,
-                onTap: _showDashboard, initiallyExpanded: null, children: [],
+                onTap: _showDashboard, 
               ),
               DrawerItem(
                 icon: Icons.verified_user,
@@ -368,7 +368,7 @@ class _LawyerHomeState extends State<LawyerHome> {
                             LawyerProfileSubsection.profile,
                     onTap: () => _navigateToProfileSection(
                       LawyerProfileSubsection.profile,
-                    ), icon: null, initiallyExpanded: null, children: [],
+                    ), 
                   ),
                   DrawerItem(
                     title: 'Especialidades',

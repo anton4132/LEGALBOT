@@ -161,6 +161,7 @@ class DrawerItem {
   final bool initiallyExpanded;
 
   const DrawerItem({
+    this.icon,
     required this.title,
     this.onTap,
     this.trailing,
