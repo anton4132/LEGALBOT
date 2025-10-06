@@ -55,18 +55,25 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     );
   }
 
+
+  String _normalizeName(String value) => value.trim().replaceAll(RegExp(r'\s+'), ' ');
+
   void _nextStep() {
     if (_validateFields()) {
+      final normalizedPrimerNombre = _normalizeName(_primerNombreController.text);
+      final normalizedSegundoNombre = _normalizeName(_segundoNombreController.text);
+      final normalizedApellidoPaterno = _normalizeName(_apellidoPaternoController.text);
+      final normalizedApellidoMaterno = _normalizeName(_apellidoMaternoController.text);
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ContactInfoScreen(
             userType: widget.userType,
             personalInfo: {
-              'primerNombre': _primerNombreController.text,
-              'segundoNombre': _segundoNombreController.text,
-              'apellidoPaterno': _apellidoPaternoController.text,
-              'apellidoMaterno': _apellidoMaternoController.text,
+              'primerNombre': normalizedPrimerNombre,
+              'segundoNombre': normalizedSegundoNombre,
+              'apellidoPaterno': normalizedApellidoPaterno,
+              'apellidoMaterno': normalizedApellidoMaterno,
             },
           ),
         ),
@@ -248,26 +255,57 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                       ),
                       
                       // Apellidos
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildCustomTextField(
-                              controller: _apellidoPaternoController,
-                              label: 'Apellido Paterno *',
-                            ),
+                       Row(
+                          children: [
+                            Expanded(
+                              child: _buildCustomTextField(
+                                controller: _apellidoPaternoController,
+                                label: 'Apellido Paterno *',
+                              ),
                           ),
-                          const SizedBox(width: 15),
-                          Expanded(
-                            child: _buildCustomTextField(
-                              controller: _apellidoMaternoController,
-                              label: 'Apellido Materno *',
+                         const SizedBox(width: 15),
+                            Expanded(
+                              child: _buildCustomTextField(
+                                controller: _apellidoMaternoController,
+                                label: 'Apellido Materno *',
+                              ),
                             ),
+                          ],
+                        ),
+                      const SizedBox(height: 16),
+
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.orange.shade200),  
                           ),
-                        ],
-                      ),
-                    ],
+                 child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.orange.shade700,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Recuerda ingresar tus nombres tal como aparecen en el padrón oficial. '
+                                  'Los datos se validarán con RENIEC al verificar tu DNI.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.orange.shade800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
                 
                 const SizedBox(height: 30),
                 

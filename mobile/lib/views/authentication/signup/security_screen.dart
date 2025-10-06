@@ -9,12 +9,15 @@ class SecurityScreen extends StatefulWidget {
   final String userType;
   final Map<String, String> personalInfo;
   final Map<String, String> contactInfo;
+  final Map<String, dynamic>? verification;
+
   
   const SecurityScreen({
-    super.key, 
-    required this.userType, 
+    super.key,
+    required this.userType,
     required this.personalInfo,
     required this.contactInfo,
+    required this.verification,
   });
 
   @override
@@ -26,6 +29,28 @@ class _SecurityScreenState extends State<SecurityScreen> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+
+   bool get _hasValidVerification {
+    final verification = widget.verification;
+    if (verification == null) return false;
+    final dniMatch = verification['dniMatch'] == true;
+    final conflictsCleared = verification['conflictsCleared'] == true;
+    return dniMatch && conflictsCleared;
+  }
+
+  String get _verificationStatusMessage {
+    if (widget.verification == null) {
+      return 'Debes validar tu identidad con RENIEC antes de crear tu clave.';
+    }
+    if (widget.verification?['dniMatch'] != true) {
+      return 'Los datos ingresados no coinciden con el padrón RENIEC.';
+    }
+    if (widget.verification?['conflictsCleared'] != true) {
+      return 'Aún existen datos duplicados por resolver antes de continuar.';
+    }
+    return 'Identidad validada correctamente.';
+  }
+
 
   Widget _buildCustomTextField({
     required TextEditingController controller,
@@ -74,6 +99,16 @@ class _SecurityScreenState extends State<SecurityScreen> {
   }
 
   void _nextStep() {
+    if (!_hasValidVerification) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_verificationStatusMessage),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     if (_validateFields()) {
       Navigator.push(
         context,
@@ -83,6 +118,8 @@ class _SecurityScreenState extends State<SecurityScreen> {
             personalInfo: widget.personalInfo,
             contactInfo: widget.contactInfo,
             password: _passwordController.text,
+            verification: widget.verification,
+
           ),
         ),
       );
@@ -259,6 +296,49 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
+
+                       Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _hasValidVerification
+                              ? Colors.green.shade50
+                              : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _hasValidVerification
+                                ? Colors.green.shade200
+                                : Colors.orange.shade200,
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _hasValidVerification
+                                  ? Icons.verified
+                                  : Icons.warning_amber_outlined,
+                              color: _hasValidVerification
+                                  ? Colors.green.shade700
+                                  : Colors.orange.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _verificationStatusMessage,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _hasValidVerification
+                                      ? Colors.green.shade800
+                                      : Colors.orange.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
                       
                       // Contraseña
                       _buildCustomTextField(
@@ -322,7 +402,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   height: 55,
                   child: CustomButton(
                     text: 'Crear Cuenta',
-                    onTap: _nextStep,
+                    onTap: _hasValidVerification ? _nextStep : null,
+                    color:
+                        _hasValidVerification ? AppColors.buttonColor : Colors.grey.shade400,
                   ),
                 ),
                 

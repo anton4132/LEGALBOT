@@ -9,13 +9,18 @@ class ConfirmationScreen extends StatefulWidget {
   final Map<String, String> personalInfo;
   final Map<String, String> contactInfo;
   final String password;
+  final Map<String, dynamic>? verification;
+
+
   
   const ConfirmationScreen({
-    super.key, 
+     super.key,
     required this.userType, 
     required this.personalInfo,
     required this.contactInfo,
     required this.password,
+    this.verification,
+
   });
 
   @override
@@ -67,11 +72,9 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
         password: widget.password,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('¡Registro exitoso! Redirigiendo al login...'),
-          backgroundColor: Colors.green,
-        ),
+      _showSnackBar(
+        '¡Registro exitoso! Redirigiendo al login...',
+        backgroundColor: Colors.green,
       );
       Future.delayed(const Duration(seconds: 2), () {
         Navigator.pushAndRemoveUntil(
@@ -82,19 +85,70 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           (route) => false,
         );
       });
-    } catch (e) {
+    } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al registrar: $e'),
-          backgroundColor: Colors.red,
-        ),
+      final friendlyMessage = _mapSignupError(error);
+      _showSnackBar(friendlyMessage);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      _showSnackBar(
+        message.isNotEmpty
+            ? message
+            : 'No se pudo completar el registro. Inténtalo nuevamente.',
 
       );
     }finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
+
+  
+
+  void _showSnackBar(String message, {Color backgroundColor = Colors.red}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor,
+      ),
+    );
+  }
+
+  String _mapSignupError(ApiException error) {
+    final rawMessage = error.message.trim();
+    final statusCode = error.statusCode;
+    final message = rawMessage.isNotEmpty ? rawMessage : 'No se pudo completar el registro.';
+
+    if (statusCode == 409) {
+      if (message.contains('ya posee un usuario con ese rol') ||
+          message.contains('ya tiene una cuenta con ese rol')) {
+        return 'La persona ya se encuentra registrada.';
+      }
+      if (message.contains('DNI y correo pertenecen a personas diferentes')) {
+        return 'El DNI y el correo corresponden a distintas personas registradas.';
+      }
+    }
+
+    if (statusCode == 400) {
+      if (message.contains('DNI')) return message;
+      if (message.contains('correo') || message.contains('rol_id') || message.contains('Faltan')) {
+        return message;
+      }
+    }
+
+    if (statusCode == 404 &&
+        message.contains('Persona no encontrada')) {
+      return 'No se encontró la persona para completar el registro.';
+    }
+
+    if (statusCode == 500) {
+      return 'Ocurrió un error en el servidor al crear la cuenta. Inténtalo más tarde.';
+    }
+
+    return message;
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +338,13 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                         _buildInfoRow(
                           'Código Ubigeo',
                           widget.contactInfo['ubigeoCodigo'] ?? '',
-                        ),                      ],
+                        ),
+
+                        if (widget.verification != null) ...[
+                          const Divider(height: 32),
+                          _buildVerificationSummary(),
+                        ]
+                      ],
                     ),
                   ),
                 ),
@@ -302,6 +362,9 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                           ? 'Enviando...'
                           : 'Confirmar Registro',
                       onTap: _isSubmitting ? null : _completeRegistration,
+                       color: _isSubmitting
+                          ? Colors.grey.shade400
+                          : AppColors.buttonColor,
                     ),
                   ),
                 ),
@@ -371,4 +434,67 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       ),
     );
   }
-} 
+ Widget _buildVerificationSummary() {
+    final lookup = (widget.verification?['dniLookup'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final numero = (lookup['numero'] ?? widget.contactInfo['dni'] ?? '').toString();
+    final padronNombre = [
+      lookup['primerNombre'],
+      lookup['segundoNombre'],
+      lookup['apellidoPaterno'],
+      lookup['apellidoMaterno'],
+    ]
+        .map((value) => value is String ? value.trim() : (value?.toString().trim() ?? ''))
+        .where((value) => value.isNotEmpty)
+        .join(' ');
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.verified, color: Colors.green.shade700, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Identidad verificada',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'DNI validado: $numero',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+                if (padronNombre.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Nombres según padrón: $padronNombre',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

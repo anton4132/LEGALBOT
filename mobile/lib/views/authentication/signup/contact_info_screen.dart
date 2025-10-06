@@ -39,6 +39,8 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   bool _loadingProvincias = false;
   bool _loadingDistritos = false;
 
+  bool _verificandoIdentidad = false;
+
 
   @override
   void initState() {
@@ -216,25 +218,113 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       ),
     );
   }
-  
-  void _nextStep() {
-    if (_validateFields()) {
+    String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
+
+  Future<void> _nextStep() async {
+    if (!_validateFields()) return;
+
+    final normalizedDni = _digitsOnly(_dniController.text);
+    final normalizedTelefono = _digitsOnly(_phoneController.text);
+    final normalizedCorreo = _emailController.text.trim().toLowerCase();
+
+    setState(() => _verificandoIdentidad = true);
+
+    try {
+      final conflicts = await ApiClient.checkPersonaConflicts(
+        dni: normalizedDni,
+        telefono: normalizedTelefono,
+        correo: normalizedCorreo,
+      );
+
+      if (conflicts.contains('dni')) {
+        _showSnack('DNI ya registrado');
+        return;
+      }
+      if (conflicts.contains('telefono')) {
+        _showSnack('Teléfono ya registrado');
+        return;
+      }
+      if (conflicts.contains('correo')) {
+        _showSnack('Correo ya registrado');
+        return;
+      }
+
+      final dniLookup = await ApiClient.lookupDni(normalizedDni);
+
+      final enteredPrimerNombre =
+          (widget.personalInfo['primerNombre'] ?? '').trim().toLowerCase();
+      final enteredApellidoPaterno =
+          (widget.personalInfo['apellidoPaterno'] ?? '').trim().toLowerCase();
+
+      final padronsPrimerNombre = dniLookup.primerNombre.trim().toLowerCase();
+      final padronsApellidoPaterno =
+          dniLookup.apellidoPaterno.trim().toLowerCase();
+
+      if (enteredPrimerNombre.isEmpty || enteredApellidoPaterno.isEmpty) {
+        _showSnack(
+            'Los nombres ingresados no son válidos para validar el DNI.');
+        return;
+      }
+
+      if (enteredPrimerNombre != padronsPrimerNombre ||
+          enteredApellidoPaterno != padronsApellidoPaterno) {
+        _showSnack(
+          'Los nombres ingresados no coinciden con el padrón RENIEC. Verifica tu primer nombre y apellido paterno.',
+        );
+        return;
+      }
+
+      if (!mounted) return;
+
+      final contactInfo = {
+        'dni': normalizedDni,
+        'phone': normalizedTelefono,
+        'email': normalizedCorreo,
+        'ubigeoCodigo': _selectedDistritoCodigo ?? '',
+        'lineaExactaDireccion': _direccionExactaController.text.trim(),
+      };
+
+      final verification = {
+        'dniMatch': true,
+        'conflictsCleared': true,
+        'dniLookup': {
+          'numero': dniLookup.numero,
+          'primerNombre': dniLookup.primerNombre,
+          'segundoNombre': dniLookup.segundoNombre,
+          'apellidoPaterno': dniLookup.apellidoPaterno,
+          'apellidoMaterno': dniLookup.apellidoMaterno,
+        },
+        'verifiedAt': DateTime.now().toIso8601String(),
+      };
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => SecurityScreen(
             userType: widget.userType,
             personalInfo: widget.personalInfo,
-            contactInfo: {
-              'dni': _dniController.text,
-              'phone': _phoneController.text,
-              'email': _emailController.text,
-              'ubigeoCodigo': _selectedDistritoCodigo ?? '',
-              'lineaExactaDireccion': _direccionExactaController.text.trim(),
-            },
+            contactInfo: contactInfo,
+            verification: verification,
           ),
         ),
       );
+    }on ApiException catch (error) {
+      if (!mounted) return;
+      final message = error.message.isNotEmpty
+          ? error.message
+          : 'No se pudo verificar los datos ingresados';
+      _showSnack(message);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      _showSnack(
+        message.isNotEmpty
+            ? message
+            : 'Ocurrió un error al verificar tus datos. Inténtalo nuevamente.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _verificandoIdentidad = false);
+      }
     }
   }
 
@@ -269,6 +359,15 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   
   @override
   Widget build(BuildContext context) {
+     final bool isProcessing = _isLoadingUbigeo || _verificandoIdentidad;
+    final String primaryButtonText = _isLoadingUbigeo
+        ? 'Cargando ubicaciones...'
+        : (_verificandoIdentidad ? 'Verificando datos...' : 'Siguiente');
+    final Color primaryButtonColor = isProcessing
+        ? Colors.grey.shade400
+        : AppColors.buttonColor;
+
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.buttonColor,
@@ -506,11 +605,9 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                   width: double.infinity,
                   height: 55,
                   child: CustomButton(
-                     text: _isLoadingUbigeo ? 'Cargando ubicaciones...' : 'Siguiente',
-                    onTap: _isLoadingUbigeo ? null : _nextStep,
-                    color: _isLoadingUbigeo
-                        ? Colors.grey.shade400
-                        : AppColors.buttonColor,
+                    text: primaryButtonText,
+                    onTap: isProcessing ? null : _nextStep,
+                    color: primaryButtonColor,
                   ),
                 ),
                 

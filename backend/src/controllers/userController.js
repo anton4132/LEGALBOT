@@ -860,6 +860,68 @@ const lookupDni = async (req, res) => {
   }
 };
 
+const normalizeDigits = (value) => (value || '').replace(/\D/g, '');
+
+const checkPersonaConflicts = async (req, res) => {
+  try {
+    const dniRaw = String(req.query.dni || '').trim();
+    const telefonoRaw = String(req.query.telefono || '').trim();
+    const correoRaw = String(req.query.correo || '').trim();
+
+    if (!dniRaw && !telefonoRaw && !correoRaw) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe proporcionar al menos un DNI, teléfono o correo para validar duplicados',
+      });
+    }
+
+    const normalizedDni = normalizeDigits(dniRaw);
+    const normalizedTelefono = normalizeDigits(telefonoRaw);
+    const normalizedCorreo = correoRaw.toLowerCase();
+
+    const conflicts = {};
+
+    if (normalizedDni) {
+      const personaByDni = await prisma.persona.findUnique({ where: { dni: normalizedDni } });
+      conflicts.dni = Boolean(personaByDni);
+    }
+
+    if (normalizedTelefono) {
+      const telefonoMatch = await prisma.$queryRaw`
+        SELECT id
+        FROM persona
+        WHERE telefono IS NOT NULL
+          AND regexp_replace(telefono, '\\D', '', 'g') = ${normalizedTelefono}
+        LIMIT 1;
+      `;
+      conflicts.telefono = Array.isArray(telefonoMatch) && telefonoMatch.length > 0;
+    }
+
+    if (normalizedCorreo) {
+      const personaByCorreo = await prisma.persona.findFirst({
+        where: { correo: { equals: normalizedCorreo, mode: 'insensitive' } },
+      });
+      conflicts.correo = Boolean(personaByCorreo);
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        dni: normalizedDni || null,
+        telefono: normalizedTelefono || null,
+        correo: normalizedCorreo || null,
+      },
+      conflicts,
+    });
+  } catch (error) {
+    console.error('Error validando duplicados de persona:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Error validando duplicados de persona',
+    });
+  }
+};
+
 // Listar roles (el frontend lo necesita)
 const getRoles = async (_req, res) => {
   try {
@@ -2015,10 +2077,37 @@ const getUserEstudios = async (req, res) => {
 
 const upsertUserEstudio = async (req, res) => {
   const userId = parseInt(req.params.id, 10);
-  let { estudio_id, principal, rol_en_estudio } = req.body || {};
+  let {
+    estudio_id,
+    principal,
+    rol_en_estudio,
+    direccion_id: direccionIdRaw,
+    linea_exacta_direccion: lineaExactaRaw,
+  } = req.body || {};
   estudio_id = parseInt(estudio_id, 10);
   principal = !!principal;
+  const direccionId = sanitizeString(direccionIdRaw);
+  const lineaExactaDireccion = sanitizeString(lineaExactaRaw);
+
+  if (!direccionId) {
+    return res.status(400).json({ message: 'El campo direccion_id es obligatorio.' });
+  }
+
+  if (direccionId.length !== 6) {
+    return res.status(400).json({ message: 'El código de dirección debe tener 6 caracteres.' });
+  }
+
+  if (!lineaExactaDireccion) {
+    return res.status(400).json({ message: 'La dirección exacta es obligatoria.' });
+  }
   try {
+    const direccion = await prisma.direccion.findUnique({
+      where: { ubigeo_codigo: direccionId },
+    });
+
+    if (!direccion) {
+      return res.status(400).json({ message: 'La dirección seleccionada no existe.' });
+    }
     const vinculo = await prisma.$transaction(async (tx) => {
       const row = await tx.abogadoestudio.upsert({
         where: { usuario_id_estudio_id: { usuario_id: userId, estudio_id } },
@@ -2026,13 +2115,23 @@ const upsertUserEstudio = async (req, res) => {
         create: { usuario_id: userId, estudio_id, principal, rol_en_estudio },
         include: { estudio: { include: { direccion: true } } }
       });
+
+      const estudioActualizado = await tx.estudio.update({
+        where: { id: estudio_id },
+        data: {
+          direccion_id: direccionId,
+          linea_exacta_direccion: lineaExactaDireccion,
+        },
+        include: { direccion: true },
+      });
+
       if (principal) {
         await tx.abogadoestudio.updateMany({
           where: { usuario_id: userId, estudio_id: { not: estudio_id } },
           data: { principal: false }
         });
       }
-      return row;
+      return { ...row, estudio: estudioActualizado };
     });
     res.json({ success: true, vinculo });
   } catch (error) {
@@ -2151,6 +2250,7 @@ module.exports = {
   addUserDisponibilidad,
   deleteUserDisponibilidad,
   // auxiliares
+  checkPersonaConflicts,
   lookupDni,
   fetchDniInfo,
   // públicos abogado

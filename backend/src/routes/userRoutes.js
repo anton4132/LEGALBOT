@@ -350,6 +350,37 @@ router.post('/', userController.createUser);
 
 /**
  * @swagger
+ * /users/persona/conflicts:
+ *   get:
+ *     summary: Verifica duplicados de persona por DNI, teléfono o correo
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: dni
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: DNI a validar
+ *       - in: query
+ *         name: telefono
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Teléfono a validar
+ *       - in: query
+ *         name: correo
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Correo electrónico a validar
+ *     responses:
+ *       200:
+ *         description: Resultado de la validación
+ */
+router.get('/persona/conflicts', userController.checkPersonaConflicts);
+
+/**
+ * @swagger
  * /users/{id}:
  *   get:
  *     summary: Obtiene un usuario por ID

@@ -6,6 +6,8 @@ import '../models/lawyer_application.dart';
 import '../models/user_session.dart';
 import '../models/lawyer_search_result.dart';
 import '../models/ubigeo_option.dart';
+import '../models/dni_lookup_result.dart';
+
 
 class UnauthorizedException implements Exception {
   final String message;
@@ -13,6 +15,16 @@ class UnauthorizedException implements Exception {
   const UnauthorizedException([
     this.message = 'Tu sesión ha expirado. Inicia sesión nuevamente.',
   ]);
+
+  @override
+  String toString() => message;
+}
+
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  const ApiException(this.message, {this.statusCode});
 
   @override
   String toString() => message;
@@ -47,7 +59,83 @@ class ApiClient {
     }
     return headers;
   }
+static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
 
+  static Future<DniLookupResult> lookupDni(String dni) async {
+    final normalizedDni = _digitsOnly(dni);
+    if (normalizedDni.isEmpty) {
+      throw const ApiException('Ingresa un DNI válido para verificarlo.');
+    }
+
+    final uri = Uri.parse('$_baseUrl/dni/$normalizedDni');
+    final http.Response response = await http.get(uri);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      final payload = _asJsonMap(data?['data']);
+      if (payload != null) {
+        return DniLookupResult.fromJson(payload);
+      }
+      throw const ApiException('La respuesta del padrón no contiene nombres válidos.');
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo verificar el DNI proporcionado';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<Set<String>> checkPersonaConflicts({
+    String? dni,
+    String? telefono,
+    String? correo,
+  }) async {
+    final queryParameters = <String, String>{};
+
+    final normalizedDni = dni != null ? _digitsOnly(dni) : '';
+    if (normalizedDni.isNotEmpty) {
+      queryParameters['dni'] = normalizedDni;
+    }
+
+    final normalizedTelefono = telefono != null ? _digitsOnly(telefono) : '';
+    if (normalizedTelefono.isNotEmpty) {
+      queryParameters['telefono'] = normalizedTelefono;
+    }
+
+    final normalizedCorreo = correo?.trim().toLowerCase() ?? '';
+    if (normalizedCorreo.isNotEmpty) {
+      queryParameters['correo'] = normalizedCorreo;
+    }
+
+    if (queryParameters.isEmpty) {
+      return <String>{};
+    }
+
+    final uri = Uri.parse('$_baseUrl/users/persona/conflicts')
+        .replace(queryParameters: queryParameters);
+    final http.Response response = await http.get(uri);
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      final conflictsMap = _asJsonMap(data?['conflicts']);
+      final result = <String>{};
+      conflictsMap?.forEach((key, value) {
+        if (value is bool && value) {
+          result.add(key);
+        }
+      });
+      return result;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo validar los datos de la persona';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
   static Future<List<Map<String, dynamic>>> fetchEspecialidades() async {
     final uri = Uri.parse('$_baseUrl/especialidades');
     final http.Response response = await http.get(uri);
@@ -148,7 +236,7 @@ class ApiClient {
 
     String? digitsOrNull(String? value) {
       if (value == null) return null;
-      final digits = value.replaceAll(RegExp(r'\D'), '');
+      final digits = _digitsOnly(value);
       return digits.isEmpty ? null : digits;
     }
 
@@ -186,13 +274,15 @@ class ApiClient {
       // ignore json parse errors
     }
 
-    if (response.statusCode >= 400 ||
-        (data != null && data['success'] == false)) {
+    final isErrorStatus = response.statusCode >= 400;
+    final successFlag = data?['success'] as bool?;
+
+    if (isErrorStatus || successFlag == false) {
       final message =
           data != null && data['message'] is String
               ? data['message'] as String
               : 'Error registrando usuario';
-      throw Exception(message);
+      throw ApiException(message, statusCode: response.statusCode);
     }
   }
 
