@@ -1,5 +1,6 @@
 import 'dart:io' as io;
 import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -19,10 +20,14 @@ class LawyerProfileScreen extends StatefulWidget {
     super.key,
     this.initialSubsection = LawyerProfileSubsection.profile,
     this.onSubsectionChanged,
+    this.embedded = false,
+
   });
 
   final LawyerProfileSubsection initialSubsection;
   final ValueChanged<LawyerProfileSubsection>? onSubsectionChanged;
+  final bool embedded;
+
   @override
   State<LawyerProfileScreen> createState() => LawyerProfileScreenState();
 }
@@ -1176,35 +1181,37 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   }
 
   Widget _buildScrollableContent() {
-    return RefreshIndicator(
-      onRefresh: _loadInitialData,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  _iconForSection(_currentSubsection),
-                  color: AppColors.buttonColor,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _labelForSection(_currentSubsection),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+    final scrollable = SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: widget.embedded ? EdgeInsets.zero : const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _iconForSection(_currentSubsection),
+                color: AppColors.buttonColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _labelForSection(_currentSubsection),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                     color: AppColors.buttonColor,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildCurrentSection()],
-        ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildCurrentSection()
+        ],
       ),
+    );
+    return RefreshIndicator(
+      onRefresh: _loadInitialData,
+      child: scrollable,
     );
   }
 
