@@ -5,7 +5,11 @@ let currentUserId = null;
 let isEditing = false;
 let currentAvailability = [];
 let pendingDisponibilidad = [];
-
+let currentVerificationUserId = null;
+let currentVerificationPersonaId = null;
+let verificationModalInstance = null;
+let verificationLoading = false;
+let currentVerificationEstado = null;
 
 const API_BASE_URL = '/api';
 
@@ -53,6 +57,106 @@ const isEmail          = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s ?? ''
 const isDNI            = (s) => /^\d{8}$/.test(String(s ?? '').trim());
 const isRUC            = (s) => /^\d{11}$/.test(String(s ?? '').trim());
 const formatDate       = (d) => new Date(d).toLocaleDateString('es-PE', { year:'numeric', month:'2-digit', day:'2-digit' });
+
+const formatDateTime   = (d) => d ? new Date(d).toLocaleString('es-PE', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+}) : '';
+
+const VERIFICATION_STATE_CLASSES = {
+  PENDIENTE: 'bg-warning text-dark',
+  OBSERVADA: 'bg-info text-dark',
+  APROBADA: 'bg-success',
+  RECHAZADA: 'bg-danger',
+  NONE: 'bg-secondary',
+};
+
+function personaNombreCompleto(persona = {}) {
+  return [persona.primer_nombre, persona.segundo_nombre, persona.apellido_paterno, persona.apellido_materno]
+    .map(part => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+function normalizeArchivoRecord(record) {
+  if (!record) return null;
+  const ruta = String(record.ruta ?? '').trim();
+  const isAbsolute = /^https?:\/\//i.test(ruta);
+  const normalizedPath = !ruta
+    ? null
+    : isAbsolute
+    ? ruta
+    : ruta.startsWith('/')
+    ? ruta
+    : `/${ruta}`;
+  const fullUrl = record.url
+    || (!normalizedPath
+      ? null
+      : isAbsolute
+      ? normalizedPath
+      : `https://blob.vercel-storage.com${normalizedPath}`);
+  return {
+    id: record.id,
+    ruta,
+    tamano: record.tamano,
+    tipo: record.tipo,
+    url: fullUrl,
+  };
+}
+
+function mapColegiaturaRecord(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    numero: record.numero,
+    fecha_emision: record.fecha_emision,
+    fecha_vigencia_hasta: record.fecha_vigencia_hasta,
+    colegio: record.colegio ? { nombre: record.colegio.nombre, region: record.colegio.region } : null,
+    carnet_archivo: normalizeArchivoRecord(record.carnet_archivo),
+  };
+}
+
+function mapVerificationFromUser(user) {
+  const persona = user?.persona ?? {};
+  const verification = persona.verificacionabogado ?? null;
+  const colegiatura = verification?.colegiatura ?? persona.colegiatura ?? null;
+
+  if (!verification) {
+    return {
+      exists: false,
+      estado: null,
+      linkedin_url: null,
+      observaciones: null,
+      creado_el: null,
+      actualizado_el: null,
+      aprobado_el: null,
+      titulo: null,
+      colegiatura: mapColegiaturaRecord(colegiatura),
+    };
+  }
+
+  return {
+    exists: true,
+    id: verification.id,
+    persona_id: verification.persona_id,
+    estado: verification.estado,
+    linkedin_url: verification.linkedin_url,
+    observaciones: verification.observaciones,
+    creado_el: verification.creado_el,
+    actualizado_el: verification.actualizado_el,
+    aprobado_el: verification.aprobado_el,
+    titulo: normalizeArchivoRecord(verification.titulo),
+    colegiatura: mapColegiaturaRecord(colegiatura),
+  };
+}
+
+function verificationBadgeInfo(verification) {
+  if (!verification || !verification.estado) {
+    return { text: 'Sin postulación', className: VERIFICATION_STATE_CLASSES.NONE };
+  }
+  const estado = verification.estado;
+  const className = VERIFICATION_STATE_CLASSES[estado] || VERIFICATION_STATE_CLASSES.NONE;
+  return { text: estado, className };
+}
 /* ----------------- Bootstrap ------------------- */
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -76,6 +180,11 @@ function setupEventListeners() {
   document.getElementById('userForm')?.addEventListener('submit', (e) => { e.preventDefault(); saveUser(); });
   document.getElementById('dni')?.addEventListener('blur', handleDniLookup);
   document.getElementById('rol')?.addEventListener('change', toggleAbogadoFields);
+
+  document.getElementById('verificacionAprobarBtn')?.addEventListener('click', () => handleVerificationAction('APROBADA'));
+  document.getElementById('verificacionRechazarBtn')?.addEventListener('click', () => handleVerificationAction('RECHAZADA'));
+  document.getElementById('verificacionObservarBtn')?.addEventListener('click', () => handleVerificationAction('OBSERVADA'));
+
 
   // Estudio: búsqueda de existentes
   document.getElementById('buscarEstudio')?.addEventListener('input', debounce(handleBuscarEstudio, 250));
@@ -157,19 +266,25 @@ function renderUsersTable(usersToRender) {
   if (!tbody) return;
 
   if (!usersToRender.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted p-4">No se encontraron usuarios</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted p-4">No se encontraron usuarios</td></tr>`;
     return;
   }
 
   tbody.innerHTML = usersToRender.map(user => {
     const p = user.persona ?? {};
     const badgeClass = getRoleBadge(user.role?.codigo);
+    const verificationInfo = verificationBadgeInfo(mapVerificationFromUser(user));
+    const verificationBadge = `<span class="badge ${verificationInfo.className}">${escapeHtml(verificationInfo.text)}</span>`;
     const abogadoActions = (user.role?.codigo === 'abogado')
       ? `
         <button class="btn btn-sm btn-outline-primary me-1" title="Especialidades" onclick="openEspecialidadesModal(${user.id})"><i class="bi bi-stars"></i></button>
         <button class="btn btn-sm btn-outline-secondary me-1" title="Estudio" onclick="openEstudioModal(${user.id})"><i class="bi bi-building"></i></button>
         <button class="btn btn-sm btn-outline-info me-1" title="Disponibilidad" onclick="openDisponibilidadModal(${user.id})"><i class="bi bi-calendar-week"></i></button>
       `
+      : '';
+
+      const verificationButton = p.id
+      ? `<button class="btn btn-sm btn-outline-success me-1" title="Revisar verificación" onclick="openVerificacionModal(${user.id})"><i class="bi bi-patch-check"></i></button>`
       : '';
     return `
       <tr>
@@ -178,11 +293,12 @@ function renderUsersTable(usersToRender) {
         <td>${p.telefono ?? 'N/A'}</td>
         <td>${p.correo ?? ''}</td>
         <td><span class="badge ${badgeClass}">${user.role?.nombre ?? ''}</span></td>
+        <td>${verificationBadge}</td>
         <td>${user.creado_el ? formatDate(user.creado_el) : ''}</td>
         <td class="text-center">
           <div class="btn-group">
             <button class="btn btn-sm btn-warning me-1" title="Editar" onclick="editUser(${user.id})"><i class="bi bi-pencil"></i></button>
-            ${abogadoActions}
+            ${verificationButton}${abogadoActions}
             <button class="btn btn-sm btn-danger" title="Eliminar" onclick="deleteUser(${user.id})"><i class="bi bi-trash"></i></button>
           </div>
         </td>
@@ -708,6 +824,290 @@ async function deleteDisponibilidad(slotId) {
     showAlert(`Error eliminando disponibilidad: ${e.message}`, 'danger');
   }
 }
+
+
+/* ----------------- Verificación de abogado -------- */
+function openVerificacionModal(userId) {
+  const user = users.find(u => u.id === userId);
+  if (!user) {
+    showAlert('Usuario no encontrado.', 'danger');
+    return;
+  }
+
+  currentVerificationUserId = userId;
+  currentVerificationPersonaId = user.persona?.id ?? null;
+  verificationModalInstance = bootstrap.Modal.getOrCreateInstance(document.getElementById('verificacionModal'));
+  populateVerificationModal(user);
+  verificationModalInstance.show();
+}
+
+function setVerificationButtonsEnabled(enabled) {
+  ['verificacionAprobarBtn', 'verificacionRechazarBtn', 'verificacionObservarBtn'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !enabled;
+  });
+}
+
+function setVerificationLoading(isLoading) {
+  verificationLoading = isLoading;
+  const indicator = document.getElementById('verificacionSavingIndicator');
+  if (indicator) indicator.classList.toggle('d-none', !isLoading);
+  if (isLoading) {
+    setVerificationButtonsEnabled(false);
+  } else {
+    const user = users.find(u => u.id === currentVerificationUserId);
+    const hasApplication = user ? mapVerificationFromUser(user).exists : false;
+    setVerificationButtonsEnabled(hasApplication);
+  }
+}
+
+function populateVerificationModal(user) {
+  const persona = user.persona ?? {};
+  const verification = mapVerificationFromUser(user);
+  currentVerificationEstado = verification.estado || null;
+
+  const nameEl = document.getElementById('verificacionNombre');
+  if (nameEl) {
+    const nombre = personaNombreCompleto(persona) || '(sin nombre)';
+    const dni = persona.dni ? ` · DNI ${persona.dni}` : '';
+    nameEl.textContent = `${nombre}${dni}`;
+  }
+
+  const badgeEl = document.getElementById('verificacionEstadoBadge');
+  const badgeInfo = verificationBadgeInfo(verification);
+  if (badgeEl) {
+    badgeEl.className = `badge ${badgeInfo.className}`;
+    badgeEl.textContent = badgeInfo.text;
+  }
+
+  const emptyNotice = document.getElementById('verificacionEmptyNotice');
+  const dataSection = document.getElementById('verificacionDataSection');
+  const commentSection = document.getElementById('verificacionComentarioSection');
+  const obsPrevias = document.getElementById('verificacionObservacionesPrevias');
+  const obsInput = document.getElementById('verificacionObservacionesInput');
+
+  const hasPersona = !!persona.id;
+  const hasApplication = verification.exists && hasPersona;
+
+  emptyNotice?.classList.toggle('d-none', hasApplication);
+  dataSection?.classList.toggle('d-none', !hasApplication);
+  commentSection?.classList.toggle('d-none', !hasApplication);
+
+  if (!hasPersona) {
+    setVerificationButtonsEnabled(false);
+    currentVerificationPersonaId = null;
+    if (obsInput) obsInput.value = '';
+    if (obsPrevias) obsPrevias.classList.add('d-none');
+    return;
+  }
+
+  currentVerificationPersonaId = persona.id;
+
+  if (!hasApplication) {
+    setVerificationButtonsEnabled(false);
+    if (obsInput) obsInput.value = '';
+    if (obsPrevias) obsPrevias.classList.add('d-none');
+    return;
+  }
+
+  setVerificationButtonsEnabled(!verificationLoading);
+
+  const setText = (id, value, emptyText = 'No registrado') => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (value) {
+      el.textContent = value;
+      el.classList.remove('text-muted');
+    } else {
+      el.textContent = emptyText;
+      el.classList.add('text-muted');
+    }
+  };
+
+  const setLink = (id, url, label, emptyText = 'No disponible') => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = '';
+    el.classList.remove('text-muted');
+    if (!url) {
+      el.textContent = emptyText;
+      el.classList.add('text-muted');
+      return;
+    }
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener';
+    anchor.textContent = label || url;
+    el.appendChild(anchor);
+  };
+
+  setLink('verificacionLinkedin', verification.linkedin_url, verification.linkedin_url);
+
+  const tituloArchivo = verification.titulo;
+  const tituloLabel = tituloArchivo?.ruta
+    ? tituloArchivo.ruta.split('/').pop() || 'Ver archivo'
+    : 'Ver archivo';
+  setLink('verificacionTituloArchivo', tituloArchivo?.url || tituloArchivo?.ruta, tituloLabel);
+
+  const colegiatura = verification.colegiatura;
+  setText('verificacionColegioNombre', colegiatura?.colegio?.nombre);
+  setText('verificacionColegioRegion', colegiatura?.colegio?.region, 'Sin región');
+  setText('verificacionNumeroColegiatura', colegiatura?.numero);
+  setText('verificacionFechaEmision', colegiatura?.fecha_emision ? formatDate(colegiatura.fecha_emision) : '', 'No registrada');
+  setText('verificacionFechaVigencia', colegiatura?.fecha_vigencia_hasta ? formatDate(colegiatura.fecha_vigencia_hasta) : '', 'No registrada');
+
+  const carnetArchivo = colegiatura?.carnet_archivo;
+  const carnetLabel = carnetArchivo?.ruta
+    ? carnetArchivo.ruta.split('/').pop() || 'Ver archivo'
+    : 'Ver archivo';
+  setLink('verificacionCarnetArchivo', carnetArchivo?.url || carnetArchivo?.ruta, carnetLabel);
+
+  const actualizado = verification.actualizado_el || verification.creado_el;
+  setText('verificacionActualizado', actualizado ? formatDateTime(actualizado) : '', 'Sin actualizar');
+
+  if (obsPrevias) {
+    if (verification.observaciones) {
+      obsPrevias.textContent = verification.observaciones;
+      obsPrevias.classList.remove('d-none');
+    } else {
+      obsPrevias.textContent = '';
+      obsPrevias.classList.add('d-none');
+    }
+  }
+
+  if (obsInput) {
+    obsInput.value = verification.observaciones ?? '';
+  }
+}
+
+async function handleVerificationAction(estado) {
+  if (verificationLoading) return;
+
+  const personaId = currentVerificationPersonaId;
+  if (!personaId) {
+    showAlert('No hay una postulación asociada para este usuario.', 'danger');
+    return;
+  }
+
+  const user = users.find(u => u.id === currentVerificationUserId);
+  if (!user) {
+    showAlert('Usuario no encontrado.', 'danger');
+    return;
+  }
+
+  const verification = mapVerificationFromUser(user);
+  const obsInput = document.getElementById('verificacionObservacionesInput');
+  const observaciones = (obsInput?.value ?? '').trim();
+
+  if (estado === 'OBSERVADA' && !observaciones) {
+    showAlert('Debes ingresar un comentario para marcar como OBSERVADA.', 'danger');
+    obsInput?.focus();
+    return;
+  }
+
+  const payload = { estado };
+  if (observaciones) {
+    payload.observaciones = observaciones;
+  }
+
+  const isFinal = verification.estado === 'APROBADA' || verification.estado === 'RECHAZADA';
+  if (isFinal && estado !== verification.estado) {
+    const confirmForce = window.confirm('La postulación ya se marcó como finalizada. ¿Deseas forzar el cambio de estado?');
+    if (!confirmForce) {
+      return;
+    }
+    payload.force = true;
+  }
+
+  try {
+    setVerificationLoading(true);
+    const result = await apiFetch(`/lawyers/applications/${personaId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+
+    if (result?.application) {
+      applyVerificationUpdate(currentVerificationUserId, result.application);
+      const updatedUser = users.find(u => u.id === currentVerificationUserId);
+      if (updatedUser) {
+        populateVerificationModal(updatedUser);
+      }
+      renderUsersTable(users);
+      showAlert('Estado de verificación actualizado.', 'success');
+    } else {
+      showAlert('No se recibió la postulación actualizada.', 'warning');
+    }
+  } catch (e) {
+    showAlert(`Error actualizando verificación: ${e.message}`, 'danger');
+  } finally {
+    setVerificationLoading(false);
+  }
+}
+
+function applyVerificationUpdate(userId, application) {
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx === -1) return;
+
+  const user = users[idx];
+  user.persona = user.persona ?? {};
+
+  const colegiatura = application.colegiatura
+    ? {
+        id: application.colegiatura.id,
+        persona_id: application.colegiatura.personaId ?? user.persona.id,
+        colegio_id: application.colegiatura.colegioId,
+        numero: application.colegiatura.numero,
+        fecha_emision: application.colegiatura.fechaEmision,
+        fecha_vigencia_hasta: application.colegiatura.fechaVigenciaHasta,
+        carnet_archivo_id: application.colegiatura.carnetArchivoId ?? application.colegiatura.carnetArchivo?.id ?? null,
+        carnet_archivo: application.colegiatura.carnetArchivo
+          ? {
+              id: application.colegiatura.carnetArchivo.id,
+              ruta: application.colegiatura.carnetArchivo.ruta,
+              tamano: application.colegiatura.carnetArchivo.tamano,
+              tipo: application.colegiatura.carnetArchivo.tipo,
+              url: application.colegiatura.carnetArchivo.url,
+            }
+          : null,
+        colegio: application.colegiatura.colegio
+          ? {
+              id: application.colegiatura.colegio.id,
+              nombre: application.colegiatura.colegio.nombre,
+              region: application.colegiatura.colegio.region,
+            }
+          : null,
+      }
+    : null;
+
+  user.persona.verificacionabogado = {
+    id: application.id,
+    persona_id: application.personaId,
+    estado: application.estado,
+    linkedin_url: application.linkedinUrl,
+    observaciones: application.observaciones,
+    aprobado_el: application.aprobadoEl,
+    creado_el: application.creadoEl,
+    actualizado_el: application.actualizadoEl,
+    titulo_archivo_id: application.tituloArchivoId ?? application.tituloArchivo?.id ?? null,
+    titulo: application.tituloArchivo
+      ? {
+          id: application.tituloArchivo.id,
+          ruta: application.tituloArchivo.ruta,
+          tamano: application.tituloArchivo.tamano,
+          tipo: application.tituloArchivo.tipo,
+          url: application.tituloArchivo.url,
+        }
+      : null,
+    colegiatura_id: colegiatura?.id ?? null,
+    colegiatura,
+  };
+
+  if (colegiatura) {
+    user.persona.colegiatura = colegiatura;
+  }
+}
+
 
 /* ----------------- Delete usuario ---------------- */
 function deleteUser(userId) {

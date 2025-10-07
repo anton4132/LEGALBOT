@@ -1,6 +1,11 @@
 class ClientContactSettings {
   final int usuarioId;
   final int personaId;
+  final String? dni;
+  final String? primerNombre;
+  final String? segundoNombre;
+  final String? apellidoPaterno;
+  final String? apellidoMaterno;
   final String? telefono;
   final String correo;
   final String? direccionId;
@@ -12,6 +17,11 @@ class ClientContactSettings {
   const ClientContactSettings({
     required this.usuarioId,
     required this.personaId,
+    required this.dni,
+    required this.primerNombre,
+    required this.segundoNombre,
+    required this.apellidoPaterno,
+    required this.apellidoMaterno,
     required this.telefono,
     required this.correo,
     required this.direccionId,
@@ -26,6 +36,11 @@ class ClientContactSettings {
       return const ClientContactSettings(
         usuarioId: 0,
         personaId: 0,
+        dni: null,
+        primerNombre: null,
+        segundoNombre: null,
+        apellidoPaterno: null,
+        apellidoMaterno: null,
         telefono: null,
         correo: '',
         direccionId: null,
@@ -57,6 +72,11 @@ class ClientContactSettings {
     return ClientContactSettings(
       usuarioId: _parseInt(json['id'] ?? json['usuarioId']),
       personaId: _parseInt(json['persona_id'] ?? json['personaId']),
+      dni: _trimString(persona['dni']),
+      primerNombre: _trimString(persona['primer_nombre']),
+      segundoNombre: _trimString(persona['segundo_nombre']),
+      apellidoPaterno: _trimString(persona['apellido_paterno']),
+      apellidoMaterno: _trimString(persona['apellido_materno']),
       telefono: _trimString(persona['telefono']),
       correo: _trimString(persona['correo']) ?? '',
       direccionId: _trimString(persona['direccion_id']),
@@ -68,6 +88,11 @@ class ClientContactSettings {
   }
 
   ClientContactSettings copyWith({
+    String? dni,
+    String? primerNombre,
+    String? segundoNombre,
+    String? apellidoPaterno,
+    String? apellidoMaterno,
     String? telefono,
     String? correo,
     String? direccionId,
@@ -79,6 +104,11 @@ class ClientContactSettings {
     return ClientContactSettings(
       usuarioId: usuarioId,
       personaId: personaId,
+      dni: dni ?? this.dni,
+      primerNombre: primerNombre ?? this.primerNombre,
+      segundoNombre: segundoNombre ?? this.segundoNombre,
+      apellidoPaterno: apellidoPaterno ?? this.apellidoPaterno,
+      apellidoMaterno: apellidoMaterno ?? this.apellidoMaterno,
       telefono: telefono ?? this.telefono,
       correo: correo ?? this.correo,
       direccionId: direccionId ?? this.direccionId,
@@ -87,5 +117,15 @@ class ClientContactSettings {
       provincia: provincia ?? this.provincia,
       distrito: distrito ?? this.distrito,
     );
+  }
+
+  String get nombreCompleto {
+    final parts = <String>[
+      if ((primerNombre ?? '').isNotEmpty) primerNombre!,
+      if ((segundoNombre ?? '').isNotEmpty) segundoNombre!,
+      if ((apellidoPaterno ?? '').isNotEmpty) apellidoPaterno!,
+      if ((apellidoMaterno ?? '').isNotEmpty) apellidoMaterno!,
+    ];
+    return parts.join(' ').trim();
   }
 }

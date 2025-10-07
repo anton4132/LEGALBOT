@@ -172,7 +172,50 @@ function mapArchivoResponse(archivo) {
 
   };
 }
+function mapColegiaturaResponse(record) {
+  if (!record) return null;
 
+  const colegio = record.colegio
+    ? {
+        id: record.colegio.id,
+        nombre: record.colegio.nombre,
+        region: record.colegio.region,
+      }
+    : null;
+
+  return {
+    id: record.id,
+    persona_id: record.persona_id,
+    colegio_id: record.colegio_id,
+    numero: record.numero,
+    fecha_emision: record.fecha_emision,
+    fecha_vigencia_hasta: record.fecha_vigencia_hasta,
+    carnet_archivo_id: record.carnet_archivo_id,
+    carnet_archivo: mapArchivoResponse(record.carnet_archivo),
+    colegio,
+    creado_el: record.creado_el,
+    actualizado_el: record.actualizado_el,
+  };
+}
+
+function mapVerificacionResponse(record) {
+  if (!record) return null;
+
+  return {
+    id: record.id,
+    persona_id: record.persona_id,
+    linkedin_url: record.linkedin_url,
+    titulo_archivo_id: record.titulo_archivo_id,
+    estado: record.estado,
+    observaciones: record.observaciones,
+    aprobado_el: record.aprobado_el,
+    creado_el: record.creado_el,
+    actualizado_el: record.actualizado_el,
+    colegiatura_id: record.colegiatura_id,
+    titulo: mapArchivoResponse(record.titulo),
+    colegiatura: mapColegiaturaResponse(record.colegiatura),
+  };
+}
 function normalizeBlobPath(path) {
   if (!path) return null;
   const raw = String(path).trim();
@@ -1104,7 +1147,19 @@ const getAllUsers = async (_req, res) => {
   try {
     const usuarios = await prisma.usuario.findMany({
       include: {
-        persona: true,
+        persona: {
+          include: {
+            verificacionabogado: {
+              include: {
+                titulo: true,
+                colegiatura: {
+                  include: { colegio: true, carnet_archivo: true },
+                },
+              },
+            },
+            colegiatura: { include: { colegio: true, carnet_archivo: true } },
+          },
+        },
         role: true,
         perfilabogado: {
           include: {
@@ -1124,15 +1179,23 @@ const getAllUsers = async (_req, res) => {
 
     // Aplana especialidades para facilitar al front
     const data = usuarios.map(u => {
-      const { perfilabogado, ...rest } = u;
+      const { perfilabogado, persona, ...rest } = u;
+
+      const personaMapped = persona
+        ? {
+            ...persona,
+            colegiatura: mapColegiaturaResponse(persona.colegiatura),
+            verificacionabogado: mapVerificacionResponse(persona.verificacionabogado),
+          }
+        : null;      
       if (!perfilabogado) {
-        return { ...rest, perfilabogado: null };
+        return { ...rest, persona: personaMapped, perfilabogado: null };
       }
       const perfilMapped = mapPerfilResponse(perfilabogado);
       if (perfilMapped) {
         perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
       }
-      return { ...rest, perfilabogado: perfilMapped };
+      return { ...rest, persona: personaMapped, perfilabogado: perfilMapped };
     });
 
     res.json(data);
@@ -1150,7 +1213,19 @@ const getUserById = async (req, res) => {
     const usuario = await prisma.usuario.findUnique({
       where: { id },
       include: {
-        persona: true,
+        persona: {
+          include: {
+            verificacionabogado: {
+              include: {
+                titulo: true,
+                colegiatura: {
+                  include: { colegio: true, carnet_archivo: true },
+                },
+              },
+            },
+            colegiatura: { include: { colegio: true, carnet_archivo: true } },
+          },
+        },
         role: true,
         perfilabogado: {
           include: {
@@ -1167,15 +1242,22 @@ const getUserById = async (req, res) => {
     });
     if (!usuario) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
-    const { perfilabogado, ...rest } = usuario;
+    const { perfilabogado, persona, ...rest } = usuario;
     const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
     if (perfilMapped) {
       perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
     }
-
+    const personaMapped = persona
+      ? {
+          ...persona,
+          colegiatura: mapColegiaturaResponse(persona.colegiatura),
+          verificacionabogado: mapVerificacionResponse(persona.verificacionabogado),
+        }
+      : null;
     const data = perfilabogado
-      ? { ...rest, perfilabogado: perfilMapped }
-      : usuario;
+    ? { ...rest, persona: personaMapped, perfilabogado: perfilMapped }
+    : { ...rest, persona: personaMapped, perfilabogado: null };
+
 
     res.json({ success: true, user: data });
   } catch (error) {
