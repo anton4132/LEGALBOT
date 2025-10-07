@@ -126,7 +126,7 @@ enum est_consulta {
 
 enum resp_consulta {
   abogado
-  documento
+  IA
 }
 
 model consulta {

@@ -575,18 +575,18 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                         ),
                         const SizedBox(height: 12),
                         _buildUbigeoDropdown(
-                          label: 'Distrito',
-                          options: _distritos,
-                          value: _selectedDistritoCodigo,
-                          isLoading: _loadingDistritos,
-                          onChanged: _isLoadingUbigeo
-                              ? null
-                              : (value) {
-                                  setState(() {
-                                    _selectedDistritoCodigo = value;
-                                  });
-                                },
-                        ),
+  label: 'Distrito',
+  options: _distritos,
+  value: _selectedDistritoCodigo,
+  isLoading: _loadingDistritos,
+  onChanged: (value) {
+    if (!_isLoadingUbigeo) {
+      setState(() {
+        _selectedDistritoCodigo = value;
+      });
+    }
+  },
+),
                         const SizedBox(height: 12),
                         _buildTextField(
                           controller: _lineaExactaController,
