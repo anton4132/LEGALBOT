@@ -37,8 +37,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   bool _loadingDistritos = false;
   bool _savingContact = false;
   bool _savingPassword = false;
-  ClientSettingsSubsection _currentSubsection =
-      ClientSettingsSubsection.overview;
+   final Set<ClientSettingsSubsection> _expandedSections =
+      {ClientSettingsSubsection.overview};
 
   List<UbigeoOption> _departamentos = const <UbigeoOption>[];
   List<UbigeoOption> _provincias = const <UbigeoOption>[];
@@ -71,8 +71,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   bool get _isLoadingUbigeo =>
       _loadingDepartamentos || _loadingProvincias || _loadingDistritos;
 
-  void _showSnack(String message, {Color color = Colors.red}) {
-    if (!mounted) return;
+void _showSnack(String message,
+      {Color color = AppColors.text3Color}) {    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: color),
     );
@@ -251,8 +251,10 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     if (trimmed.isEmpty) {
       return 'Ingresa un correo válido.';
     }
+    final normalized = trimmed.toLowerCase();
+
     final emailRegex = RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
-    if (!emailRegex.hasMatch(trimmed)) {
+    if (!emailRegex.hasMatch(normalized)) {
       return 'El correo electrónico no es válido.';
     }
     return null;
@@ -296,16 +298,22 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     final telefonoActual = (currentSettings.telefono ?? '')
         .replaceAll(RegExp(r'\\D'), '');
     final trimmedCorreo = _emailController.text.trim();
-    final correoActual = currentSettings.correo.trim();
-    final lineaExacta = _lineaExactaController.text.trim();
+    final normalizedCorreo = trimmedCorreo.toLowerCase();
+        if (trimmedCorreo != normalizedCorreo) {
+          _emailController.value = TextEditingValue(
+            text: normalizedCorreo,
+            selection: TextSelection.collapsed(offset: normalizedCorreo.length),
+          );
+        }
+    final correoActual = currentSettings.correo.trim().toLowerCase();    final lineaExacta = _lineaExactaController.text.trim();
     final lineaActual = currentSettings.lineaExactaDireccion?.trim() ?? '';
 
     final String? direccionId = _selectedDistritoCodigo;
     final direccionActual = currentSettings.direccionId;
 
     final bool telefonoChanged = normalizedTelefono != telefonoActual;
-    final bool correoChanged =
-        trimmedCorreo.toLowerCase() != correoActual.toLowerCase();
+        final bool correoChanged = normalizedCorreo != correoActual;
+
     final bool direccionChanged = direccionId != direccionActual;
     final bool lineaChanged = lineaExacta != lineaActual;
 
@@ -319,7 +327,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
       try {
         final conflicts = await ApiClient.checkPersonaConflicts(
           telefono: telefonoChanged ? normalizedTelefono : null,
-          correo: correoChanged ? trimmedCorreo : null,
+          correo: correoChanged ? normalizedCorreo : null,
         );
         if (telefonoChanged && conflicts.contains('telefono')) {
           _showSnack('El teléfono ya está registrado por otro usuario.');
@@ -341,7 +349,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         token: session.token,
         userId: session.usuarioId,
         telefono: telefonoChanged ? normalizedTelefono : null,
-        correo: correoChanged ? trimmedCorreo : null,
+        correo: correoChanged ? normalizedCorreo : null,
         direccionId: direccionChanged ? direccionId : null,
         lineaExactaDireccion: lineaChanged ? lineaExacta : null,
       );
@@ -434,18 +442,18 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         labelText: label,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
+ borderSide:
+              const BorderSide(color: AppColors.textFormFieldBorderColor),        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
+  borderSide:
+              const BorderSide(color: AppColors.textFormFieldBorderColor),        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.buttonColor, width: 2),
-        ),
+borderSide:
+              const BorderSide(color: AppColors.button2Color, width: 2)        ),
         filled: true,
-        fillColor: Colors.grey.shade50,
+        fillColor: AppColors.bgColor,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
@@ -470,52 +478,127 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         labelText: label,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
+borderSide:
+              const BorderSide(color: AppColors.textFormFieldBorderColor),        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
+          borderSide:
+              const BorderSide(color: AppColors.textFormFieldBorderColor),
+                      ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.buttonColor, width: 2),
-        ),
+ borderSide:
+              const BorderSide(color: AppColors.button2Color, width: 2),        ),
         filled: true,
-        fillColor: Colors.grey.shade50,
+        fillColor: AppColors.bgColor,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }
-void _setSubsection(ClientSettingsSubsection subsection) {
-    if (_currentSubsection == subsection) return;
-    setState(() => _currentSubsection = subsection);
+bool _isSectionExpanded(ClientSettingsSubsection subsection) =>
+      _expandedSections.contains(subsection);
+
+  void _toggleSection(ClientSettingsSubsection subsection) {
+    setState(() {
+      if (_expandedSections.contains(subsection)) {
+        _expandedSections.remove(subsection);
+      } else {
+        _expandedSections.add(subsection);
+      }
+    });
   }
 
-  Widget _buildSectionNavigation() {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        _SettingsNavButton(
-          icon: Icons.dashboard_customize_outlined,
-          label: 'Resumen',
-          selected: _currentSubsection == ClientSettingsSubsection.overview,
-          onTap: () => _setSubsection(ClientSettingsSubsection.overview),
-        ),
-        _SettingsNavButton(
-          icon: Icons.contact_phone_outlined,
-          label: 'Contacto',
-          selected: _currentSubsection == ClientSettingsSubsection.contact,
-          onTap: () => _setSubsection(ClientSettingsSubsection.contact),
-        ),
-        _SettingsNavButton(
-          icon: Icons.lock_outline,
-          label: 'Seguridad',
-          selected: _currentSubsection == ClientSettingsSubsection.security,
-          onTap: () => _setSubsection(ClientSettingsSubsection.security),
-        ),
-      ],
+  Widget _buildExpandableSection({
+    required ClientSettingsSubsection subsection,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    final expanded = _isSectionExpanded(subsection);
+    return ShadowCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _toggleSection(subsection),
+              borderRadius: BorderRadius.circular(15),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.buttonColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(icon, color: AppColors.buttonColor, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text1Color,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.text2Color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: expanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      child: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: AppColors.buttonColor,
+                        size: 24,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            crossFadeState:
+                expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 250),
+            sizeCurve: Curves.easeInOut,
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Divider(height: 1, color: AppColors.strokeColor),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  child: child,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -527,7 +610,7 @@ void _setSubsection(ClientSettingsSubsection subsection) {
     final resolved = (value ?? '').trim();
     final displayValue = resolved.isEmpty ? 'Sin registrar' : resolved;
     final icon = editable ? Icons.edit_outlined : Icons.lock_outline;
-    final iconColor = editable ? AppColors.buttonColor : Colors.grey.shade400;
+    final iconColor = editable ? AppColors.buttonColor : AppColors.text2Color;
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
@@ -580,15 +663,15 @@ void _setSubsection(ClientSettingsSubsection subsection) {
                 const SizedBox(height: 12),
                 _buildSummaryTile('Nombre completo',
                     nombreCompleto.isEmpty ? null : nombreCompleto),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Primer nombre', settings.primerNombre),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Segundo nombre', settings.segundoNombre),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Apellido paterno', settings.apellidoPaterno),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Apellido materno', settings.apellidoMaterno),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Documento de identidad (DNI)', settings.dni),
               ],
             ),
@@ -609,18 +692,18 @@ void _setSubsection(ClientSettingsSubsection subsection) {
                 const SizedBox(height: 12),
                 _buildSummaryTile('Correo electrónico', settings.correo,
                     editable: true),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Número de teléfono', settings.telefono,
                     editable: true),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Ubigeo', locationDisplay, editable: true),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Código de distrito (UBIGEO)',
                     settings.direccionId, editable: true),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Dirección exacta',
                     settings.lineaExactaDireccion, editable: true),
-                const Divider(height: 20),
+                const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile(
                   'Contraseña',
                   'Oculta por seguridad. Actualízala desde "Seguridad".',
@@ -633,132 +716,128 @@ void _setSubsection(ClientSettingsSubsection subsection) {
       ),
     );
   }
-
-  Widget _buildContactSection() {
+ Widget _buildContactSection() {
     return KeyedSubtree(
       key: const ValueKey('contact'),
-      child: ShadowCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Editar datos de contacto',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.text3Color,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Editar datos de contacto',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.text3Color,
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Modifica tu correo, teléfono y dirección manteniendo el resto de tu perfil sin cambios.',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.text2Color,
-              ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Modifica tu correo, teléfono y dirección manteniendo el resto de tu perfil sin cambios.',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.text2Color,
             ),
-            const SizedBox(height: 18),
-            Form(
-              key: _contactFormKey,
-              child: Column(
-                children: [
-                  _buildTextField(
-                    controller: _phoneController,
-                    label: 'Teléfono',
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'[0-9+\\s-]'),
-                      ),
-                    ],
-                    maxLength: 15,
-                    validator: _validatePhone,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildTextField(
-                    controller: _emailController,
-                    label: 'Correo electrónico',
-                    keyboardType: TextInputType.emailAddress,
-                    validator: _validateEmail,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildUbigeoDropdown(
-                    label: 'Departamento',
-                    options: _departamentos,
-                    value: _selectedDepartamentoCodigo,
-                    isLoading: _loadingDepartamentos,
-                    onChanged: (value) async {
-                      if (value == null) {
-                        setState(() {
-                          _selectedDepartamentoCodigo = null;
-                          _selectedProvinciaCodigo = null;
-                          _selectedDistritoCodigo = null;
-                          _provincias = const <UbigeoOption>[];
-                          _distritos = const <UbigeoOption>[];
-                        });
-                        return;
-                      }
+          ),
+          const SizedBox(height: 18),
+          Form(
+            key: _contactFormKey,
+            child: Column(
+              children: [
+                _buildTextField(
+                  controller: _phoneController,
+                  label: 'Teléfono',
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'[0-9+\\s-]'),
+                    ),
+                  ],
+                  maxLength: 15,
+                  validator: _validatePhone,
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _emailController,
+                  label: 'Correo electrónico',
+                  keyboardType: TextInputType.emailAddress,
+                  validator: _validateEmail,
+                ),
+                const SizedBox(height: 12),
+                _buildUbigeoDropdown(
+                  label: 'Departamento',
+                  options: _departamentos,
+                  value: _selectedDepartamentoCodigo,
+                  isLoading: _loadingDepartamentos,
+                  onChanged: (value) async {
+                    if (value == null) {
                       setState(() {
-                        _selectedDepartamentoCodigo = value;
+                        _selectedDepartamentoCodigo = null;
+                        _selectedProvinciaCodigo = null;
+                        _selectedDistritoCodigo = null;
+                        _provincias = const <UbigeoOption>[];
+                        _distritos = const <UbigeoOption>[];
                       });
-                      await _loadProvincias(value);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _buildUbigeoDropdown(
-                    label: 'Provincia',
-                    options: _provincias,
-                    value: _selectedProvinciaCodigo,
-                    isLoading: _loadingProvincias,
-                    onChanged: (value) async {
-                      if (value == null) {
-                        setState(() {
-                          _selectedProvinciaCodigo = null;
-                          _selectedDistritoCodigo = null;
-                          _distritos = const <UbigeoOption>[];
-                        });
-                        return;
-                      }
+                      return;
+                    }
+                    setState(() {
+                      _selectedDepartamentoCodigo = value;
+                    });
+                    await _loadProvincias(value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildUbigeoDropdown(
+                  label: 'Provincia',
+                  options: _provincias,
+                  value: _selectedProvinciaCodigo,
+                  isLoading: _loadingProvincias,
+                  onChanged: (value) async {
+                    if (value == null) {
                       setState(() {
-                        _selectedProvinciaCodigo = value;
+                        _selectedProvinciaCodigo = null;
+                        _selectedDistritoCodigo = null;
+                        _distritos = const <UbigeoOption>[];
                       });
-                      await _loadDistritos(value);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _buildUbigeoDropdown(
-                    label: 'Distrito',
-                    options: _distritos,
-                    value: _selectedDistritoCodigo,
-                    isLoading: _loadingDistritos,
-                    onChanged: (value) {
-                      if (!_isLoadingUbigeo) {
-                        setState(() {
-                          _selectedDistritoCodigo = value;
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _buildTextField(
-                    controller: _lineaExactaController,
-                    label: 'Dirección exacta',
-                    keyboardType: TextInputType.streetAddress,
-                  ),
-                  const SizedBox(height: 20),
-                  CustomButton(
-                    text:
-                        _savingContact ? 'Guardando...' : 'Guardar cambios',
-                    onTap: _savingContact ? null : _handleSaveContact,
-                    color: _savingContact
-                        ? AppColors.text2Color
-                        : AppColors.buttonColor,
-                  ),
-                ],
-              ),
+                      return;
+                    }
+                    setState(() {
+                      _selectedProvinciaCodigo = value;
+                    });
+                    await _loadDistritos(value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildUbigeoDropdown(
+                  label: 'Distrito',
+                  options: _distritos,
+                  value: _selectedDistritoCodigo,
+                  isLoading: _loadingDistritos,
+                  onChanged: (value) {
+                    if (!_isLoadingUbigeo) {
+                      setState(() {
+                        _selectedDistritoCodigo = value;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _lineaExactaController,
+                  label: 'Dirección exacta',
+                  keyboardType: TextInputType.streetAddress,
+                ),
+                const SizedBox(height: 20),
+                CustomButton(
+                  text: _savingContact ? 'Guardando...' : 'Guardar cambios',
+                  onTap: _savingContact ? null : _handleSaveContact,
+                  color: _savingContact
+                      ? AppColors.text2Color
+                      : AppColors.buttonColor,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -766,87 +845,74 @@ void _setSubsection(ClientSettingsSubsection subsection) {
   Widget _buildSecuritySection() {
     return KeyedSubtree(
       key: const ValueKey('security'),
-      child: ShadowCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Actualizar contraseña',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.text3Color,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Actualizar contraseña',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.text3Color,
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'La nueva contraseña reemplazará únicamente a tu clave de acceso.',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.text2Color,
-              ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'La nueva contraseña reemplazará únicamente a tu clave de acceso.',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.text2Color,
             ),
-            const SizedBox(height: 18),
-            Form(
-              key: _passwordFormKey,
-              child: Column(
-                children: [
-                  _buildTextField(
-                    controller: _passwordController,
-                    label: 'Nueva contraseña',
-                    keyboardType: TextInputType.visiblePassword,
-                    validator: (value) {
-                      final trimmed = value?.trim() ?? '';
-                      if (trimmed.length < 6) {
-                        return 'La contraseña debe tener al menos 6 caracteres.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _buildTextField(
-                    controller: _confirmPasswordController,
-                    label: 'Confirmar contraseña',
-                    keyboardType: TextInputType.visiblePassword,
-                    validator: (value) {
-                      final trimmed = value?.trim() ?? '';
-                      if (trimmed != _passwordController.text.trim()) {
-                        return 'Las contraseñas no coinciden.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  CustomButton(
-                    text: _savingPassword
-                        ? 'Actualizando...'
-                        : 'Actualizar contraseña',
-                    onTap: _savingPassword ? null : _handleSavePassword,
-                    color: _savingPassword
-                        ? AppColors.text2Color
-                        : AppColors.button2Color,
-                  ),
-                ],
-              ),
+          ),
+          const SizedBox(height: 18),
+          Form(
+            key: _passwordFormKey,
+            child: Column(
+              children: [
+                _buildTextField(
+                  controller: _passwordController,
+                  label: 'Nueva contraseña',
+                  keyboardType: TextInputType.visiblePassword,
+                  validator: (value) {
+                    final trimmed = value?.trim() ?? '';
+                    if (trimmed.length < 6) {
+                      return 'La contraseña debe tener al menos 6 caracteres.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _confirmPasswordController,
+                  label: 'Confirmar contraseña',
+                  keyboardType: TextInputType.visiblePassword,
+                  validator: (value) {
+                    final trimmed = value?.trim() ?? '';
+                    if (trimmed != _passwordController.text.trim()) {
+                      return 'Las contraseñas no coinciden.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+                CustomButton(
+                  text: _savingPassword
+                      ? 'Actualizando...'
+                      : 'Actualizar contraseña',
+                  onTap: _savingPassword ? null : _handleSavePassword,
+                  color: _savingPassword
+                      ? AppColors.text2Color
+                      : AppColors.button2Color,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSectionContent(ClientContactSettings settings) {
-    switch (_currentSubsection) {
-      case ClientSettingsSubsection.overview:
-        return _buildOverviewSection(settings);
-      case ClientSettingsSubsection.contact:
-        return _buildContactSection();
-      case ClientSettingsSubsection.security:
-        return _buildSecuritySection();
-    }
-  }
-
-   @override
+  @override
   Widget build(BuildContext context) {
     final settings = _initialSettings;
     return Scaffold(
@@ -879,82 +945,42 @@ void _setSubsection(ClientSettingsSubsection subsection) {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'Selecciona una subsección para revisar tu información o actualizar los campos permitidos.',
+                        'Selecciona cada bloque para consultar tu información o actualizar los datos permitidos.',
                         style: TextStyle(
                           fontSize: 13,
                           color: AppColors.text2Color,
                         ),
                       ),
                       const SizedBox(height: 18),
-                      _buildSectionNavigation(),
-                      const SizedBox(height: 20),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        switchInCurve: Curves.easeOut,
-                        switchOutCurve: Curves.easeIn,
-                        child: KeyedSubtree(
-                          key: ValueKey<ClientSettingsSubsection>(
-                              _currentSubsection),
-                          child: _buildSectionContent(settings),
-                        ),
+                      _buildExpandableSection(
+                        subsection: ClientSettingsSubsection.overview,
+                        icon: Icons.dashboard_customize_outlined,
+                        title: 'Resumen general',
+                        subtitle:
+                            'Consulta tus datos personales y de contacto registrados.',
+                        child: _buildOverviewSection(settings),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildExpandableSection(
+                        subsection: ClientSettingsSubsection.contact,
+                        icon: Icons.contact_phone_outlined,
+                        title: 'Edición de datos de contacto',
+                        subtitle:
+                            'Actualiza tu correo, teléfono y dirección registrados.',
+                        child: _buildContactSection(),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildExpandableSection(
+                        subsection: ClientSettingsSubsection.security,
+                        icon: Icons.lock_outline,
+                        title: 'Seguridad',
+                        subtitle:
+                            'Gestiona la contraseña de acceso a tu cuenta.',
+                        child: _buildSecuritySection(),
                       ),
                     ],
                   ),
                 ),
-    );
-  }
-}
-
-class _SettingsNavButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SettingsNavButton({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final Color foregroundColor =
-        selected ? AppColors.buttonTextColor : AppColors.text3Color;
-    final Color backgroundColor =
-        selected ? AppColors.buttonColor : Colors.white;
-    final BorderSide borderSide = BorderSide(
-      color: selected ? AppColors.buttonColor : Colors.grey.shade300,
-    );
-
-    return Material(
-      color: backgroundColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: borderSide,
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: foregroundColor, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: foregroundColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
