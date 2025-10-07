@@ -7,6 +7,8 @@ import '../models/user_session.dart';
 import '../models/lawyer_search_result.dart';
 import '../models/ubigeo_option.dart';
 import '../models/dni_lookup_result.dart';
+import '../models/client_contact_settings.dart';
+
 
 
 class UnauthorizedException implements Exception {
@@ -134,6 +136,131 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
         data != null && data['message'] is String
             ? data['message'] as String
             : 'No se pudo validar los datos de la persona';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+
+
+  static Future<ClientContactSettings> fetchClientContactSettings({
+    required String token,
+    required int userId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 401) {
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      final userJson = _asJsonMap(data?['user']);
+      return ClientContactSettings.fromUserJson(userJson);
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo obtener la información del usuario';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<ClientContactSettings> updateClientContactSettings({
+    required String token,
+    required int userId,
+    String? telefono,
+    String? correo,
+    String? direccionId,
+    String? lineaExactaDireccion,
+  }) async {
+    final personaPayload = <String, dynamic>{};
+    if (telefono != null) {
+      personaPayload['telefono'] = telefono;
+    }
+    if (correo != null) {
+      personaPayload['correo'] = correo;
+    }
+    if (direccionId != null) {
+      personaPayload['direccion_id'] = direccionId;
+    }
+    if (lineaExactaDireccion != null) {
+      personaPayload['linea_exacta_direccion'] = lineaExactaDireccion;
+    }
+
+    final payload = <String, dynamic>{};
+    if (personaPayload.isNotEmpty) {
+      payload['persona'] = personaPayload;
+    }
+
+    if (payload.isEmpty) {
+      throw const ApiException('No se enviaron datos para actualizar.');
+    }
+
+    final uri = Uri.parse('$_baseUrl/users/$userId');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode(payload),
+    );
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 401) {
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      final userJson = _asJsonMap(data?['user']);
+      return ClientContactSettings.fromUserJson(userJson);
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo actualizar la información del usuario';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<ClientContactSettings> updateUserPassword({
+    required String token,
+    required int userId,
+    required String password,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/users/$userId');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode({'clave': password}),
+    );
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 401) {
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      final userJson = _asJsonMap(data?['user']);
+      return ClientContactSettings.fromUserJson(userJson);
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo actualizar la contraseña';
     throw ApiException(message, statusCode: response.statusCode);
   }
   static Future<List<Map<String, dynamic>>> fetchEspecialidades() async {

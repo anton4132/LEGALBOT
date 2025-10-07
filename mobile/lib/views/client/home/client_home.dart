@@ -17,6 +17,8 @@ import '../../authentication/login_screen.dart';
 import '../../lawyer/home/lawyer_home.dart';
 import '../lawyers/client_lawyer_search_screen.dart';
 import 'become_lawyer_screen.dart';
+import 'client_settings_screen.dart';
+
 
 class ClientHome extends StatefulWidget {
   const ClientHome({super.key});
@@ -300,7 +302,12 @@ class _ClientHomeState extends State<ClientHome> {
                 icon: Icons.settings,
                 title: 'Configuración',
                 onTap: () {
-                  // TODO
+                 Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ClientSettingsScreen(),
+                    ),
+                  );
                 },
               ),
             ],

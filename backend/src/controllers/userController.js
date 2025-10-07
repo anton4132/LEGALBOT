@@ -1648,7 +1648,11 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    const { persona, rol_id, abogado_info } = req.body || {};
+    const { persona, rol_id, abogado_info, clave } = req.body || {};
+    const trimmedClave =
+      clave === undefined
+        ? undefined
+        : (typeof clave === 'string' ? clave.trim() : String(clave || '').trim());
 
     const usuarioActual = await prisma.usuario.findUnique({
       where: { id: userId },
@@ -1656,10 +1660,14 @@ const updateUser = async (req, res) => {
         persona: true,
         role: true,
         perfilabogado: true,
-        abogadoestudios: true 
+        abogadoestudios: true
       }
     });
     if (!usuarioActual) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+    if (clave !== undefined && !trimmedClave) {
+      return res.status(400).json({ success: false, message: 'La contraseña no puede estar vacía' });
+    }
 
     // Validaciones de unicidad si cambian DNI o correo
     if (persona?.dni && persona.dni.trim() !== usuarioActual.persona.dni) {
@@ -1672,8 +1680,29 @@ const updateUser = async (req, res) => {
       const emailExists = await prisma.persona.findUnique({ where: { correo: persona.correo } });
       if (emailExists) return res.status(400).json({ success: false, message: 'El email ya está registrado por otro usuario' });
     }
-     // Si cambian de rol, validar que no exista otro usuario de la misma persona con ese rol
-     if (rol_id && parseInt(rol_id, 10) !== usuarioActual.rol_id) {
+
+    if (persona && hasOwn(persona, 'telefono')) {
+      const telefonoActual = normalizeDigits(usuarioActual.persona.telefono || '');
+      const telefonoNuevo = persona.telefono == null
+        ? ''
+        : normalizeDigits(persona.telefono);
+      if (telefonoNuevo && telefonoNuevo !== telefonoActual) {
+        const telefonoMatch = await prisma.$queryRaw`
+          SELECT id
+          FROM persona
+          WHERE telefono IS NOT NULL
+            AND id <> ${usuarioActual.persona_id}
+            AND regexp_replace(telefono, '\\D', '', 'g') = ${telefonoNuevo}
+          LIMIT 1;
+        `;
+        if (Array.isArray(telefonoMatch) && telefonoMatch.length > 0) {
+          return res.status(400).json({ success: false, message: 'El teléfono ya está registrado por otro usuario' });
+        }
+      }
+    }
+
+    // Si cambian de rol, validar que no exista otro usuario de la misma persona con ese rol
+    if (rol_id && parseInt(rol_id, 10) !== usuarioActual.rol_id) {
       const roleTaken = await prisma.usuario.findFirst({
         where: {
           persona_id: usuarioActual.persona_id,
@@ -1725,13 +1754,26 @@ const updateUser = async (req, res) => {
         } = persona;
         const personaUpdateData = {
           dni: dni ?? undefined,
-          telefono: telefono ?? undefined,
-          correo: correo ?? undefined,
           primer_nombre: primer_nombre ?? undefined,
           segundo_nombre: segundo_nombre ?? undefined,
           apellido_paterno: apellido_paterno ?? undefined,
           apellido_materno: apellido_materno ?? undefined,
         };
+
+
+        if (hasOwn(persona, 'correo')) {
+          const correoTrimmed = typeof correo === 'string' ? correo.trim() : correo;
+          personaUpdateData.correo = correoTrimmed === '' ? null : correoTrimmed ?? null;
+        }
+
+        if (hasOwn(persona, 'telefono')) {
+          if (telefono == null) {
+            personaUpdateData.telefono = null;
+          } else {
+            const telefonoDigits = normalizeDigits(telefono);
+            personaUpdateData.telefono = telefonoDigits || null;
+          }
+        }
 
         const hasLineaExacta = hasOwn(persona, 'linea_exacta_direccion') || hasOwn(persona, 'direccion');
         if (hasLineaExacta) {
@@ -1746,8 +1788,14 @@ const updateUser = async (req, res) => {
         }
         await tx.persona.update({
           where: { id: usuarioActual.persona_id },
-                    data: personaUpdateData
+          data: personaUpdateData
+        });
+      }
 
+      if (trimmedClave !== undefined && trimmedClave !== usuarioActual.clave) {
+        await tx.usuario.update({
+          where: { id: userId },
+          data: { clave: trimmedClave },
         });
       }
 

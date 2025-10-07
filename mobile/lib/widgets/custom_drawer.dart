@@ -87,6 +87,13 @@ class CustomDrawer extends StatelessWidget {
       if (hasChildren) {
         final bool highlight =
             item.selected || item.children.any((child) => child.selected);
+             final double fontSize = isChild ? 15 : 17;
+        final TextStyle titleStyle = TextStyle(
+          fontSize: fontSize,
+          fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
+          color: highlight ? AppColors.buttonColor : Colors.black87,
+          height: 1.2,
+        );
         tiles.add(
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -96,17 +103,17 @@ class CustomDrawer extends StatelessWidget {
               initiallyExpanded:
                   item.initiallyExpanded || item.children.any((child) => child.selected),
               leading: item.icon != null
-                  ? Icon(item.icon, color: AppColors.buttonColor)
-                  : null,
+                    ? Icon(
+                      item.icon,
+                      color: highlight ? AppColors.buttonColor : Colors.black54,
+                    )                  : null,
               title: Row(
                 children: [
                   Expanded(
                     child: Text(
                       item.title,
-                      style: TextStyle(
-                        fontWeight: highlight ? FontWeight.w600 : FontWeight.w500,
-                        color: highlight ? AppColors.buttonColor : null,
-                      ),
+                        style: titleStyle,
+
                     ),
                   ),
                   if (item.trailing != null) item.trailing!,
@@ -118,17 +125,25 @@ class CustomDrawer extends StatelessWidget {
           ),
         );
       } else {
+        final bool highlighted = item.selected;
+        final TextStyle titleStyle = TextStyle(
+          fontSize: isChild ? 14 : 16,
+          fontWeight: highlighted
+              ? FontWeight.w600
+              : (isChild ? FontWeight.w500 : FontWeight.w600),
+          color: highlighted ? AppColors.buttonColor : Colors.black87,
+          height: 1.2,
+        );
         tiles.add(
           ListTile(
             leading: item.icon != null
-                ? Icon(item.icon, color: AppColors.buttonColor)
-                : null,
+                  ? Icon(
+                    item.icon,
+                    color: highlighted ? AppColors.buttonColor : Colors.black54,
+                  )                : null,
             title: Text(
               item.title,
-              style: TextStyle(
-                fontWeight: item.selected ? FontWeight.w600 : FontWeight.w500,
-                color: item.selected ? AppColors.buttonColor : null,
-              ),
+              style: titleStyle,
             ),
             trailing: item.trailing,
             selected: item.selected,
@@ -142,7 +157,7 @@ class CustomDrawer extends StatelessWidget {
                     item.onTap!();
                   },
             contentPadding: padding,
-            dense: true,
+            dense: isChild,
           ),
         );
       }
