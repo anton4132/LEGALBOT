@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../Widgets/custom_outline_button.dart';
-import '../../../Widgets/customapp_bar.dart';
-import '../../../Widgets/custombtn.dart';
-import '../../../Widgets/customtextfield.dart';
+import '../../../../Widgets/custom_outline_button.dart';
+import '../../../../Widgets/customapp_bar.dart';
+import '../../../../Widgets/custombtn.dart';
+import '../../../../Widgets/customtextfield.dart';
 
 class ManageAddressScreen extends StatelessWidget {
   const ManageAddressScreen({super.key});

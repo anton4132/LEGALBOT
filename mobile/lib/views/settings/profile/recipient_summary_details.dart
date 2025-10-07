@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../Constants/colors.dart';
-import '../../Widgets/customapp_bar.dart';
-import '../../Widgets/custombtn.dart';
-import '../../Widgets/detailstext1.dart';
-import '../../Widgets/detailstext2.dart';
-import '../Checkout/payment_screen.dart';
-import '../Checkout/shipping_screen.dart';
+import '../../../Constants/colors.dart';
+import '../../../Widgets/customapp_bar.dart';
+import '../../../Widgets/custombtn.dart';
+import '../../../Widgets/detailstext1.dart';
+import '../../../Widgets/detailstext2.dart';
+import '../../Checkout/payment_screen.dart';
+import '../../Checkout/shipping_screen.dart';
 
 
 class RecipientSummaryDetailsScreen extends StatelessWidget {

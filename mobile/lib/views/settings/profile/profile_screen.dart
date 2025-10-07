@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 
 
 
-import '../../Constants/colors.dart';
-import '../../Widgets/customapp_bar.dart';
+import '../../../Constants/colors.dart';
+import '../../../Widgets/customapp_bar.dart';
 import 'ManageAddress/address_book_screeen.dart';
 import 'change_password.dart';
 import 'edit_profile.dart';

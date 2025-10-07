@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../Widgets/customapp_bar.dart';
-import '../../Widgets/custombtn.dart';
-import '../../Widgets/customtextfield.dart';
-import '../../Widgets/detailstext1.dart';
+import '../../../Widgets/customapp_bar.dart';
+import '../../../Widgets/custombtn.dart';
+import '../../../Widgets/customtextfield.dart';
+import '../../../Widgets/detailstext1.dart';
 
 class ChangePassword extends StatelessWidget {
   const ChangePassword({super.key});
