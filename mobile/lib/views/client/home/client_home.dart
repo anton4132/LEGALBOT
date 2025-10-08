@@ -26,12 +26,15 @@ class ClientHome extends StatefulWidget {
   @override
   State<ClientHome> createState() => _ClientHomeState();
 }
+enum _ClientHomeView { dashboard, settings }
 
 class _ClientHomeState extends State<ClientHome> {
   final TextEditingController _consultationController = TextEditingController();
   bool _isRecording = false;
   bool _isSwitchingAccount = false;
-
+  _ClientHomeView _activeView = _ClientHomeView.dashboard;
+  ClientSettingsSubsection _activeSettingsSubsection =
+      ClientSettingsSubsection.overview;
   @override
   void initState() {
     super.initState();
@@ -162,6 +165,207 @@ class _ClientHomeState extends State<ClientHome> {
     print(_isRecording ? 'Iniciando grabación...' : 'Deteniendo grabación...');
   }
 
+
+  void _showHomeView() {
+    if (_activeView == _ClientHomeView.dashboard) return;
+    setState(() {
+      _activeView = _ClientHomeView.dashboard;
+    });
+  }
+
+  void _openSettingsSubsection(ClientSettingsSubsection subsection) {
+    setState(() {
+      _activeView = _ClientHomeView.settings;
+      _activeSettingsSubsection = subsection;
+    });
+  }
+
+  Widget _buildDashboardContent(
+    UserSession? session,
+    LawyerApplicationStatus application,
+    String displayName,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ShadowCard(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.waving_hand,
+                    color: AppColors.buttonColor,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '¡Hola, $displayName!',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.buttonColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                '¿En qué puedo ayudarte hoy?',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.text2Color,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        ShadowCard(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    color: AppColors.buttonColor,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Consulta Rápida',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.buttonColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Escribe tu consulta legal o usa el micrófono para dictar',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.text2Color,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ConsultationInput(
+                controller: _consultationController,
+                hintText: 'Escribe tu consulta legal aquí...',
+                onSendPressed: _handleSendConsultation,
+                onMicPressed: _handleMicPressed,
+                isRecording: _isRecording,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        const SectionHeader(title: 'Servicios'),
+        const SizedBox(height: 15),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
+          childAspectRatio: 1.1,
+          children: [
+            OptionCard(
+              icon: Icons.question_answer,
+              title: 'Consultas\nLegales',
+              color: AppColors.button2Color,
+              onTap: () {
+                // TODO
+              },
+            ),
+            OptionCard(
+              icon: Icons.directions_car,
+              title: 'Búsqueda\nVehicular',
+              color: AppColors.tabColor,
+              onTap: () {
+                // TODO
+              },
+            ),
+            OptionCard(
+              icon: Icons.search,
+              title: 'Buscar\nAbogados',
+              color: AppColors.buttonColor,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ClientLawyerSearchScreen(),
+                  ),
+                );
+              },
+            ),
+            OptionCard(
+              icon: Icons.history,
+              title: 'Mi\nHistorial',
+              color: AppColors.text3Color,
+              onTap: () {
+                // TODO
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        ShadowCard(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(
+                    Icons.help_outline,
+                    color: AppColors.buttonColor,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    '¿Necesitas ayuda?',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.buttonColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Nuestro equipo legal está disponible 24/7 para ayudarte con cualquier consulta.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.text2Color,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: CustomButton(
+                  text: 'Contactar Soporte',
+                  onTap: () {
+                    // TODO
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        _buildBecomeLawyerCard(session, application),
+      ],
+    );
+  }
+
+
   void _handleLogout() async {
     final bool? shouldLogout = await showDialog<bool>(
       context: context,
@@ -248,6 +452,7 @@ class _ClientHomeState extends State<ClientHome> {
             hasLawyerAccount
                 ? 'Gestiona tus roles desde LegalBot'
                 : 'Bienvenido a LegalBot';
+                  final bool settingsActive = _activeView == _ClientHomeView.settings;
 
         return Scaffold(
           appBar: const CustomAppBar(title: 'LegalBot - Cliente'),
@@ -257,8 +462,12 @@ class _ClientHomeState extends State<ClientHome> {
             userName: displayName,
             subtitle: drawerSubtitle,
             items: [
-              const DrawerItem(icon: Icons.home, title: 'Inicio'),
-              DrawerItem(
+DrawerItem(
+                icon: Icons.home,
+                title: 'Inicio',
+                selected: _activeView == _ClientHomeView.dashboard,
+                onTap: _showHomeView,
+              ),              DrawerItem(
                 icon: Icons.search,
                 title: 'Buscar Abogados',
                 onTap: () {
@@ -302,208 +511,50 @@ class _ClientHomeState extends State<ClientHome> {
               DrawerItem(
                 icon: Icons.settings,
                 title: 'Configuración',
-                onTap: () {
-                 Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ClientSettingsScreen(),
-                    ),
-                  );
-                },
+                         selected: settingsActive,
+                initiallyExpanded: settingsActive,
+                children: [
+                  DrawerItem(
+                    title: 'Resumen general',
+                    selected: settingsActive &&
+                        _activeSettingsSubsection ==
+                            ClientSettingsSubsection.overview,
+                    onTap: () =>
+                        _openSettingsSubsection(ClientSettingsSubsection.overview),
+                  ),
+                  DrawerItem(
+                    title: 'Edición de datos de contacto',
+                    selected: settingsActive &&
+                        _activeSettingsSubsection ==
+                            ClientSettingsSubsection.contact,
+                    onTap: () =>
+                        _openSettingsSubsection(ClientSettingsSubsection.contact),
+                  ),
+                  DrawerItem(
+                    title: 'Seguridad',
+                    selected: settingsActive &&
+                        _activeSettingsSubsection ==
+                            ClientSettingsSubsection.security,
+                    onTap: () =>
+                        _openSettingsSubsection(ClientSettingsSubsection.security),
+                  ),
+                ],
               ),
             ],
             onLogout: _handleLogout,
           ),
           body: GradientContainer(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ShadowCard(
-                    padding: const EdgeInsets.all(15),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.waving_hand,
-                              color: AppColors.buttonColor,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '¡Hola, $displayName!',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.buttonColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 5),
-                        const Text(
-                          '¿En qué puedo ayudarte hoy?',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.text2Color,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  ShadowCard(
-                    padding: const EdgeInsets.all(15),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: const [
-                            Icon(
-                              Icons.chat_bubble_outline,
-                              color: AppColors.buttonColor,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Consulta Rápida',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.buttonColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Escribe tu consulta legal o usa el micrófono para dictar',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.text2Color,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ConsultationInput(
-                          controller: _consultationController,
- hintText: 'Escribe tu consulta legal aquí...',
-                          onSendPressed: _handleSendConsultation,
-                          onMicPressed: _handleMicPressed,
-                          isRecording: _isRecording,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  const SectionHeader(title: 'Servicios'),
-                  const SizedBox(height: 15),
-
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 15,
-                    mainAxisSpacing: 15,
-                    childAspectRatio: 1.1,
-                    children: [
-                      OptionCard(
-                        icon: Icons.question_answer,
-                        title: 'Consultas\nLegales',
-                        color: AppColors.button2Color,
-                        onTap: () {
-                          // TODO
-                        },
-                      ),
-                      OptionCard(
-                        icon: Icons.directions_car,
-                        title: 'Búsqueda\nVehicular',
-                        color: AppColors.tabColor,
-                        onTap: () {
-                          // TODO
-                        },
-                      ),
-                      OptionCard(
-                        icon: Icons.search,
-                        title: 'Buscar\nAbogados',
-                        color: AppColors.buttonColor,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ClientLawyerSearchScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      OptionCard(
-                        icon: Icons.history,
-                        title: 'Mi\nHistorial',
-                        color: AppColors.text3Color,
-                        onTap: () {
-                          // TODO
-                        },
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  ShadowCard(
-                    padding: const EdgeInsets.all(15),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: const [
-                            Icon(
-                              Icons.help_outline,
-                              color: AppColors.buttonColor,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              '¿Necesitas ayuda?',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.buttonColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Nuestro equipo legal está disponible 24/7 para ayudarte con cualquier consulta.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.text2Color,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: CustomButton(
-                            text: 'Contactar Soporte',
-                            onTap: () {
-                              // TODO
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  _buildBecomeLawyerCard(session, application),
-                ],
-              ),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: IndexedStack(
+              index: _activeView.index,
+              children: [
+                _buildDashboardContent(session, application, displayName),
+                ClientSettingsScreen(
+                  key: const ValueKey('client-settings'),
+                  subsection: _activeSettingsSubsection,
+                  embedded: true,
+                ),
+              ],
             ),
           ),
         );
@@ -529,7 +580,6 @@ class _ClientHomeState extends State<ClientHome> {
         AppColors.button2Color.withOpacity(0.95),
       ],
     );
-
     final String actionText =
         hasLawyerAccount
             ? 'Ir al panel de abogado'

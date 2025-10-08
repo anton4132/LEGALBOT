@@ -11,14 +11,19 @@ import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
 
 class ClientSettingsScreen extends StatefulWidget {
-  const ClientSettingsScreen({super.key});
+final ClientSettingsSubsection subsection;
+  final bool embedded;
 
+  const ClientSettingsScreen({
+    super.key,
+    this.subsection = ClientSettingsSubsection.overview,
+    this.embedded = false,
+  });
   @override
   State<ClientSettingsScreen> createState() => _ClientSettingsScreenState();
 }
 
 enum ClientSettingsSubsection { overview, contact, security }
-
 
 class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   final GlobalKey<FormState> _contactFormKey = GlobalKey<FormState>();
@@ -37,8 +42,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   bool _loadingDistritos = false;
   bool _savingContact = false;
   bool _savingPassword = false;
-  final Set<ClientSettingsSubsection> _expandedSections =
-      {ClientSettingsSubsection.overview};
+  late ClientSettingsSubsection _currentSubsection;
+
 
   List<UbigeoOption> _departamentos = const <UbigeoOption>[];
   List<UbigeoOption> _provincias = const <UbigeoOption>[];
@@ -53,11 +58,20 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _currentSubsection = widget.subsection;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
   }
-
+@override
+  void didUpdateWidget(covariant ClientSettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.subsection != oldWidget.subsection) {
+      setState(() {
+        _currentSubsection = widget.subsection;
+      });
+    }
+  }
   @override
   void dispose() {
     _phoneController.dispose();
@@ -71,7 +85,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   bool get _isLoadingUbigeo =>
       _loadingDepartamentos || _loadingProvincias || _loadingDistritos;
 
-void _showSnack(
+  void _showSnack(
     String message, {
     Color color = AppColors.text3Color,
   }) {
@@ -94,10 +108,11 @@ void _showSnack(
     })();
 
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      SnackBar(
         content: Text(resolvedMessage),
         backgroundColor: AppColors.tabColor,
-      ),    );
+      ),
+    );
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -159,8 +174,10 @@ void _showSnack(
     }
   }
 
-  Future<void> _loadProvincias(String departamentoCodigo,
-      {String? preselect}) async {
+  Future<void> _loadProvincias(
+    String departamentoCodigo, {
+    String? preselect,
+  }) async {
     setState(() {
       _loadingProvincias = true;
       _provincias = const <UbigeoOption>[];
@@ -194,7 +211,10 @@ void _showSnack(
     }
   }
 
-  Future<void> _loadDistritos(String provinciaCodigo, {String? preselect}) async {
+  Future<void> _loadDistritos(
+    String provinciaCodigo, {
+    String? preselect,
+  }) async {
     setState(() {
       _loadingDistritos = true;
       _distritos = const <UbigeoOption>[];
@@ -232,8 +252,9 @@ void _showSnack(
     }
 
     final departamentoCodigo = direccionId.substring(0, 2);
-    if (_departamentos
-        .any((departamento) => departamento.codigo == departamentoCodigo)) {
+    if (_departamentos.any(
+      (departamento) => departamento.codigo == departamentoCodigo,
+    )) {
       setState(() {
         _selectedDepartamentoCodigo = departamentoCodigo;
       });
@@ -300,8 +321,10 @@ void _showSnack(
 
     final rawTelefono = _phoneController.text.trim();
     final normalizedTelefono = rawTelefono.replaceAll(RegExp(r'\D'), '');
-    final telefonoActual =
-        (currentSettings.telefono ?? '').replaceAll(RegExp(r'\D'), '');
+    final telefonoActual = (currentSettings.telefono ?? '').replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
     final trimmedCorreo = _emailController.text.trim();
     final normalizedCorreo = trimmedCorreo.toLowerCase();
     if (trimmedCorreo != normalizedCorreo) {
@@ -312,6 +335,8 @@ void _showSnack(
     }
     final correoActual = currentSettings.correo.trim().toLowerCase();
     final lineaExacta = _lineaExactaController.text.trim();
+    final lineaActual =
+        (currentSettings.lineaExactaDireccion ?? '').trim().toLowerCase();
 
     final String? direccionId = _selectedDistritoCodigo;
     final direccionActual = currentSettings.direccionId;
@@ -320,11 +345,16 @@ void _showSnack(
     final bool correoChanged = normalizedCorreo != correoActual;
 
     final bool direccionChanged = direccionId != direccionActual;
-    final bool lineaChanged = lineaExacta != lineaActual;
+    final bool lineaChanged = lineaExacta.toLowerCase() != lineaActual;
 
-    if (!(telefonoChanged || correoChanged || direccionChanged || lineaChanged)) {
-      _showSnack('No se detectaron cambios para guardar.',
-          color: AppColors.text3Color);
+    if (!(telefonoChanged ||
+        correoChanged ||
+        direccionChanged ||
+        lineaChanged)) {
+      _showSnack(
+        'No se detectaron cambios para guardar.',
+        color: AppColors.text3Color,
+      );
       return;
     }
 
@@ -365,14 +395,13 @@ void _showSnack(
       _lineaExactaController.text = updated.lineaExactaDireccion ?? '';
 
       SessionService.instance.setSession(
-        session.copyWith(
-          telefono: updated.telefono,
-          correo: updated.correo,
-        ),
+        session.copyWith(telefono: updated.telefono, correo: updated.correo),
       );
 
-      _showSnack('Información actualizada correctamente.',
-          color: AppColors.buttonColor);
+      _showSnack(
+        'Información actualizada correctamente.',
+        color: AppColors.buttonColor,
+      );
     } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
       return;
@@ -408,8 +437,10 @@ void _showSnack(
       );
       _passwordController.clear();
       _confirmPasswordController.clear();
-      _showSnack('Contraseña actualizada correctamente.',
-          color: AppColors.buttonColor);
+      _showSnack(
+        'Contraseña actualizada correctamente.',
+        color: AppColors.buttonColor,
+      );
     } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
       return;
@@ -433,37 +464,41 @@ void _showSnack(
   }) {
     return DropdownButtonFormField<String>(
       value: options.any((option) => option.codigo == value) ? value : null,
-      items: options
-          .map(
-            (option) => DropdownMenuItem<String>(
-              value: option.codigo,
-              child: Text(option.nombre),
-            ),
-          )
-          .toList(),
+      items:
+          options
+              .map(
+                (option) => DropdownMenuItem<String>(
+                  value: option.codigo,
+                  child: Text(option.nombre),
+                ),
+              )
+              .toList(),
       onChanged: isLoading ? null : onChanged,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-  borderSide:
-              const BorderSide(color: AppColors.textFormFieldBorderColor),
+          borderSide: const BorderSide(
+            color: AppColors.textFormFieldBorderColor,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.textFormFieldBorderColor),
+          borderSide: const BorderSide(
+            color: AppColors.textFormFieldBorderColor,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.button2Color, width: 2),
+          borderSide: const BorderSide(color: AppColors.button2Color, width: 2),
         ),
         filled: true,
         fillColor: AppColors.bgColor,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }
@@ -486,129 +521,26 @@ void _showSnack(
         labelText: label,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.textFormFieldBorderColor),
+          borderSide: const BorderSide(
+            color: AppColors.textFormFieldBorderColor,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.textFormFieldBorderColor),
+          borderSide: const BorderSide(
+            color: AppColors.textFormFieldBorderColor,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.button2Color, width: 2),
+          borderSide: const BorderSide(color: AppColors.button2Color, width: 2),
         ),
         filled: true,
         fillColor: AppColors.bgColor,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-    );
-  }
-
-  bool _isSectionExpanded(ClientSettingsSubsection subsection) =>
-      _expandedSections.contains(subsection);
-
-  void _toggleSection(ClientSettingsSubsection subsection) {
-    setState(() {
-      if (_expandedSections.contains(subsection)) {
-        _expandedSections.remove(subsection);
-      } else {
-        _expandedSections.add(subsection);
-      }
-    });
-  }
-
-  Widget _buildExpandableSection({
-    required ClientSettingsSubsection subsection,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Widget child,
-  }) {
-    final expanded = _isSectionExpanded(subsection);
-    return ShadowCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _toggleSection(subsection),
-              borderRadius: BorderRadius.circular(15),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.buttonColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(icon, color: AppColors.buttonColor, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.text1Color,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.text2Color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    AnimatedRotation(
-                      turns: expanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeInOut,
-                      child: const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: AppColors.buttonColor,
-                        size: 24,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          AnimatedCrossFade(
-            crossFadeState:
-                expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 250),
-            sizeCurve: Curves.easeInOut,
-            firstChild: const SizedBox.shrink(),
-            secondChild: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Divider(height: 1, color: AppColors.strokeColor),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  child: child,
-                ),
-              ],
-            ),
-          ),
-        ],
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }
@@ -635,10 +567,7 @@ void _showSnack(
       ),
       subtitle: Text(
         displayValue,
-        style: const TextStyle(
-          fontSize: 14,
-          color: AppColors.text2Color,
-        ),
+        style: const TextStyle(fontSize: 14, color: AppColors.text2Color),
       ),
       trailing: Icon(icon, size: 18, color: iconColor),
     );
@@ -672,8 +601,10 @@ void _showSnack(
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildSummaryTile('Nombre completo',
-                    nombreCompleto.isEmpty ? null : nombreCompleto),
+                _buildSummaryTile(
+                  'Nombre completo',
+                  nombreCompleto.isEmpty ? null : nombreCompleto,
+                ),
                 const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Primer nombre', settings.primerNombre),
                 const Divider(height: 20, color: AppColors.strokeColor),
@@ -701,19 +632,31 @@ void _showSnack(
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildSummaryTile('Correo electrónico', settings.correo,
-                    editable: true),
+                _buildSummaryTile(
+                  'Correo electrónico',
+                  settings.correo,
+                  editable: true,
+                ),
                 const Divider(height: 20, color: AppColors.strokeColor),
-                _buildSummaryTile('Número de teléfono', settings.telefono,
-                    editable: true),
+                _buildSummaryTile(
+                  'Número de teléfono',
+                  settings.telefono,
+                  editable: true,
+                ),
                 const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile('Ubigeo', locationDisplay, editable: true),
                 const Divider(height: 20, color: AppColors.strokeColor),
-                _buildSummaryTile('Código de distrito (UBIGEO)',
-                    settings.direccionId, editable: true),
+                _buildSummaryTile(
+                  'Código de distrito (UBIGEO)',
+                  settings.direccionId,
+                  editable: true,
+                ),
                 const Divider(height: 20, color: AppColors.strokeColor),
-                _buildSummaryTile('Dirección exacta',
-                    settings.lineaExactaDireccion, editable: true),
+                _buildSummaryTile(
+                  'Dirección exacta',
+                  settings.lineaExactaDireccion,
+                  editable: true,
+                ),
                 const Divider(height: 20, color: AppColors.strokeColor),
                 _buildSummaryTile(
                   'Contraseña',
@@ -727,128 +670,131 @@ void _showSnack(
       ),
     );
   }
+
   Widget _buildContactSection() {
     return KeyedSubtree(
       key: const ValueKey('contact'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Editar datos de contacto',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.text3Color,
+      child: ShadowCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Editar datos de contacto',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.text3Color,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Modifica tu correo, teléfono y dirección manteniendo el resto de tu perfil sin cambios.',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.text2Color,
+            const SizedBox(height: 6),
+            const Text(
+              'Modifica tu correo, teléfono y dirección manteniendo el resto de tu perfil sin cambios.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.text2Color,
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Form(
-            key: _contactFormKey,
-            child: Column(
-              children: [
-                _buildTextField(
-                  controller: _phoneController,
-                  label: 'Teléfono',
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'[0-9+\s-]'),
-                    ),
-                  ],
-                  maxLength: 15,
-                  validator: _validatePhone,
-                ),
-                const SizedBox(height: 12),
-                _buildTextField(
-                  controller: _emailController,
-                  label: 'Correo electrónico',
-                  keyboardType: TextInputType.emailAddress,
-                  validator: _validateEmail,
-                ),
-                const SizedBox(height: 12),
-                _buildUbigeoDropdown(
-                  label: 'Departamento',
-                  options: _departamentos,
-                  value: _selectedDepartamentoCodigo,
-                  isLoading: _loadingDepartamentos,
-                  onChanged: (value) async {
-                    if (value == null) {
+            const SizedBox(height: 18),
+            Form(
+              key: _contactFormKey,
+              child: Column(
+                children: [
+                  _buildTextField(
+                    controller: _phoneController,
+                    label: 'Teléfono',
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'[0-9+\s-]'),
+                      ),
+                    ],
+                    maxLength: 15,
+                    validator: _validatePhone,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    controller: _emailController,
+                    label: 'Correo electrónico',
+                    keyboardType: TextInputType.emailAddress,
+                    validator: _validateEmail,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildUbigeoDropdown(
+                    label: 'Departamento',
+                    options: _departamentos,
+                    value: _selectedDepartamentoCodigo,
+                    isLoading: _loadingDepartamentos,
+                    onChanged: (value) async {
+                      if (value == null) {
+                        setState(() {
+                          _selectedDepartamentoCodigo = null;
+                          _selectedProvinciaCodigo = null;
+                          _selectedDistritoCodigo = null;
+                          _provincias = const <UbigeoOption>[];
+                          _distritos = const <UbigeoOption>[];
+                        });
+                        return;
+                      }
                       setState(() {
-                        _selectedDepartamentoCodigo = null;
-                        _selectedProvinciaCodigo = null;
-                        _selectedDistritoCodigo = null;
-                        _provincias = const <UbigeoOption>[];
-                        _distritos = const <UbigeoOption>[];
+                        _selectedDepartamentoCodigo = value;
                       });
-                      return;
-                    }
-                    setState(() {
-                      _selectedDepartamentoCodigo = value;
-                    });
-                    await _loadProvincias(value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildUbigeoDropdown(
-                  label: 'Provincia',
-                  options: _provincias,
-                  value: _selectedProvinciaCodigo,
-                  isLoading: _loadingProvincias,
-                  onChanged: (value) async {
-                    if (value == null) {
+                      await _loadProvincias(value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildUbigeoDropdown(
+                    label: 'Provincia',
+                    options: _provincias,
+                    value: _selectedProvinciaCodigo,
+                    isLoading: _loadingProvincias,
+                    onChanged: (value) async {
+                      if (value == null) {
+                        setState(() {
+                          _selectedProvinciaCodigo = null;
+                          _selectedDistritoCodigo = null;
+                          _distritos = const <UbigeoOption>[];
+                        });
+                        return;
+                      }
                       setState(() {
-                        _selectedProvinciaCodigo = null;
-                        _selectedDistritoCodigo = null;
-                        _distritos = const <UbigeoOption>[];
+                        _selectedProvinciaCodigo = value;
                       });
-                      return;
-                    }
-                    setState(() {
-                      _selectedProvinciaCodigo = value;
-                    });
-                    await _loadDistritos(value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildUbigeoDropdown(
-                  label: 'Distrito',
-                  options: _distritos,
-                  value: _selectedDistritoCodigo,
-                  isLoading: _loadingDistritos,
-                  onChanged: (value) {
-                    if (!_isLoadingUbigeo) {
-                      setState(() {
-                        _selectedDistritoCodigo = value;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildTextField(
-                  controller: _lineaExactaController,
-                  label: 'Dirección exacta',
-                  keyboardType: TextInputType.streetAddress,
-                ),
-                const SizedBox(height: 20),
-                CustomButton(
-                  text: _savingContact ? 'Guardando...' : 'Guardar cambios',
-                  onTap: _savingContact ? null : _handleSaveContact,
-                  color: _savingContact
-                      ? AppColors.text2Color
-                      : AppColors.buttonColor,
-                ),
-              ],
+                      await _loadDistritos(value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildUbigeoDropdown(
+                    label: 'Distrito',
+                    options: _distritos,
+                    value: _selectedDistritoCodigo,
+                    isLoading: _loadingDistritos,
+                    onChanged: (value) {
+                      if (!_isLoadingUbigeo) {
+                        setState(() {
+                          _selectedDistritoCodigo = value;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    controller: _lineaExactaController,
+                    label: 'Dirección exacta',
+                    keyboardType: TextInputType.streetAddress,
+                  ),
+                  const SizedBox(height: 20),
+                  CustomButton(
+                    text: _savingContact ? 'Guardando...' : 'Guardar cambios',
+                    onTap: _savingContact ? null : _handleSaveContact,
+                    color: _savingContact
+                        ? AppColors.text2Color
+                        : AppColors.buttonColor,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -856,142 +802,196 @@ void _showSnack(
   Widget _buildSecuritySection() {
     return KeyedSubtree(
       key: const ValueKey('security'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Actualizar contraseña',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.text3Color,
+      child: ShadowCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Actualizar contraseña',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.text3Color,
+              ),
             ),
+            const SizedBox(height: 6),
+            const Text(
+              'La nueva contraseña reemplazará únicamente a tu clave de acceso.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.text2Color,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Form(
+              key: _passwordFormKey,
+              child: Column(
+                children: [
+                  _buildTextField(
+                    controller: _passwordController,
+                    label: 'Nueva contraseña',
+                    keyboardType: TextInputType.visiblePassword,
+                    validator: (value) {
+                      final trimmed = value?.trim() ?? '';
+                      if (trimmed.length < 6) {
+                        return 'La contraseña debe tener al menos 6 caracteres.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    controller: _confirmPasswordController,
+                    label: 'Confirmar contraseña',
+                    keyboardType: TextInputType.visiblePassword,
+                    validator: (value) {
+                      final trimmed = value?.trim() ?? '';
+                      if (trimmed != _passwordController.text.trim()) {
+                        return 'Las contraseñas no coinciden.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  CustomButton(
+                    text: _savingPassword
+                        ? 'Actualizando...'
+                        : 'Actualizar contraseña',
+                    onTap: _savingPassword ? null : _handleSavePassword,
+                    color: _savingPassword
+                        ? AppColors.text2Color
+                        : AppColors.button2Color,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  _SectionInfo _sectionInfoFor(ClientSettingsSubsection subsection) {
+    switch (subsection) {
+      case ClientSettingsSubsection.overview:
+        return const _SectionInfo(
+          title: 'Resumen general',
+          description:
+              'Consulta tus datos personales y de contacto registrados.',
+        );
+      case ClientSettingsSubsection.contact:
+        return const _SectionInfo(
+          title: 'Edición de datos de contacto',
+          description: 'Actualiza tu correo, teléfono y dirección registrados.',
+        );
+      case ClientSettingsSubsection.security:
+        return const _SectionInfo(
+          title: 'Seguridad',
+          description: 'Gestiona la contraseña de acceso a tu cuenta.',
+        );
+    }
+  }
+
+  Widget _buildContent(ClientContactSettings settings) {
+    final sectionInfo = _sectionInfoFor(_currentSubsection);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Configura los datos de tu cuenta',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.text3Color,
           ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Selecciona cada bloque para consultar tu información o actualizar los datos permitidos.',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.text2Color,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          sectionInfo.title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.text3Color,
+          ),
+        ),
+        if (sectionInfo.description != null) ...[
           const SizedBox(height: 6),
-          const Text(
-            'La nueva contraseña reemplazará únicamente a tu clave de acceso.',
-            style: TextStyle(
+          Text(
+            sectionInfo.description!,
+            style: const TextStyle(
               fontSize: 13,
               color: AppColors.text2Color,
             ),
           ),
-          const SizedBox(height: 18),
-          Form(
-            key: _passwordFormKey,
-            child: Column(
-              children: [
-                _buildTextField(
-                  controller: _passwordController,
-                  label: 'Nueva contraseña',
-                  keyboardType: TextInputType.visiblePassword,
-                  validator: (value) {
-                    final trimmed = value?.trim() ?? '';
-                    if (trimmed.length < 6) {
-                      return 'La contraseña debe tener al menos 6 caracteres.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildTextField(
-                  controller: _confirmPasswordController,
-                  label: 'Confirmar contraseña',
-                  keyboardType: TextInputType.visiblePassword,
-                  validator: (value) {
-                    final trimmed = value?.trim() ?? '';
-                    if (trimmed != _passwordController.text.trim()) {
-                      return 'Las contraseñas no coinciden.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                CustomButton(
-                  text: _savingPassword
-                      ? 'Actualizando...'
-                      : 'Actualizar contraseña',
-                  onTap: _savingPassword ? null : _handleSavePassword,
-                  color: _savingPassword
-                      ? AppColors.text2Color
-                      : AppColors.button2Color,
-                ),
-              ],
-            ),
-          ),
         ],
-      ),
+        const SizedBox(height: 18),
+        IndexedStack(
+          index: _currentSubsection.index,
+          children: [
+            _buildOverviewSection(settings),
+            _buildContactSection(),
+            _buildSecuritySection(),
+          ],
+        ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return content;
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: content,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = _initialSettings;
+    final Widget content;
+    if (_loading) {
+      content = const Center(child: CircularProgressIndicator());
+    } else if (settings == null) {
+      content = const Center(
+        child: Text(
+          'No se pudo cargar la información del usuario.',
+          style: TextStyle(color: AppColors.text2Color),
+        ),
+      );
+    } else {
+      content = _buildContent(settings);
+    }
+
+    if (widget.embedded) {
+      return content;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuración'),
         backgroundColor: AppColors.buttonColor,
         foregroundColor: AppColors.buttonTextColor,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : settings == null
-              ? const Center(
-                  child: Text(
-                    'No se pudo cargar la información del usuario.',
-                    style: TextStyle(color: AppColors.text2Color),
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Configura los datos de tu cuenta',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.text3Color,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Selecciona cada bloque para consultar tu información o actualizar los datos permitidos.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.text2Color,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      _buildExpandableSection(
-                        subsection: ClientSettingsSubsection.overview,
-                        icon: Icons.dashboard_customize_outlined,
-                        title: 'Resumen general',
-                        subtitle:
-                            'Consulta tus datos personales y de contacto registrados.',
-                        child: _buildOverviewSection(settings),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildExpandableSection(
-                        subsection: ClientSettingsSubsection.contact,
-                        icon: Icons.contact_phone_outlined,
-                        title: 'Edición de datos de contacto',
-                        subtitle:
-                            'Actualiza tu correo, teléfono y dirección registrados.',
-                        child: _buildContactSection(),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildExpandableSection(
-                        subsection: ClientSettingsSubsection.security,
-                        icon: Icons.lock_outline,
-                        title: 'Seguridad',
-                        subtitle:
-                            'Gestiona la contraseña de acceso a tu cuenta.',
-                        child: _buildSecuritySection(),
-                      ),
-                    ],
-                  ),
-                ),
+      body: content,
     );
   }
+}
+
+class _SectionInfo {
+  final String title;
+  final String? description;
+
+  const _SectionInfo({
+    required this.title,
+    this.description,
+  });
 }
