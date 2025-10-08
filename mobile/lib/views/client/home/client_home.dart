@@ -72,7 +72,8 @@ class _ClientHomeState extends State<ClientHome> {
     }
   }
 
-  void _showSnackBar(String message, {Color color = Colors.red}) {
+  void _showSnackBar(String message,
+      {Color color = AppColors.tabColor}) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
@@ -103,7 +104,7 @@ class _ClientHomeState extends State<ClientHome> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(resolvedMessage),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.tabColor,
       ),
     );
 
@@ -390,7 +391,7 @@ class _ClientHomeState extends State<ClientHome> {
                         const SizedBox(height: 10),
                         ConsultationInput(
                           controller: _consultationController,
-                          hintText: 'Escribe tu consulta legal aquí...',
+ hintText: 'Escribe tu consulta legal aquí...',
                           onSendPressed: _handleSendConsultation,
                           onMicPressed: _handleMicPressed,
                           isRecording: _isRecording,
@@ -415,7 +416,7 @@ class _ClientHomeState extends State<ClientHome> {
                       OptionCard(
                         icon: Icons.question_answer,
                         title: 'Consultas\nLegales',
-                        color: Colors.blue,
+                        color: AppColors.button2Color,
                         onTap: () {
                           // TODO
                         },
@@ -423,7 +424,7 @@ class _ClientHomeState extends State<ClientHome> {
                       OptionCard(
                         icon: Icons.directions_car,
                         title: 'Búsqueda\nVehicular',
-                        color: Colors.orange,
+                        color: AppColors.tabColor,
                         onTap: () {
                           // TODO
                         },
@@ -431,9 +432,9 @@ class _ClientHomeState extends State<ClientHome> {
                       OptionCard(
                         icon: Icons.search,
                         title: 'Buscar\nAbogados',
-                        color: Colors.green,
+                        color: AppColors.buttonColor,
                         onTap: () {
-                           Navigator.of(context).push(
+                          Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => const ClientLawyerSearchScreen(),
                             ),
@@ -443,7 +444,7 @@ class _ClientHomeState extends State<ClientHome> {
                       OptionCard(
                         icon: Icons.history,
                         title: 'Mi\nHistorial',
-                        color: Colors.purple,
+                        color: AppColors.text3Color,
                         onTap: () {
                           // TODO
                         },

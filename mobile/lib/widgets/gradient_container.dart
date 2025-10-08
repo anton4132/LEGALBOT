@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../Constants/colors.dart';
+import '../constants/colors.dart';
 
 class GradientContainer extends StatelessWidget {
   final Widget child;
@@ -24,7 +24,7 @@ class GradientContainer extends StatelessWidget {
         gradient: LinearGradient(
           begin: begin ?? Alignment.topCenter,
           end: end ?? Alignment.bottomCenter,
-          colors: colors ?? [AppColors.buttonColor, Colors.white],
+          colors: colors ?? [AppColors.buttonColor, AppColors.buttonTextColor],
         ),
       ),
       child: SafeArea(
@@ -35,4 +35,4 @@ class GradientContainer extends StatelessWidget {
       ),
     );
   }
-} 
+}

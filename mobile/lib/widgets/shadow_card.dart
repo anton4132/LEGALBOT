@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../constants/colors.dart';
+
 class ShadowCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -28,11 +30,11 @@ class ShadowCard extends StatelessWidget {
       width: double.infinity,
       padding: padding ?? const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: backgroundColor ?? Colors.white,
+        color: backgroundColor ?? AppColors.buttonTextColor,
         borderRadius: BorderRadius.circular(borderRadius ?? 15),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(shadowOpacity ?? 0.2),
+            color: AppColors.strokeColor.withOpacity(shadowOpacity ?? 0.35),
             spreadRadius: shadowSpreadRadius ?? 1,
             blurRadius: shadowBlurRadius ?? 10,
             offset: shadowOffset ?? const Offset(0, 4),

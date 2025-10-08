@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../constants/colors.dart';
+
 class SectionHeader extends StatelessWidget {
   final String title;
   final Color? textColor;
@@ -20,9 +22,9 @@ class SectionHeader extends StatelessWidget {
       title,
       style: TextStyle(
         fontSize: fontSize ?? 20,
-        fontWeight: fontWeight ?? FontWeight.bold,
-        color: textColor ?? Colors.white,
+        fontWeight: fontWeight ?? FontWeight.w700,
+        color: textColor ?? AppColors.buttonTextColor,
       ),
     );
   }
-} 
+}

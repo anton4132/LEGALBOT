@@ -26,7 +26,7 @@ class CustomDrawer extends StatelessWidget {
         padding: EdgeInsets.zero,
         children: [
           DrawerHeader(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.buttonColor,
             ),
             child: Column(
@@ -34,14 +34,18 @@ class CustomDrawer extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 30,
-                  backgroundColor: Colors.white,
-                  child: Icon(userIcon, size: 35, color: AppColors.buttonColor),
+                  backgroundColor: AppColors.buttonTextColor,
+                  child: Icon(
+                    userIcon,
+                    size: 35,
+                    color: AppColors.buttonColor,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   userName,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.buttonTextColor,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -49,18 +53,21 @@ class CustomDrawer extends StatelessWidget {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: AppColors.buttonTextColor.withOpacity(0.85),
                     fontSize: 14,
                   ),
                 ),
               ],
             ),
           ),
-            ..._buildDrawerItems(context, items),
-          const Divider(),
+          ..._buildDrawerItems(context, items),
+          const Divider(color: AppColors.strokeColor, height: 24),
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Cerrar Sesión', style: TextStyle(color: Colors.red)),
+            leading: const Icon(Icons.logout, color: AppColors.tabColor),
+            title: const Text(
+              'Cerrar Sesión',
+              style: TextStyle(color: AppColors.tabColor),
+            ),
             onTap: () {
               Navigator.pop(context);
               onLogout?.call();
@@ -87,33 +94,36 @@ class CustomDrawer extends StatelessWidget {
       if (hasChildren) {
         final bool highlight =
             item.selected || item.children.any((child) => child.selected);
-             final double fontSize = isChild ? 15 : 17;
+        final double fontSize = isChild ? 14 : 16;
         final TextStyle titleStyle = TextStyle(
           fontSize: fontSize,
           fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
-          color: highlight ? AppColors.buttonColor : Colors.black87,
+          color: highlight ? AppColors.buttonColor : AppColors.text1Color,
           height: 1.2,
         );
         tiles.add(
           Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            data: Theme.of(context)
+                .copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
               tilePadding: padding,
               childrenPadding: EdgeInsets.zero,
               initiallyExpanded:
                   item.initiallyExpanded || item.children.any((child) => child.selected),
               leading: item.icon != null
-                    ? Icon(
+                  ? Icon(
                       item.icon,
-                      color: highlight ? AppColors.buttonColor : Colors.black54,
-                    )                  : null,
+                      color: highlight
+                          ? AppColors.buttonColor
+                          : AppColors.text2Color,
+                    )
+                  : null,
               title: Row(
                 children: [
                   Expanded(
                     child: Text(
                       item.title,
-                        style: titleStyle,
-
+                      style: titleStyle,
                     ),
                   ),
                   if (item.trailing != null) item.trailing!,
@@ -131,16 +141,19 @@ class CustomDrawer extends StatelessWidget {
           fontWeight: highlighted
               ? FontWeight.w600
               : (isChild ? FontWeight.w500 : FontWeight.w600),
-          color: highlighted ? AppColors.buttonColor : Colors.black87,
+          color: highlighted ? AppColors.buttonColor : AppColors.text1Color,
           height: 1.2,
         );
         tiles.add(
           ListTile(
             leading: item.icon != null
-                  ? Icon(
+                ? Icon(
                     item.icon,
-                    color: highlighted ? AppColors.buttonColor : Colors.black54,
-                  )                : null,
+                    color: highlighted
+                        ? AppColors.buttonColor
+                        : AppColors.text2Color,
+                  )
+                : null,
             title: Text(
               item.title,
               style: titleStyle,

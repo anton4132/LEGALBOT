@@ -37,7 +37,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   bool _loadingDistritos = false;
   bool _savingContact = false;
   bool _savingPassword = false;
-   final Set<ClientSettingsSubsection> _expandedSections =
+  final Set<ClientSettingsSubsection> _expandedSections =
       {ClientSettingsSubsection.overview};
 
   List<UbigeoOption> _departamentos = const <UbigeoOption>[];
@@ -71,8 +71,11 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   bool get _isLoadingUbigeo =>
       _loadingDepartamentos || _loadingProvincias || _loadingDistritos;
 
-void _showSnack(String message,
-      {Color color = AppColors.text3Color}) {    if (!mounted) return;
+void _showSnack(
+    String message, {
+    Color color = AppColors.text3Color,
+  }) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: color),
     );
@@ -91,8 +94,10 @@ void _showSnack(String message,
     })();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(resolvedMessage), backgroundColor: Colors.red),
-    );
+        SnackBar(
+        content: Text(resolvedMessage),
+        backgroundColor: AppColors.tabColor,
+      ),    );
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -253,7 +258,7 @@ void _showSnack(String message,
     }
     final normalized = trimmed.toLowerCase();
 
-    final emailRegex = RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!emailRegex.hasMatch(normalized)) {
       return 'El correo electrónico no es válido.';
     }
@@ -265,7 +270,7 @@ void _showSnack(String message,
     if (trimmed.isEmpty) {
       return null;
     }
-    final digits = trimmed.replaceAll(RegExp(r'\\D'), '');
+    final digits = trimmed.replaceAll(RegExp(r'\D'), '');
     if (digits.length < 6) {
       return 'Ingresa al menos 6 dígitos.';
     }
@@ -294,25 +299,25 @@ void _showSnack(String message,
     }
 
     final rawTelefono = _phoneController.text.trim();
-    final normalizedTelefono = rawTelefono.replaceAll(RegExp(r'\\D'), '');
-    final telefonoActual = (currentSettings.telefono ?? '')
-        .replaceAll(RegExp(r'\\D'), '');
+    final normalizedTelefono = rawTelefono.replaceAll(RegExp(r'\D'), '');
+    final telefonoActual =
+        (currentSettings.telefono ?? '').replaceAll(RegExp(r'\D'), '');
     final trimmedCorreo = _emailController.text.trim();
     final normalizedCorreo = trimmedCorreo.toLowerCase();
-        if (trimmedCorreo != normalizedCorreo) {
-          _emailController.value = TextEditingValue(
-            text: normalizedCorreo,
-            selection: TextSelection.collapsed(offset: normalizedCorreo.length),
-          );
-        }
-    final correoActual = currentSettings.correo.trim().toLowerCase();    final lineaExacta = _lineaExactaController.text.trim();
-    final lineaActual = currentSettings.lineaExactaDireccion?.trim() ?? '';
+    if (trimmedCorreo != normalizedCorreo) {
+      _emailController.value = TextEditingValue(
+        text: normalizedCorreo,
+        selection: TextSelection.collapsed(offset: normalizedCorreo.length),
+      );
+    }
+    final correoActual = currentSettings.correo.trim().toLowerCase();
+    final lineaExacta = _lineaExactaController.text.trim();
 
     final String? direccionId = _selectedDistritoCodigo;
     final direccionActual = currentSettings.direccionId;
 
     final bool telefonoChanged = normalizedTelefono != telefonoActual;
-        final bool correoChanged = normalizedCorreo != correoActual;
+    final bool correoChanged = normalizedCorreo != correoActual;
 
     final bool direccionChanged = direccionId != direccionActual;
     final bool lineaChanged = lineaExacta != lineaActual;
@@ -442,16 +447,19 @@ void _showSnack(String message,
         labelText: label,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
- borderSide:
-              const BorderSide(color: AppColors.textFormFieldBorderColor),        ),
+  borderSide:
+              const BorderSide(color: AppColors.textFormFieldBorderColor),
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-  borderSide:
-              const BorderSide(color: AppColors.textFormFieldBorderColor),        ),
+          borderSide:
+              const BorderSide(color: AppColors.textFormFieldBorderColor),
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-borderSide:
-              const BorderSide(color: AppColors.button2Color, width: 2)        ),
+          borderSide:
+              const BorderSide(color: AppColors.button2Color, width: 2),
+        ),
         filled: true,
         fillColor: AppColors.bgColor,
         contentPadding:
@@ -478,17 +486,19 @@ borderSide:
         labelText: label,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-borderSide:
-              const BorderSide(color: AppColors.textFormFieldBorderColor),        ),
+          borderSide:
+              const BorderSide(color: AppColors.textFormFieldBorderColor),
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide:
               const BorderSide(color: AppColors.textFormFieldBorderColor),
-                      ),
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
- borderSide:
-              const BorderSide(color: AppColors.button2Color, width: 2),        ),
+          borderSide:
+              const BorderSide(color: AppColors.button2Color, width: 2),
+        ),
         filled: true,
         fillColor: AppColors.bgColor,
         contentPadding:
@@ -496,7 +506,8 @@ borderSide:
       ),
     );
   }
-bool _isSectionExpanded(ClientSettingsSubsection subsection) =>
+
+  bool _isSectionExpanded(ClientSettingsSubsection subsection) =>
       _expandedSections.contains(subsection);
 
   void _toggleSection(ClientSettingsSubsection subsection) {
@@ -716,7 +727,7 @@ bool _isSectionExpanded(ClientSettingsSubsection subsection) =>
       ),
     );
   }
- Widget _buildContactSection() {
+  Widget _buildContactSection() {
     return KeyedSubtree(
       key: const ValueKey('contact'),
       child: Column(
@@ -749,7 +760,7 @@ bool _isSectionExpanded(ClientSettingsSubsection subsection) =>
                   keyboardType: TextInputType.phone,
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(
-                      RegExp(r'[0-9+\\s-]'),
+                      RegExp(r'[0-9+\s-]'),
                     ),
                   ],
                   maxLength: 15,

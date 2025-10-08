@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../constants/colors.dart';
+
 class OptionCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -24,11 +26,11 @@ class OptionCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.buttonTextColor,
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.2),
+              color: AppColors.strokeColor.withOpacity(0.5),
               spreadRadius: 1,
               blurRadius: 10,
               offset: const Offset(0, 4),
@@ -56,8 +58,8 @@ class OptionCard extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: titleSize ?? 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+                color: AppColors.text1Color,
               ),
             ),
           ],
