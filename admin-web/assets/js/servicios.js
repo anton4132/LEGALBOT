@@ -13,7 +13,22 @@ function logout() {
   localStorage.removeItem('adminId');
   localStorage.removeItem('loginTime');
   localStorage.removeItem('rememberMe');
+  localStorage.removeItem('adminToken');
+
   window.location.href = '/login';
+}
+
+function fetchWithAuth(url, options = {}) {
+  const token = localStorage.getItem('adminToken');
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (token && !headers.Authorization && !headers.authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return fetch(url, { ...options, headers });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -28,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadServices() {
   try {
-    const res = await fetch(`${API_BASE_URL}/services`);
+    const res = await fetchWithAuth(`${API_BASE_URL}/services`);
     if (!res.ok) throw new Error('Error cargando servicios');
     const data = await res.json();
     // La API puede devolver un array directamente o un objeto con la propiedad services
@@ -121,7 +136,7 @@ async function saveService() {
   const modalEl = document.getElementById('serviceModal');
   const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithAuth(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -142,7 +157,7 @@ async function saveService() {
 
 async function toggleService(id, activo) {
   try {
-    const res = await fetch(`${API_BASE_URL}/services/${id}`, {
+    const res = await fetchWithAuth(`${API_BASE_URL}/services/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activo: !activo })
@@ -151,8 +166,7 @@ async function toggleService(id, activo) {
       const errData = await res.json();
       if (errData.tarifas || errData.planes) {
         if (confirm(`${errData.message}. ¿Desactivar de todos modos?`)) {
-          const forceRes = await fetch(`${API_BASE_URL}/services/${id}`, {
-            method: 'PUT',
+          const forceRes = await fetchWithAuth(`${API_BASE_URL}/services/${id}`, {            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ activo: false, force: true })
           });

@@ -2067,9 +2067,8 @@ const updateUser = async (req, res) => {
       perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
     }
 
-    const user = updated?.perfilabogado !== undefined 
-      ? updated.perfilabogado 
-      : { ...rest, perfilabogado: perfilMapped };
+    const user = { ...rest, perfilabogado: perfilMapped };
+
 
     res.json({ success: true, message: 'Usuario actualizado exitosamente', user });
   } catch (error) {

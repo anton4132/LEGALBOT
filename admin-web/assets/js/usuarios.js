@@ -15,10 +15,23 @@ const API_BASE_URL = '/api';
 
 /* ------------------ Utils API ------------------ */
 async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken');
+
+  const isFormDataBody = options.body instanceof FormData;
+  const headers = new Headers(options.headers || {});
+
+  if (!isFormDataBody && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   const resp = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    credentials: 'include',
-    ...options
+    ...options,
+    headers,
+    credentials: options.credentials ?? 'include',
   });
   let data = null;
   try { data = await resp.json(); } catch { /* puede no haber body */ }

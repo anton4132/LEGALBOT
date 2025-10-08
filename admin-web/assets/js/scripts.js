@@ -19,13 +19,29 @@ function logout() {
   localStorage.removeItem('adminId');
   localStorage.removeItem('loginTime');
   localStorage.removeItem('rememberMe');
+  localStorage.removeItem('adminToken');
+
   window.location.href = 'login.html';
 }
+
+function fetchWithAuth(url, options = {}) {
+  const token = localStorage.getItem('adminToken');
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (token && !headers.Authorization && !headers.authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return fetch(url, { ...options, headers });
+}
+
 
 // Función para cargar estadísticas del dashboard
 async function loadDashboardStats() {
   try {
-    const response = await fetch(`${API_BASE_URL}/dashboard/stats`);
+    const response = await fetchWithAuth(`${API_BASE_URL}/dashboard/stats`);
     const data = await response.json();
     
     if (data.success) {
@@ -43,7 +59,7 @@ async function loadDashboardStats() {
 // Función para cargar datos de gráficos
 async function loadChartData() {
   try {
-    const response = await fetch(`${API_BASE_URL}/dashboard/charts`);
+    const response = await fetchWithAuth(`${API_BASE_URL}/dashboard/charts`);
     const data = await response.json();
     
     if (data.success) {

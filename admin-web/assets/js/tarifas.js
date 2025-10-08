@@ -1,5 +1,16 @@
 const API_BASE_URL = '/api';
+function fetchWithAuth(url, options = {}) {
+    const token = localStorage.getItem('adminToken');
+    const headers = {
+        ...(options.headers || {}),
+    };
 
+    if (token && !headers.Authorization && !headers.authorization) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
+    return fetch(url, { ...options, headers });
+}
 document.addEventListener('DOMContentLoaded', () => {
     // --- MOCK DATA ---
     const mockServices = [
@@ -67,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadTariffs() {
         try {
-            const res = await fetch(`${API_BASE_URL}/tariffs`);
+            const res = await fetchWithAuth(`${API_BASE_URL}/tariffs`);
             const data = await res.json();
             state.tariffs = data.tariffs || [];
         } catch (e) {

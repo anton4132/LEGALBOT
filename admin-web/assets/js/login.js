@@ -1,4 +1,3 @@
-// Configuración de la API
 const API_BASE_URL = '/api';
 
 // Función para mostrar alertas
@@ -19,12 +18,16 @@ function clearAlert() {
 }
 
 // Función para guardar sesión
-function saveSession(userData) {
+function saveSession(userData, token) {
   localStorage.setItem('adminLoggedIn', 'true');
   localStorage.setItem('adminEmail', userData.email);
   localStorage.setItem('adminName', userData.nombre);
   localStorage.setItem('adminId', userData.id);
   localStorage.setItem('loginTime', new Date().toISOString());
+  if (token) {
+    localStorage.setItem('adminToken', token);
+    sessionStorage.setItem('adminToken', token);
+  }
 }
 
 // Función para verificar si ya está logueado
@@ -52,8 +55,8 @@ async function handleLogin(email, password, rememberMe) {
     if (data.success) {
       showAlert('¡Inicio de sesión exitoso! Redirigiendo...', 'success');
       
-      // Guardar sesión
-      saveSession(data.user);
+      // Guardar sesión con token para las peticiones autenticadas
+      saveSession(data.user, data.token);
       
       // Si marcó "recordarme", guardar por más tiempo
       if (rememberMe) {
@@ -91,11 +94,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const rememberMe = document.getElementById('rememberMe').checked;
     
     // Validaciones básicas
-    if (!email || !password) {
-      showAlert('Por favor, completa todos los campos.');
-      return;
-    }
-    
     if (!email.includes('@')) {
       showAlert('Por favor, ingresa un email válido.');
       return;
@@ -121,5 +119,6 @@ function logout() {
   localStorage.removeItem('adminId');
   localStorage.removeItem('loginTime');
   localStorage.removeItem('rememberMe');
+  localStorage.removeItem('adminToken');
   window.location.href = 'login.html';
 }
