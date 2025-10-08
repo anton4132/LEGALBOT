@@ -226,6 +226,20 @@ const createOrActivateAbogadoUser = async (tx, personaId) => {
   return newLawyer;
 };
 
+const deactivateAbogadoUser = async (tx, personaId) => {
+  const lawyerRole = await tx.role.findFirst({
+    where: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+  });
+  if (!lawyerRole) {
+    return;
+  }
+
+  await tx.usuario.updateMany({
+    where: { persona_id: personaId, rol_id: lawyerRole.id },
+    data: { activo: false },
+  });
+};
+
 // ---------- controladores ----------
 const getOwnApplication = async (req, res) => {
   try {
@@ -662,6 +676,11 @@ const reviewApplication = async (req, res) => {
       // 2) SI Y SOLO SI quedó APROBADA => crear/activar usuario ABOGADO (duplicando SOLO la clave)
       if (estado === EstadoVerificacion.APROBADA) {
         await createOrActivateAbogadoUser(tx, personaId);
+      } else if (
+        estado === EstadoVerificacion.OBSERVADA ||
+        estado === EstadoVerificacion.RECHAZADA
+      ) {
+        await deactivateAbogadoUser(tx, personaId);
       }
 
       return fetchApplicationWithRelations(tx, { persona_id: personaId });

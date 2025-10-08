@@ -53,8 +53,17 @@ class SessionService {
   void updateAccounts(List<UserAccount> accounts) {
     final current = _sessionNotifier.value;
     if (current == null) return;
-    _sessionNotifier.value = current.copyWith(accounts: accounts);
-  }
+bool? updatedActive;
+    for (final account in accounts) {
+      if (account.usuarioId == current.usuarioId) {
+        updatedActive = account.activo;
+        break;
+      }
+    }
+    _sessionNotifier.value = current.copyWith(
+      accounts: accounts,
+      activo: updatedActive ?? current.activo,
+    );  }
 
   UserAccount? accountForRole(String roleCode) {
     final current = _sessionNotifier.value;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../constants/colors.dart';
+import '../../../models/lawyer_application.dart';
 import '../../../models/user_session.dart';
 import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
@@ -43,6 +44,7 @@ class _LawyerHomeState extends State<LawyerHome> {
   final TextEditingController _consultationController = TextEditingController();
   bool _isRecording = false;
   bool _isSwitchingAccount = false;
+  bool _accessDenied = false;
   bool _profileIncomplete = false;
   bool _loadingProfileStatus = false;
   bool _profileStatusScheduled = false;
@@ -52,6 +54,14 @@ class _LawyerHomeState extends State<LawyerHome> {
       LawyerProfileSubsection.profile;
   final GlobalKey<LawyerProfileScreenState> _profileScreenKey =
       GlobalKey<LawyerProfileScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _enforceLawyerAccess();
+    });
+  
 
   @override
   void dispose() {
@@ -84,7 +94,7 @@ class _LawyerHomeState extends State<LawyerHome> {
       _isRecording = false;
       _isSwitchingAccount = false;
       _consultationController.clear();
-        _loadingProfileStatus = false;
+      _loadingProfileStatus = false;
       _profileStatusLoadedFor = null;
       _profileIncomplete = false;
     });
@@ -101,6 +111,120 @@ class _LawyerHomeState extends State<LawyerHome> {
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
+  }
+
+
+  String _lawyerAccessBlockMessage(
+    LawyerApplicationStatus application,
+    bool isActive,
+  ) {
+    if (!isActive) {
+      final detail = application.observation?.trim();
+      if (detail != null && detail.isNotEmpty) {
+        return detail;
+      }
+      return 'Tu cuenta de abogado fue deshabilitada hasta regularizar la documentación requerida.';
+    }
+
+    switch (application.state) {
+      case LawyerApplicationState.pendiente:
+        return 'Tu postulación de abogado está en revisión. Podrás acceder nuevamente cuando sea aprobada.';
+      case LawyerApplicationState.observada:
+        final detail = application.observation?.trim();
+        if (detail != null && detail.isNotEmpty) {
+          return detail;
+        }
+        return 'Tu postulación fue observada. Revisa el panel de cliente para atender las observaciones.';
+      case LawyerApplicationState.rechazada:
+        final detail = application.observation?.trim();
+        if (detail != null && detail.isNotEmpty) {
+          return detail;
+        }
+        return 'Tu postulación fue rechazada. Comunícate con soporte para más información.';
+      case LawyerApplicationState.aprobada:
+      case LawyerApplicationState.none:
+      default:
+        return 'Tu perfil de abogado no está disponible en este momento.';
+    }
+  }
+
+  Future<void> _enforceLawyerAccess() async {
+    if (_accessDenied) {
+      return;
+    }
+
+    UserSession? session = SessionService.instance.session;
+    if (session == null) {
+      _handleUnauthorized(null);
+      return;
+    }
+
+    LawyerApplicationStatus application = session.application;
+
+    try {
+      final status = await ApiClient.fetchLawyerApplicationStatus(
+        token: session.token,
+      );
+      application = status;
+      SessionService.instance.updateApplication(status);
+    } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
+      return;
+    } catch (_) {
+      application = SessionService.instance.session?.application ?? application;
+    }
+
+    try {
+      final accounts = await ApiClient.fetchMobileAccounts(token: session.token);
+      SessionService.instance.updateAccounts(accounts.accounts);
+      session = SessionService.instance.session ?? session;
+    } catch (_) {
+      session = SessionService.instance.session ?? session;
+    }
+
+    final bool isActive = session?.activo ?? false;
+    final bool approved = application.state == LawyerApplicationState.aprobada;
+
+    if (isActive && approved) {
+      return;
+    }
+
+    _accessDenied = true;
+    final String message = _lawyerAccessBlockMessage(application, isActive);
+
+    if (!mounted) {
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Acceso restringido'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    final UserSession? updatedSession =
+        SessionService.instance.session ?? session;
+    if (updatedSession != null) {
+      await _switchToClientAccount(updatedSession);
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const ClientHome()),
+        (route) => false,
+      );
+    }
   }
 
   void _handleSendConsultation() {

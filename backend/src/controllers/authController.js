@@ -65,20 +65,88 @@ const switchAccount = async (req, res) => {
       return res.status(400).json({ message: 'usuarioId es requerido' });
     }
 
-    const user = await prisma.usuario.findFirst({
+    const targetAccount = await prisma.usuario.findFirst({
       where: { id: usuarioId, persona_id: personaId },
       include: { role: true }
     });
 
-    if (!user) {
+    if (!targetAccount) {
       return res.status(403).json({ message: 'Cuenta no pertenece a la persona' });
     }
 
+
+    const currentAccount = await prisma.usuario.findUnique({
+      where: { id: req.ctx.usuarioId },
+      include: { role: true }
+    });
+
+    const currentRoleCode = (currentAccount?.role?.codigo || '').toLowerCase();
+    const targetRoleCode = (targetAccount.role?.codigo || '').toLowerCase();
+
+    const ensureVerification = async () =>
+      prisma.verificacionabogado.findUnique({
+        where: { persona_id: personaId }
+      });
+
+    if (targetRoleCode === 'abogado') {
+      if (currentRoleCode !== 'cliente') {
+        return res.status(403).json({
+          message:
+            'Solo puedes acceder al panel de abogado desde tu cuenta de cliente.',
+          code: 'LAWYER_SWITCH_FORBIDDEN'
+        });
+      }
+
+      const verification = await ensureVerification();
+      const verificationState = (verification?.estado || '').toUpperCase();
+
+      if (!targetAccount.activo) {
+        const reason = (verification?.observaciones || '').trim();
+        return res.status(423).json({
+          message:
+            reason ||
+            'Tu cuenta de abogado está deshabilitada hasta que regularices tu información.',
+          state: verificationState || null,
+          code: 'LAWYER_ACCOUNT_DISABLED'
+        });
+      }
+
+      if (verificationState !== 'APROBADA') {
+        let message = 'Tu postulación aún no ha sido aprobada.';
+        if (verificationState === 'PENDIENTE') {
+          message =
+            'Estamos revisando tu postulación. Podrás acceder al panel de abogado cuando sea aprobada.';
+        } else if (verificationState === 'OBSERVADA') {
+          const detail = (verification?.observaciones || '').trim();
+          message =
+            detail ||
+            'Tu postulación fue observada. Corrige la información solicitada para continuar.';
+        } else if (verificationState === 'RECHAZADA') {
+          const detail = (verification?.observaciones || '').trim();
+          message =
+            detail ||
+            'Tu postulación fue rechazada. Contáctanos para más información.';
+        }
+
+        return res.status(409).json({
+          message,
+          state: verificationState || null,
+          code: 'LAWYER_VERIFICATION_BLOCKED'
+        });
+      }
+    }
+
+    if (!targetAccount.activo) {
+      return res.status(423).json({
+        message: 'La cuenta seleccionada está deshabilitada.',
+        code: 'ACCOUNT_DISABLED'
+      });
+    }
     const token = jwt.sign(
       {
-        personaId: user.persona_id,
-        usuarioId: user.id,
-        rolId: user.rol_id,
+        personaId: targetAccount.persona_id,
+        usuarioId: targetAccount.id,
+        rolId: targetAccount.rol_id,
         scope: 'full'
       },
       JWT_SECRET,
@@ -87,12 +155,12 @@ const switchAccount = async (req, res) => {
 
     res.json({
       token,
-      personaId: user.persona_id,
-      usuarioId: user.id,
-      rolId: user.rol_id,
-      rolCodigo: user.role?.codigo || null,
-      rolNombre: user.role?.nombre || null,
-      activo: user.activo,
+      personaId: targetAccount.persona_id,
+      usuarioId: targetAccount.id,
+      rolId: targetAccount.rol_id,
+      rolCodigo: targetAccount.role?.codigo || null,
+      rolNombre: targetAccount.role?.nombre || null,
+      activo: targetAccount.activo,
     });
   } catch (error) {
     console.error('Error en switchAccount:', error);

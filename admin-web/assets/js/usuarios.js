@@ -62,6 +62,22 @@ const formatDateTime   = (d) => d ? new Date(d).toLocaleString('es-PE', {
   year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
 }) : '';
 
+
+
+const formatFileSize   = (bytes) => {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+
 const VERIFICATION_STATE_CLASSES = {
   PENDIENTE: 'bg-warning text-dark',
   OBSERVADA: 'bg-info text-dark',
@@ -942,6 +958,69 @@ function populateVerificationModal(user) {
     el.appendChild(anchor);
   };
 
+
+  const setFilePreview = (id, record) => {
+    const container = document.getElementById(id);
+    if (!container) return;
+    container.innerHTML = '';
+    container.classList.add('d-none');
+
+    if (!record) return;
+    const url = record.url || record.ruta;
+    if (!url) return;
+
+    const type = String(record.tipo || '').toLowerCase();
+    const rawName = String(record.ruta || record.url || '').trim();
+    const fileName = rawName ? rawName.split('/').pop() : null;
+    const sizeLabel = formatFileSize(record.tamano);
+    const details = [];
+    if (fileName) details.push(fileName);
+    if (sizeLabel) details.push(sizeLabel);
+    if (record.tipo) details.push(record.tipo);
+
+    if (details.length) {
+      const meta = document.createElement('div');
+      meta.className = 'small text-muted mb-2';
+      meta.textContent = details.join(' · ');
+      container.appendChild(meta);
+    }
+
+    let previewElement;
+    if (type.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = fileName || 'Archivo';
+      img.className = 'img-fluid rounded border';
+      img.loading = 'lazy';
+      previewElement = img;
+    } else if (type === 'application/pdf') {
+      const iframe = document.createElement('iframe');
+      iframe.src = url;
+      iframe.width = '100%';
+      iframe.height = '320';
+      iframe.className = 'border rounded w-100';
+      iframe.setAttribute('loading', 'lazy');
+      previewElement = iframe;
+    } else {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'd-flex align-items-center gap-2';
+      const icon = document.createElement('i');
+      icon.className = 'bi bi-file-earmark-text fs-4 text-secondary';
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'Abrir archivo';
+      wrapper.appendChild(icon);
+      wrapper.appendChild(link);
+      previewElement = wrapper;
+    }
+
+    container.appendChild(previewElement);
+    container.classList.remove('d-none');
+  };
+
+
   setLink('verificacionLinkedin', verification.linkedin_url, verification.linkedin_url);
 
   const tituloArchivo = verification.titulo;
@@ -949,6 +1028,8 @@ function populateVerificationModal(user) {
     ? tituloArchivo.ruta.split('/').pop() || 'Ver archivo'
     : 'Ver archivo';
   setLink('verificacionTituloArchivo', tituloArchivo?.url || tituloArchivo?.ruta, tituloLabel);
+  setFilePreview('verificacionTituloPreview', tituloArchivo);
+
 
   const colegiatura = verification.colegiatura;
   setText('verificacionColegioNombre', colegiatura?.colegio?.nombre);
@@ -962,6 +1043,7 @@ function populateVerificationModal(user) {
     ? carnetArchivo.ruta.split('/').pop() || 'Ver archivo'
     : 'Ver archivo';
   setLink('verificacionCarnetArchivo', carnetArchivo?.url || carnetArchivo?.ruta, carnetLabel);
+  setFilePreview('verificacionCarnetPreview', carnetArchivo);
 
   const actualizado = verification.actualizado_el || verification.creado_el;
   setText('verificacionActualizado', actualizado ? formatDateTime(actualizado) : '', 'Sin actualizar');

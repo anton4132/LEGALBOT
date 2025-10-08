@@ -477,6 +477,14 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
         data != null && data['message'] is String
             ? data['message'] as String
             : 'No se pudo cambiar de cuenta';
+             if (response.statusCode == 403 ||
+        response.statusCode == 409 ||
+        response.statusCode == 423) {
+      throw ApiException(
+        message,
+        statusCode: response.statusCode,
+      );
+    }
     throw Exception(message);
   }
 

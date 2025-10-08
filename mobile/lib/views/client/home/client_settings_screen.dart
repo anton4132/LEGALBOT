@@ -84,10 +84,63 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
 
   bool get _isLoadingUbigeo =>
       _loadingDepartamentos || _loadingProvincias || _loadingDistritos;
+   String? _formatUbigeo({
+    String? departamento,
+    String? provincia,
+    String? distrito,
+  }) {
+    final parts = <String>[
+      if ((departamento ?? '').trim().isNotEmpty) departamento!.trim(),
+      if ((provincia ?? '').trim().isNotEmpty) provincia!.trim(),
+      if ((distrito ?? '').trim().isNotEmpty) distrito!.trim(),
+    ];
 
+    if (parts.isEmpty) {
+      return null;
+    }
+
+    return parts.join(' – ');
+  }
+
+  String? _findUbigeoName(List<UbigeoOption> options, String? codigo) {
+    if (codigo == null) {
+      return null;
+    }
+    for (final option in options) {
+      if (option.codigo == codigo) {
+        return option.nombre;
+      }
+    }
+    return null;
+  }
+
+  String? get _selectedUbigeoDisplay {
+    final departamento =
+        _findUbigeoName(_departamentos, _selectedDepartamentoCodigo);
+    final provincia = _findUbigeoName(_provincias, _selectedProvinciaCodigo);
+    final distrito = _findUbigeoName(_distritos, _selectedDistritoCodigo);
+    final fromSelection = _formatUbigeo(
+      departamento: departamento,
+      provincia: provincia,
+      distrito: distrito,
+    );
+    if (fromSelection != null) {
+      return fromSelection;
+    }
+
+    final settings = _initialSettings;
+    if (settings == null) {
+      return null;
+    }
+    return _formatUbigeo(
+      departamento: settings.departamento,
+      provincia: settings.provincia,
+      distrito: settings.distrito,
+    );
+  }
   void _showSnack(
     String message, {
-    Color color = AppColors.text3Color,
+    Color color = AppColors.buttonColor,
   }) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -110,7 +163,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(resolvedMessage),
-        backgroundColor: AppColors.tabColor,
+        backgroundColor: AppColors.button2Color,
       ),
     );
 
@@ -353,7 +406,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         lineaChanged)) {
       _showSnack(
         'No se detectaron cambios para guardar.',
-        color: AppColors.text3Color,
+        color: AppColors.buttonColor,
       );
       return;
     }
@@ -389,18 +442,57 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         lineaExactaDireccion: lineaChanged ? lineaExacta : null,
       );
 
-      _initialSettings = updated;
-      _phoneController.text = updated.telefono ?? '';
-      _emailController.text = updated.correo;
-      _lineaExactaController.text = updated.lineaExactaDireccion ?? '';
+       final mergedSettings = currentSettings.copyWith(
+        telefono: updated.telefono ?? currentSettings.telefono,
+        correo:
+            updated.correo.trim().isEmpty ? currentSettings.correo : updated.correo,
+        direccionId: updated.direccionId ?? currentSettings.direccionId,
+        lineaExactaDireccion:
+            updated.lineaExactaDireccion ?? currentSettings.lineaExactaDireccion,
+        departamento: updated.departamento ?? currentSettings.departamento,
+        provincia: updated.provincia ?? currentSettings.provincia,
+        distrito: updated.distrito ?? currentSettings.distrito,
+      );
+
+      final enhancedSettings = direccionChanged
+          ? mergedSettings.copyWith(
+              departamento: _findUbigeoName(
+                    _departamentos,
+                    _selectedDepartamentoCodigo,
+                  ) ??
+                  mergedSettings.departamento,
+              provincia: _findUbigeoName(
+                    _provincias,
+                    _selectedProvinciaCodigo,
+                  ) ??
+                  mergedSettings.provincia,
+              distrito: _findUbigeoName(
+                    _distritos,
+                    _selectedDistritoCodigo,
+                  ) ??
+                  mergedSettings.distrito,
+            )
+          : mergedSettings;
+
+      _initialSettings = enhancedSettings;
+      _phoneController.text = enhancedSettings.telefono ?? '';
+      _emailController.text = enhancedSettings.correo;
+      _lineaExactaController.text =
+          enhancedSettings.lineaExactaDireccion ?? '';
+
+      if (direccionChanged) {
+        await _preselectUbigeo(enhancedSettings.direccionId);
+      }
 
       SessionService.instance.setSession(
-        session.copyWith(telefono: updated.telefono, correo: updated.correo),
-      );
+          session.copyWith(
+          telefono: enhancedSettings.telefono,
+          correo: enhancedSettings.correo,
+        ),      );
 
       _showSnack(
         'Información actualizada correctamente.',
-        color: AppColors.buttonColor,
+        color: AppColors.button2Color,
       );
     } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
@@ -562,7 +654,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: AppColors.text3Color,
+          color: AppColors.buttonColor,
         ),
       ),
       subtitle: Text(
@@ -575,13 +667,11 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
 
   Widget _buildOverviewSection(ClientContactSettings settings) {
     final nombreCompleto = settings.nombreCompleto;
-    final locationParts = <String>[
-      if ((settings.departamento ?? '').isNotEmpty) settings.departamento!,
-      if ((settings.provincia ?? '').isNotEmpty) settings.provincia!,
-      if ((settings.distrito ?? '').isNotEmpty) settings.distrito!,
-    ];
-    final locationDisplay =
-        locationParts.isEmpty ? null : locationParts.join(' • ');
+    final locationDisplay = _formatUbigeo(
+      departamento: settings.departamento,
+      provincia: settings.provincia,
+      distrito: settings.distrito,
+    );
 
     return KeyedSubtree(
       key: const ValueKey('overview'),
@@ -597,7 +687,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.text3Color,
+                    color: AppColors.buttonColor,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -628,7 +718,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.text3Color,
+                    color: AppColors.buttonColor,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -672,6 +762,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
   }
 
   Widget _buildContactSection() {
+     final selectedUbigeo = _selectedUbigeoDisplay;
+    final ubigeoDisplay = selectedUbigeo ?? 'Sin registrar';
     return KeyedSubtree(
       key: const ValueKey('contact'),
       child: ShadowCard(
@@ -683,7 +775,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: AppColors.text3Color,
+                color: AppColors.buttonColor,
               ),
             ),
             const SizedBox(height: 6),
@@ -695,6 +787,16 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
               ),
             ),
             const SizedBox(height: 18),
+            Text(
+              'Ubigeo seleccionado: $ubigeoDisplay',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight:
+                    selectedUbigeo != null ? FontWeight.w600 : FontWeight.w500,
+                color: AppColors.buttonColor,
+              ),
+            ),
+            const SizedBox(height: 12),
             Form(
               key: _contactFormKey,
               child: Column(
@@ -811,7 +913,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: AppColors.text3Color,
+                color: AppColors.buttonColor,
               ),
             ),
             const SizedBox(height: 6),
@@ -902,7 +1004,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: AppColors.text3Color,
+            color: AppColors.buttonColor,
           ),
         ),
         const SizedBox(height: 6),
@@ -919,7 +1021,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,
-            color: AppColors.text3Color,
+            color: AppColors.buttonColor,
           ),
         ),
         if (sectionInfo.description != null) ...[

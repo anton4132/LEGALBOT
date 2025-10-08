@@ -58,7 +58,15 @@ class _ClientHomeState extends State<ClientHome> {
         token: session.token,
       );
       SessionService.instance.updateApplication(status);
-       } on UnauthorizedException catch (error) {
+        try {
+        final accounts = await ApiClient.fetchMobileAccounts(
+          token: session.token,
+        );
+        SessionService.instance.updateAccounts(accounts.accounts);
+      } catch (_) {
+        // Ignorar fallos al refrescar cuentas; no bloquear UI
+      }
+    } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
     } catch (_) {
       // Ignorar fallos silenciosamente; el usuario puede actualizar manualmente en la pantalla de postulación
@@ -129,6 +137,19 @@ class _ClientHomeState extends State<ClientHome> {
       return;
     }
 
+    final LawyerApplicationStatus application =
+        SessionService.instance.session?.application ??
+            LawyerApplicationStatus.empty;
+    final String? restrictionMessage =
+        _lawyerRestrictionMessage(application, lawyerAccount);
+    if (restrictionMessage != null) {
+      _showSnackBar(
+        restrictionMessage,
+        color: AppColors.text3Color,
+      );
+      return;
+    }
+
     setState(() => _isSwitchingAccount = true);
     try {
       final result = await ApiClient.switchAccount(
@@ -179,12 +200,60 @@ class _ClientHomeState extends State<ClientHome> {
       _activeSettingsSubsection = subsection;
     });
   }
+  UserAccount? _lawyerAccountForSession(UserSession? session) {
+    if (session == null) {
+      return null;
+    }
+    for (final account in session.accounts) {
+      if (account.isLawyer) {
+        return account;
+      }
+    }
+    return null;
+  }
 
+  String? _lawyerRestrictionMessage(
+    LawyerApplicationStatus application,
+    UserAccount? lawyerAccount,
+  ) {
+    if (lawyerAccount != null && !lawyerAccount.activo) {
+      final detail = application.observation?.trim();
+      if (detail != null && detail.isNotEmpty) {
+        return detail;
+      }
+      return 'Tu cuenta de abogado está deshabilitada hasta regularizar la documentación solicitada.';
+    }
+
+    switch (application.state) {
+      case LawyerApplicationState.pendiente:
+        return 'Tu postulación como abogado está en revisión. Recibirás una notificación cuando sea aprobada.';
+      case LawyerApplicationState.observada:
+        final detail = application.observation?.trim();
+        if (detail != null && detail.isNotEmpty) {
+          return detail;
+        }
+        return 'Tu postulación fue observada. Corrige la información solicitada para continuar.';
+      case LawyerApplicationState.rechazada:
+        final detail = application.observation?.trim();
+        if (detail != null && detail.isNotEmpty) {
+          return detail;
+        }
+        return 'Tu postulación fue rechazada. Contáctanos para obtener más detalles.';
+      case LawyerApplicationState.aprobada:
+      case LawyerApplicationState.none:
+      default:
+        return null;
+    }
+  }
   Widget _buildDashboardContent(
     UserSession? session,
     LawyerApplicationStatus application,
     String displayName,
+    UserAccount? lawyerAccount,
+
   ) {
+    final String? restrictionMessage =
+        _lawyerRestrictionMessage(application, lawyerAccount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -222,6 +291,48 @@ class _ClientHomeState extends State<ClientHome> {
             ],
           ),
         ),
+
+        if (restrictionMessage != null) ...[
+          const SizedBox(height: 16),
+          ShadowCard(
+            padding: const EdgeInsets.all(15),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: AppColors.tabColor,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Atención sobre tu verificación',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.buttonColor,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        restrictionMessage,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.35,
+                          color: AppColors.text2Color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         ShadowCard(
           padding: const EdgeInsets.all(15),
@@ -452,8 +563,8 @@ class _ClientHomeState extends State<ClientHome> {
             hasLawyerAccount
                 ? 'Gestiona tus roles desde LegalBot'
                 : 'Bienvenido a LegalBot';
-                  final bool settingsActive = _activeView == _ClientHomeView.settings;
-
+final UserAccount? lawyerAccount = _lawyerAccountForSession(session);
+        final bool settingsActive = _activeView == _ClientHomeView.settings;
         return Scaffold(
           appBar: const CustomAppBar(title: 'LegalBot - Cliente'),
           drawer: CustomDrawer(
@@ -546,11 +657,16 @@ DrawerItem(
           body: GradientContainer(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
             child: IndexedStack(
-              index: _activeView.index,
-              children: [
-                _buildDashboardContent(session, application, displayName),
-                ClientSettingsScreen(
-                  key: const ValueKey('client-settings'),
+                  index: _activeView.index,
+                  children: [
+                    _buildDashboardContent(
+                      session,
+                      application,
+                      displayName,
+                      lawyerAccount,
+                    ),
+                    ClientSettingsScreen(
+                      key: const ValueKey('client-settings'),
                   subsection: _activeSettingsSubsection,
                   embedded: true,
                 ),
