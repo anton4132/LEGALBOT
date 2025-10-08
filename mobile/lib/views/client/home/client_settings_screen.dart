@@ -25,7 +25,8 @@ final ClientSettingsSubsection subsection;
 
 enum ClientSettingsSubsection { overview, contact, security }
 
-class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
+class _ClientSettingsScreenState extends State<ClientSettingsScreen>
+    with TickerProviderStateMixin {
   final GlobalKey<FormState> _contactFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _passwordFormKey = GlobalKey<FormState>();
 
@@ -474,8 +475,13 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
             )
           : mergedSettings;
 
-      _initialSettings = enhancedSettings;
-      _phoneController.text = enhancedSettings.telefono ?? '';
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _initialSettings = enhancedSettings;
+      });      _phoneController.text = enhancedSettings.telefono ?? '';
       _emailController.text = enhancedSettings.correo;
       _lineaExactaController.text =
           enhancedSettings.lineaExactaDireccion ?? '';
@@ -996,6 +1002,18 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
 
   Widget _buildContent(ClientContactSettings settings) {
     final sectionInfo = _sectionInfoFor(_currentSubsection);
+    final Widget subsection;
+    switch (_currentSubsection) {
+      case ClientSettingsSubsection.overview:
+        subsection = _buildOverviewSection(settings);
+        break;
+      case ClientSettingsSubsection.contact:
+        subsection = _buildContactSection();
+        break;
+      case ClientSettingsSubsection.security:
+        subsection = _buildSecuritySection();
+        break;
+    }
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1035,13 +1053,25 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen> {
           ),
         ],
         const SizedBox(height: 18),
-        IndexedStack(
-          index: _currentSubsection.index,
-          children: [
-            _buildOverviewSection(settings),
-            _buildContactSection(),
-            _buildSecuritySection(),
-          ],
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          alignment: Alignment.topCenter,
+          curve: Curves.easeInOut,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeIn,
+            switchOutCurve: Curves.easeOut,
+            layoutBuilder: (currentChild, previousChildren) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (currentChild != null) currentChild,
+                  ...previousChildren,
+                ],
+              );
+            },
+            child: subsection,
+          ),
         ),
       ],
     );

@@ -62,6 +62,7 @@ class _ClientHomeState extends State<ClientHome> {
         final accounts = await ApiClient.fetchMobileAccounts(
           token: session.token,
         );
+        
         SessionService.instance.updateAccounts(accounts.accounts);
       } catch (_) {
         // Ignorar fallos al refrescar cuentas; no bloquear UI

@@ -15,7 +15,6 @@ import '../../authentication/login_screen.dart';
 import '../../client/home/client_home.dart';
 import '../profile/lawyer_profile_screen.dart';
 
-
 class LawyerHome extends StatefulWidget {
   const LawyerHome({super.key});
 
@@ -38,6 +37,7 @@ class _WarningDot extends StatelessWidget {
     );
   }
 }
+
 enum _LawyerHomeView { dashboard, profile }
 
 class _LawyerHomeState extends State<LawyerHome> {
@@ -61,7 +61,7 @@ class _LawyerHomeState extends State<LawyerHome> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _enforceLawyerAccess();
     });
-  
+  }
 
   @override
   void dispose() {
@@ -82,13 +82,14 @@ class _LawyerHomeState extends State<LawyerHome> {
       return;
     }
 
-    final resolvedMessage = (() {
-      final trimmed = message?.trim();
-      if (trimmed != null && trimmed.isNotEmpty) {
-        return trimmed;
-      }
-      return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
-    })();
+    final resolvedMessage =
+        (() {
+          final trimmed = message?.trim();
+          if (trimmed != null && trimmed.isNotEmpty) {
+            return trimmed;
+          }
+          return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+        })();
 
     setState(() {
       _isRecording = false;
@@ -101,10 +102,7 @@ class _LawyerHomeState extends State<LawyerHome> {
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
-      SnackBar(
-        content: Text(resolvedMessage),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(resolvedMessage), backgroundColor: Colors.red),
     );
 
     Navigator.of(context).pushAndRemoveUntil(
@@ -112,7 +110,6 @@ class _LawyerHomeState extends State<LawyerHome> {
       (route) => false,
     );
   }
-
 
   String _lawyerAccessBlockMessage(
     LawyerApplicationStatus application,
@@ -175,7 +172,9 @@ class _LawyerHomeState extends State<LawyerHome> {
     }
 
     try {
-      final accounts = await ApiClient.fetchMobileAccounts(token: session.token);
+      final accounts = await ApiClient.fetchMobileAccounts(
+        token: session.token,
+      );
       SessionService.instance.updateAccounts(accounts.accounts);
       session = SessionService.instance.session ?? session;
     } catch (_) {
@@ -199,16 +198,17 @@ class _LawyerHomeState extends State<LawyerHome> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Acceso restringido'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Entendido'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Acceso restringido'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Entendido'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (!mounted) {
@@ -270,7 +270,7 @@ class _LawyerHomeState extends State<LawyerHome> {
         MaterialPageRoute(builder: (_) => const ClientHome()),
         (route) => false,
       );
-        } on UnauthorizedException catch (error) {
+    } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
     } catch (error) {
       final message = error.toString().replaceFirst('Exception: ', '');
@@ -287,8 +287,7 @@ class _LawyerHomeState extends State<LawyerHome> {
   Future<void> _handleLogout() async {
     final bool? shouldLogout = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
+      builder: (context) => AlertDialog(
             title: const Text('Cerrar sesión'),
             content: const Text('¿Deseas cerrar sesión?'),
             actions: [
@@ -356,12 +355,10 @@ class _LawyerHomeState extends State<LawyerHome> {
     }
   }
 
-  void _navigateToProfileSection(
-    LawyerProfileSubsection subsection,
-  ) {
+  void _navigateToProfileSection(LawyerProfileSubsection subsection) {
     final bool shouldUpdateView =
         _currentView != _LawyerHomeView.profile ||
-            _currentProfileSubsection != subsection;
+        _currentProfileSubsection != subsection;
     if (shouldUpdateView) {
       setState(() {
         _currentView = _LawyerHomeView.profile;
@@ -374,9 +371,7 @@ class _LawyerHomeState extends State<LawyerHome> {
     });
   }
 
-  void _handleProfileSubsectionChanged(
-    LawyerProfileSubsection subsection,
-  ) {
+  void _handleProfileSubsectionChanged(LawyerProfileSubsection subsection) {
     if (_currentView == _LawyerHomeView.profile &&
         _currentProfileSubsection == subsection) {
       return;
@@ -428,8 +423,10 @@ class _LawyerHomeState extends State<LawyerHome> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: () =>
-                  _navigateToProfileSection(LawyerProfileSubsection.profile),
+              onPressed:
+                  () => _navigateToProfileSection(
+                    LawyerProfileSubsection.profile,
+                  ),
               icon: const Icon(Icons.edit, color: AppColors.buttonColor),
               label: const Text('Completar perfil'),
             ),
@@ -448,7 +445,7 @@ class _LawyerHomeState extends State<LawyerHome> {
             (session?.nombreCompleto?.trim().isNotEmpty ?? false)
                 ? session!.nombreCompleto!.trim()
                 : 'Abogado';
-    if (session != null &&
+        if (session != null &&
             !_loadingProfileStatus &&
             _profileStatusLoadedFor != session.usuarioId) {
           Future.microtask(() => _updateProfileStatus());
@@ -476,50 +473,58 @@ class _LawyerHomeState extends State<LawyerHome> {
                 icon: Icons.home,
                 title: 'Inicio',
                 selected: _currentView == _LawyerHomeView.dashboard,
-                onTap: _showDashboard, 
+                onTap: _showDashboard,
               ),
               DrawerItem(
                 icon: Icons.verified_user,
                 title: 'Perfil de Abogado',
-                 trailing: _profileIncomplete ? const _WarningDot() : null,
+                trailing: _profileIncomplete ? const _WarningDot() : null,
                 selected: _currentView == _LawyerHomeView.profile,
                 initiallyExpanded: _currentView == _LawyerHomeView.profile,
                 children: [
                   DrawerItem(
                     title: 'Perfil de Abogado',
-                    selected: _currentView == _LawyerHomeView.profile &&
+                    selected:
+                        _currentView == _LawyerHomeView.profile &&
                         _currentProfileSubsection ==
                             LawyerProfileSubsection.profile,
-                    onTap: () => _navigateToProfileSection(
-                      LawyerProfileSubsection.profile,
-                    ), 
+                    onTap:
+                        () => _navigateToProfileSection(
+                          LawyerProfileSubsection.profile,
+                        ),
                   ),
                   DrawerItem(
                     title: 'Especialidades',
-                    selected: _currentView == _LawyerHomeView.profile &&
+                    selected:
+                        _currentView == _LawyerHomeView.profile &&
                         _currentProfileSubsection ==
                             LawyerProfileSubsection.specialties,
-                    onTap: () => _navigateToProfileSection(
-                      LawyerProfileSubsection.specialties,
-                    ),
+                    onTap:
+                        () => _navigateToProfileSection(
+                          LawyerProfileSubsection.specialties,
+                        ),
                   ),
                   DrawerItem(
                     title: 'Disponibilidad',
-                    selected: _currentView == _LawyerHomeView.profile &&
+                    selected:
+                        _currentView == _LawyerHomeView.profile &&
                         _currentProfileSubsection ==
                             LawyerProfileSubsection.acceptanceCriteria,
-                    onTap: () => _navigateToProfileSection(
-                      LawyerProfileSubsection.acceptanceCriteria,
-                    ),
+                    onTap:
+                        () => _navigateToProfileSection(
+                          LawyerProfileSubsection.acceptanceCriteria,
+                        ),
                   ),
                   DrawerItem(
                     title: 'Estudios asociados',
-                    selected: _currentView == _LawyerHomeView.profile &&
+                    selected:
+                        _currentView == _LawyerHomeView.profile &&
                         _currentProfileSubsection ==
                             LawyerProfileSubsection.studies,
-                    onTap: () => _navigateToProfileSection(
-                      LawyerProfileSubsection.studies,
-                    ),
+                    onTap:
+                        () => _navigateToProfileSection(
+                          LawyerProfileSubsection.studies,
+                        ),
                   ),
                 ],
               ),
