@@ -1,35 +1,13 @@
 // controllers/userController.js
 const { prisma } = require('../config/database');
+const {
+  BLOB_API_BASE_URL,
+  resolveBlobPublicUrl,
+  resolveBlobToken,
+  normalizeBlobPath,
+} = require('../utils/blob');
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
-
-const BLOB_BASE_URL = 'https://blob.vercel-storage.com';
-const DEFAULT_BLOB_PUBLIC_BASE_URL = BLOB_BASE_URL;
-
-const DEFAULT_BLOB_RW_TOKEN = 'vercel_blob_rw_w2ZXDcCJ4vCxIR4r_IXP5uJAzwiSiY17yZ2uUbMrIUdVx5H';
-
-const resolveBlobPublicBaseUrl = () => {
-  const configured = process.env.BLOB_PUBLIC_BASE_URL
-    || process.env.VERCEL_BLOB_PUBLIC_BASE_URL
-    || process.env.VERCEL_BLOB_PUBLIC_URL;
-  if (configured) {
-    return configured.replace(/\/$/, '');  
-}
-return DEFAULT_BLOB_PUBLIC_BASE_URL;
-};
-
-function resolveBlobPublicUrl(pathOrUrl) {
-  const sanitized = sanitizeString(pathOrUrl);
-  if (!sanitized) return null;
-  if (sanitized.startsWith('http://') || sanitized.startsWith('https://')) {
-    return sanitized;
-  }
-  const normalizedPath = sanitized.startsWith('/')
-    ? sanitized
-    : `/${sanitized}`;
-  const base = resolveBlobPublicBaseUrl();
-  return `${base}${normalizedPath}`;
-}
 
 function createHttpError(statusCode, message, code) {
   const error = new Error(message);
@@ -216,21 +194,7 @@ function mapVerificacionResponse(record) {
     colegiatura: mapColegiaturaResponse(record.colegiatura),
   };
 }
-function normalizeBlobPath(path) {
-  if (!path) return null;
-  const raw = String(path).trim();
-  if (!raw) return null;
-  if (raw.startsWith('http://') || raw.startsWith('https://')) {
-    try {
-      const parsed = new URL(raw);
-      return parsed.pathname.replace(/^\//, '');
-    } catch (error) {
-      console.warn('URL de blob inválida, usando valor original:', error);
-      return raw.replace(/^\//, '');
-    }
-  }
-  return raw.replace(/^\//, '');
-}
+
 
 async function deleteBlobFile(path) {
   const normalized = normalizeBlobPath(path);
@@ -243,7 +207,7 @@ async function deleteBlobFile(path) {
     return false;
   }
   try {
-    const response = await fetch(`${BLOB_BASE_URL}/${normalized}`, {
+    const response = await fetch(`${BLOB_API_BASE_URL}/${normalized}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });

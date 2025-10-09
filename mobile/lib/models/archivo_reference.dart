@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../utils/blob_config.dart';
 
 class ArchivoReference {
   final int? id;

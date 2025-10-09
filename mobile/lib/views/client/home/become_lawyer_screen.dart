@@ -15,14 +15,12 @@ import '../../authentication/login_screen.dart';
 import '../../lawyer/home/lawyer_home.dart';
 
 class _FileSummaryChip extends StatelessWidget {
-  final String fileName;
-  final String? sizeLabel;
+  final String label;
   final String? downloadUrl;
   final VoidCallback? onRemove;
 
   const _FileSummaryChip({
-    required this.fileName,
-    this.sizeLabel,
+    required this.label,
     this.downloadUrl,
     this.onRemove,
   });
@@ -54,27 +52,15 @@ class _FileSummaryChip extends StatelessWidget {
               color: AppColors.text2Color, size: 20),
           const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.text1Color,
-                  ),
-                ),
-                if (sizeLabel != null)
-                  Text(
-                    sizeLabel!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.text2Color,
-                    ),
-                  ),
-              ],
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.text1Color,
+              ),
+
             ),
           ),
           if (downloadUrl != null)
@@ -649,8 +635,8 @@ void _removeExistingCarnetFile() {
                 if (hasLocalFile)
                   Expanded(
                     child: _FileSummaryChip(
-                      fileName: value!.name,
-                      sizeLabel: _formatFileSize(value.size),
+                      label: 'Título adjuntado',
+
                       onRemove: canInteract
                           ? () => _clearSelectedTituloFile(field)
                           : null,
@@ -659,10 +645,7 @@ void _removeExistingCarnetFile() {
                 else if (existing != null)
                   Expanded(
                     child: _FileSummaryChip(
-                      fileName: existing.fileName ?? 'archivo',
-                      sizeLabel: existing.tamano != null
-                          ? _formatFileSize(existing.tamano!)
-                          : null,
+                      label: 'Título guardado',
                       downloadUrl: existing.resolvedUrl,
                       onRemove:
                           canInteract ? _removeExistingTituloFile : null,
@@ -721,8 +704,7 @@ void _removeExistingCarnetFile() {
                 if (file != null)
                   Expanded(
                     child: _FileSummaryChip(
-                      fileName: file.name,
-                      sizeLabel: _formatFileSize(file.size),
+                      label: 'Carnet adjuntado',
                       onRemove: canInteract
                           ? () => _clearSelectedCarnetFile(field)
                           : null,
@@ -731,10 +713,7 @@ void _removeExistingCarnetFile() {
                 else if (existing != null)
                   Expanded(
                     child: _FileSummaryChip(
-                      fileName: existing.fileName ?? 'archivo',
-                      sizeLabel: existing.tamano != null
-                          ? _formatFileSize(existing.tamano!)
-                          : null,
+                      label: 'Carnet guardado',
                       downloadUrl: existing.resolvedUrl,
                       onRemove:
                           canInteract ? _removeExistingCarnetFile : null,

@@ -7,6 +7,8 @@ import 'package:mime/mime.dart';
 
 import '../models/archivo_reference.dart';
 import '../models/user_session.dart';
+import '../utils/blob_config.dart';
+
 import 'session_service.dart';
 
 class BlobUploadResult {
@@ -43,15 +45,10 @@ class BlobUploadResult {
 }
 
 class BlobStorageService {
-  static const String _baseUrl = 'https://blob.vercel-storage.com';
+  static String get _baseUrl => BlobConfig.apiBaseUrl;
   static const Duration _timeout = Duration(minutes: 1);
-  static const String _defaultToken =
-      'vercel_blob_rw_w2ZXDcCJ4vCxIR4r_IXP5uJAzwiSiY17yZ2uUbMrIUdVx5H';
 
-  static String get _token => const String.fromEnvironment(
-        'BLOB_READ_WRITE_TOKEN',
-        defaultValue: _defaultToken,
-      );
+  static String get _token => BlobConfig.readWriteToken;
 
   static String _guessContentType(String fileName) {
     final lookup = lookupMimeType(fileName);

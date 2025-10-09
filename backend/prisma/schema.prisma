@@ -131,6 +131,11 @@ enum resp_consulta {
   IA
 }
 
+enum tipo_consulta {
+  texto
+  audio
+}
+
 model consulta {
   id               Int            @id @default(autoincrement())
   cliente_id       Int
@@ -162,10 +167,7 @@ model consulta {
   @@index([tipo])
 }
 
-enum tipo_consulta {
-  texto
-  audio
-}
+
 
 /**
  * ================================

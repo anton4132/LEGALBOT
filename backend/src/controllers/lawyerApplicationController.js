@@ -1,6 +1,8 @@
 // controllers/lawyerVerification.controller.js
 const { EstadoVerificacion } = require('@prisma/client');
 const { prisma } = require('../config/database');
+const { resolveBlobPublicUrl } = require('../utils/blob');
+
 
 // ---------- helpers ----------
 const sanitizeString = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -78,7 +80,7 @@ const mapArchivo = (archivo) => {
     ? null
     : isAbsolute
     ? normalizedPath
-    : `https://blob.vercel-storage.com${normalizedPath}`;
+    : resolveBlobPublicUrl(normalizedPath);
 
   return {
     id: archivo.id,
