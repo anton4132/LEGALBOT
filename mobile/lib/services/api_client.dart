@@ -9,8 +9,6 @@ import '../models/ubigeo_option.dart';
 import '../models/dni_lookup_result.dart';
 import '../models/client_contact_settings.dart';
 
-
-
 class UnauthorizedException implements Exception {
   final String message;
 
@@ -33,7 +31,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api';
+  static const String _baseUrl = 'http://localhost:3000/api';
   static Object? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {
@@ -61,7 +59,9 @@ class ApiClient {
     }
     return headers;
   }
-static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
+
+  static String _digitsOnly(String value) =>
+      value.replaceAll(RegExp(r'\D'), '');
 
   static Future<DniLookupResult> lookupDni(String dni) async {
     final normalizedDni = _digitsOnly(dni);
@@ -79,7 +79,9 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
       if (payload != null) {
         return DniLookupResult.fromJson(payload);
       }
-      throw const ApiException('La respuesta del padrón no contiene nombres válidos.');
+      throw const ApiException(
+        'La respuesta del padrón no contiene nombres válidos.',
+      );
     }
 
     final message =
@@ -115,8 +117,9 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
       return <String>{};
     }
 
-    final uri = Uri.parse('$_baseUrl/users/persona/conflicts')
-        .replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      '$_baseUrl/users/persona/conflicts',
+    ).replace(queryParameters: queryParameters);
     final http.Response response = await http.get(uri);
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
@@ -138,8 +141,6 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
             : 'No se pudo validar los datos de la persona';
     throw ApiException(message, statusCode: response.statusCode);
   }
-
-
 
   static Future<ClientContactSettings> fetchClientContactSettings({
     required String token,
@@ -263,6 +264,7 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
             : 'No se pudo actualizar la contraseña';
     throw ApiException(message, statusCode: response.statusCode);
   }
+
   static Future<List<Map<String, dynamic>>> fetchEspecialidades() async {
     final uri = Uri.parse('$_baseUrl/especialidades');
     final http.Response response = await http.get(uri);
@@ -273,8 +275,7 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
     throw Exception('Error obteniendo especialidades');
   }
 
-
-   static List<Map<String, dynamic>> _extractUbigeoList(Object? decoded) {
+  static List<Map<String, dynamic>> _extractUbigeoList(Object? decoded) {
     if (decoded is List) {
       return _asJsonMapList(decoded);
     }
@@ -314,8 +315,9 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
   }
 
   static Future<List<UbigeoOption>> fetchProvincias(String parentCodigo) async {
-    final uri =
-        Uri.parse('$_baseUrl/ubigeo/departamentos/$parentCodigo/provincias');
+    final uri = Uri.parse(
+      '$_baseUrl/ubigeo/departamentos/$parentCodigo/provincias',
+    );
     final http.Response response = await http.get(uri);
     final decoded = _tryDecodeJson(response.body);
     if (response.statusCode == 200) {
@@ -331,8 +333,9 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
   }
 
   static Future<List<UbigeoOption>> fetchDistritos(String parentCodigo) async {
-    final uri =
-        Uri.parse('$_baseUrl/ubigeo/provincias/$parentCodigo/distritos');
+    final uri = Uri.parse(
+      '$_baseUrl/ubigeo/provincias/$parentCodigo/distritos',
+    );
     final http.Response response = await http.get(uri);
     final decoded = _tryDecodeJson(response.body);
     if (response.statusCode == 200) {
@@ -367,18 +370,17 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
       return digits.isEmpty ? null : digits;
     }
 
-     final persona = <String, dynamic>{
-        'dni': trimOrNull(contactInfo['dni']),
-        'telefono': digitsOrNull(contactInfo['phone']),
-        'correo': trimOrNull(contactInfo['email']),
-        'primer_nombre': trimOrNull(personalInfo['primerNombre']),
-        'segundo_nombre': trimOrNull(personalInfo['segundoNombre']),
-        'apellido_paterno': trimOrNull(personalInfo['apellidoPaterno']),
-        'apellido_materno': trimOrNull(personalInfo['apellidoMaterno']),
-        'direccion_id': digitsOrNull(contactInfo['ubigeoCodigo']),
-        'linea_exacta_direccion':
-            trimOrNull(contactInfo['lineaExactaDireccion']),
-      };
+    final persona = <String, dynamic>{
+      'dni': trimOrNull(contactInfo['dni']),
+      'telefono': digitsOrNull(contactInfo['phone']),
+      'correo': trimOrNull(contactInfo['email']),
+      'primer_nombre': trimOrNull(personalInfo['primerNombre']),
+      'segundo_nombre': trimOrNull(personalInfo['segundoNombre']),
+      'apellido_paterno': trimOrNull(personalInfo['apellidoPaterno']),
+      'apellido_materno': trimOrNull(personalInfo['apellidoMaterno']),
+      'direccion_id': digitsOrNull(contactInfo['ubigeoCodigo']),
+      'linea_exacta_direccion': trimOrNull(contactInfo['lineaExactaDireccion']),
+    };
     persona.removeWhere((key, value) => value == null);
 
     final Map<String, dynamic> payload = {
@@ -477,13 +479,10 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
         data != null && data['message'] is String
             ? data['message'] as String
             : 'No se pudo cambiar de cuenta';
-             if (response.statusCode == 403 ||
+    if (response.statusCode == 403 ||
         response.statusCode == 409 ||
         response.statusCode == 423) {
-      throw ApiException(
-        message,
-        statusCode: response.statusCode,
-      );
+      throw ApiException(message, statusCode: response.statusCode);
     }
     throw Exception(message);
   }
@@ -646,7 +645,7 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
 
   static Future<LawyerProfileInfo> saveLawyerProfileInfo({
     required String token,
-    required int userId,  
+    required int userId,
     required LawyerProfileInfo info,
     ArchivoReference? avatarArchivo,
     int? avatarArchivoId,
@@ -721,35 +720,44 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
       } else {
         rows = const [];
       }
-      final options = rows
-          .map(LawyerLocationOption.fromJson)
-          .where((option) => option.hasNombre && option.provincias.isNotEmpty)
-          .map((option) {
-            final filteredProvinces = option.provincias
-                .where((province) =>
-                    province.hasNombre && province.distritos.isNotEmpty)
-                .map((province) {
-              final filteredDistricts = province.distritos
-                  .where((district) => district.hasNombre)
-                  .toList()
-                ..sort((a, b) => a.key.compareTo(b.key));
-              return LawyerLocationProvince(
-                provincia: province.provincia,
-                codigo: province.codigo,
-                distritos: List.unmodifiable(filteredDistricts),
-              );
-            }).toList()
-              ..sort((a, b) => a.key.compareTo(b.key));
+      final options =
+          rows
+              .map(LawyerLocationOption.fromJson)
+              .where(
+                (option) => option.hasNombre && option.provincias.isNotEmpty,
+              )
+              .map((option) {
+                final filteredProvinces =
+                    option.provincias
+                        .where(
+                          (province) =>
+                              province.hasNombre &&
+                              province.distritos.isNotEmpty,
+                        )
+                        .map((province) {
+                          final filteredDistricts =
+                              province.distritos
+                                  .where((district) => district.hasNombre)
+                                  .toList()
+                                ..sort((a, b) => a.key.compareTo(b.key));
+                          return LawyerLocationProvince(
+                            provincia: province.provincia,
+                            codigo: province.codigo,
+                            distritos: List.unmodifiable(filteredDistricts),
+                          );
+                        })
+                        .toList()
+                      ..sort((a, b) => a.key.compareTo(b.key));
 
-            return LawyerLocationOption(
-              departamento: option.departamento,
-              codigo: option.codigo,
-              provincias: List.unmodifiable(filteredProvinces),
-            );
-          })
-          .where((option) => option.provincias.isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.key.compareTo(b.key));
+                return LawyerLocationOption(
+                  departamento: option.departamento,
+                  codigo: option.codigo,
+                  provincias: List.unmodifiable(filteredProvinces),
+                );
+              })
+              .where((option) => option.provincias.isNotEmpty)
+              .toList()
+            ..sort((a, b) => a.key.compareTo(b.key));
       return List.unmodifiable(options);
     }
     final data = _asJsonMap(decoded);
@@ -773,8 +781,9 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
       'provincia': provincia.trim(),
       'distrito': distrito.trim(),
     };
-    final uri = Uri.parse('$_baseUrl/lawyers/public/search')
-        .replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      '$_baseUrl/lawyers/public/search',
+    ).replace(queryParameters: queryParameters);
     final headers = token != null ? _authHeaders(token) : <String, String>{};
     final response = await http.get(uri, headers: headers);
     final decoded = _tryDecodeJson(response.body);
@@ -795,7 +804,6 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
               : 'Parámetros de búsqueda inválidos';
       throw Exception(message);
     }
-
 
     if (response.statusCode == 200) {
       List<Map<String, dynamic>> rows;
@@ -1011,7 +1019,7 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
     String? lineaExactaDireccion,
   }) async {
     final uri = Uri.parse('$_baseUrl/users/$userId/estudios');
-     final payload = {
+    final payload = {
       'estudio_id': studyId,
       'principal': principal,
       'rol_en_estudio': role,
@@ -1021,8 +1029,7 @@ static String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
     final response = await http.post(
       uri,
       headers: _authHeaders(token, json: true),
-        body: jsonEncode(payload),
-
+      body: jsonEncode(payload),
     );
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);

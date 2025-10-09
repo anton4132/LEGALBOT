@@ -120,5 +120,6 @@ function logout() {
   localStorage.removeItem('loginTime');
   localStorage.removeItem('rememberMe');
   localStorage.removeItem('adminToken');
+  sessionStorage.removeItem('adminToken');
   window.location.href = 'login.html';
 }

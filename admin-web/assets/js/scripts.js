@@ -20,23 +20,29 @@ function logout() {
   localStorage.removeItem('loginTime');
   localStorage.removeItem('rememberMe');
   localStorage.removeItem('adminToken');
+  sessionStorage.removeItem('adminToken');
 
   window.location.href = 'login.html';
 }
 
 function fetchWithAuth(url, options = {}) {
-  const token = localStorage.getItem('adminToken');
-  const headers = {
-    ...(options.headers || {}),
-  };
+  const token = localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken');
+  const headers = new Headers(options.headers || {});
 
-  if (token && !headers.Authorization && !headers.authorization) {
-    headers.Authorization = `Bearer ${token}`;
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
   }
 
-  return fetch(url, { ...options, headers });
-}
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
 
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: options.credentials ?? 'include',
+  });
+}
 
 // Función para cargar estadísticas del dashboard
 async function loadDashboardStats() {
