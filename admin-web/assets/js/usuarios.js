@@ -151,6 +151,62 @@ function normalizeArchivoRecord(record) {
   };
 }
 
+
+function inferArchivoMimeType(record) {
+  if (!record) return '';
+  const explicitType = String(record.tipo ?? '').trim().toLowerCase();
+  if (explicitType) return explicitType;
+
+  const reference = String(record.ruta ?? record.url ?? '').trim();
+  if (!reference) return '';
+  const sanitized = reference.includes('?') ? reference.split('?')[0] : reference;
+  const segments = sanitized.split('.');
+  const extension = segments.length > 1 ? segments.pop().toLowerCase() : '';
+  if (!extension) return '';
+
+  const extensionMap = {
+    pdf: 'application/pdf',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    jpe: 'image/jpeg',
+    jfif: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+    svg: 'image/svg+xml',
+    svgz: 'image/svg+xml',
+    heic: 'image/heic',
+    heif: 'image/heif',
+    tif: 'image/tiff',
+    tiff: 'image/tiff',
+    avif: 'image/avif',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    rtf: 'application/rtf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    avi: 'video/x-msvideo',
+    m4v: 'video/x-m4v',
+    mkv: 'video/x-matroska',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    m4a: 'audio/mp4',
+    oga: 'audio/ogg',
+    ogg: 'audio/ogg',
+    pdfa: 'application/pdf',
+  };
+
+  return extensionMap[extension] ?? '';
+}
+
 function getRoleCode(user) {
   return (user?.role?.codigo || '').toLowerCase();
 }
@@ -244,7 +300,7 @@ function renderArchivoLink(containerId, archivo, { fallbackLabel, emptyText = 'N
   if (!container) return;
 
   container.textContent = '';
-  container.classList.remove('text-muted');
+  container.classList.remove('text-muted', 'd-none', 'text-break');
 
   if (!archivo || !(archivo.url || archivo.ruta)) {
     container.textContent = emptyText;
@@ -252,27 +308,20 @@ function renderArchivoLink(containerId, archivo, { fallbackLabel, emptyText = 'N
     return;
   }
 
-  const href = archivo.url || archivo.ruta;
-  const reference = (archivo.ruta || archivo.url || '').split('?')[0];
-  const derivedLabel = reference && reference.includes('/')
-    ? reference.split('/').pop()
-    : reference;
-  const label = fallbackLabel || derivedLabel || 'Ver archivo';
+  if (!archivo.isLinkOnly) {
+    container.classList.add('d-none');
+    return;
+  }
 
+  const href = archivo.url || archivo.ruta;
   const link = document.createElement('a');
   link.href = href;
   link.target = '_blank';
   link.rel = 'noopener';
-  link.textContent = label;
-  link.className = 'link-primary fw-semibold';
+  link.textContent = href;
+  link.className = 'link-primary fw-semibold text-break';
+  container.classList.add('text-break');
   container.appendChild(link);
-
-  if (archivo.isLinkOnly) {
-    const badge = document.createElement('span');
-    badge.className = 'badge bg-light text-dark border ms-2';
-    badge.textContent = 'Enlace externo';
-    container.appendChild(badge);
-  }
 }
 /* ----------------- Bootstrap ------------------- */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1145,61 +1194,73 @@ function populateVerificationModal(user) {
     if (!container) return;
     container.innerHTML = '';
     container.classList.add('d-none');
+    container.classList.remove('text-muted');
 
     if (!record || record.isLinkOnly) return;
     const url = record.url || record.ruta;
     if (!url) return;
 
-    const type = String(record.tipo || '').toLowerCase();
-    const rawReference = String(record.ruta || record.url || '').trim();
-    const sanitizedReference = rawReference.includes('?') ? rawReference.split('?')[0] : rawReference;
-    const fileName = sanitizedReference ? sanitizedReference.split('/').pop() : null;
-    const sizeLabel = formatFileSize(record.tamano);
-    const details = [];
-    if (fileName) details.push(fileName);
-    if (sizeLabel) details.push(sizeLabel);
-    if (record.tipo) details.push(record.tipo);
+    const type = inferArchivoMimeType(record) || String(record.tipo || '').toLowerCase();
+    let previewElement = null;
 
-    if (details.length) {
-      const meta = document.createElement('div');
-      meta.className = 'small text-muted mb-2';
-      meta.textContent = details.join(' · ');
-      container.appendChild(meta);
-    }
-
-    let previewElement;
     if (type.startsWith('image/')) {
       const img = document.createElement('img');
       img.src = url;
-      img.alt = fileName || 'Archivo';
+      img.alt = 'Vista previa del archivo';
       img.className = 'img-fluid rounded border';
       img.loading = 'lazy';
       previewElement = img;
-    } else if (type === 'application/pdf') {
+    } else if (type.startsWith('video/')) {
+      const video = document.createElement('video');
+      video.src = url;
+      video.controls = true;
+      video.className = 'w-100 rounded border';
+      video.setAttribute('playsinline', 'true');
+      previewElement = video;
+    } else if (type.startsWith('audio/')) {
+      const audio = document.createElement('audio');
+      audio.src = url;
+      audio.controls = true;
+      audio.className = 'w-100';
+      previewElement = audio;
+    } else {
       const iframe = document.createElement('iframe');
       iframe.src = url;
       iframe.width = '100%';
-      iframe.height = '320';
+      iframe.height = '420';
       iframe.className = 'border rounded w-100';
-      iframe.setAttribute('loading', 'lazy');
+      iframe.loading = 'lazy';
+      iframe.title = 'Vista previa del archivo adjunto';
       previewElement = iframe;
-    } else {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'd-flex align-items-center gap-2';
-      const icon = document.createElement('i');
-      icon.className = 'bi bi-file-earmark-text fs-4 text-secondary';
-      const link = document.createElement('a');
-      link.href = url;
-      link.target = '_blank';
-      link.rel = 'noopener';
-      link.textContent = 'Abrir archivo';
-      wrapper.appendChild(icon);
-      wrapper.appendChild(link);
-      previewElement = wrapper;
     }
 
-    container.appendChild(previewElement);
+    if (!previewElement) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'd-flex flex-column gap-2';
+    wrapper.appendChild(previewElement);
+
+    const actions = document.createElement('div');
+    actions.className = 'd-flex flex-wrap gap-2';
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.target = '_blank';
+    downloadLink.rel = 'noopener';
+    downloadLink.className = 'btn btn-outline-secondary btn-sm';
+    downloadLink.textContent = 'Descargar';
+    downloadLink.setAttribute('download', '');
+    actions.appendChild(downloadLink);
+    wrapper.appendChild(actions);
+
+    const helper = document.createElement('p');
+    helper.className = 'small text-muted mb-0';
+    helper.textContent = 'Si la vista previa no carga correctamente, utiliza la opción Descargar.';
+    wrapper.appendChild(helper);
+
+    container.appendChild(wrapper);
     container.classList.remove('d-none');
+
+  
   };
 
 

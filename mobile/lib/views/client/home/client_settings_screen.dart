@@ -897,9 +897,21 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
                 },
                 child: ClipRect(
                   key: ValueKey(_currentSubsection),
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: subsection,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
+                          ),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: subsection,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
