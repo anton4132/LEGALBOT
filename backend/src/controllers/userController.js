@@ -2089,9 +2089,36 @@ const deleteUser = async (req, res) => {
 
     const usuario = await prisma.usuario.findUnique({
       where: { id },
-      include: { persona: true, perfilabogado: true, abogadoestudios: true }
+      include: {
+        role: true,
+        persona: { include: { verificacionabogado: true } },
+        perfilabogado: true,
+        abogadoestudios: true,
+      }
     });
     if (!usuario) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+
+    const roleCode = (usuario.role?.codigo || '').toLowerCase();
+    if (roleCode === 'abogado') {
+      return res.status(409).json({ success: false, message: 'No se puede eliminar una cuenta con rol de abogado' });
+    }
+
+    if (usuario.persona?.verificacionabogado) {
+      return res.status(409).json({ success: false, message: 'No se puede eliminar a un cliente que registró una verificación de abogado' });
+    }
+
+    const linkedLawyerAccount = await prisma.usuario.findFirst({
+      where: {
+        persona_id: usuario.persona_id,
+        id: { not: usuario.id },
+        role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+      },
+    });
+    if (linkedLawyerAccount) {
+      return res.status(409).json({ success: false, message: 'No se puede eliminar a un cliente que cuenta con usuarios de abogado asociados' });
+    }
+
 
     await prisma.$transaction(async (tx) => {
       // Si es abogado, limpia dependencias manuales
@@ -2117,6 +2144,56 @@ const deleteUser = async (req, res) => {
   } catch (error) {
     console.error('Error eliminando usuario:', error);
     res.status(500).json({ success: false, message: 'Error eliminando usuario' });
+  }
+};
+
+
+
+const setUserActive = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ success: false, message: 'ID inválido' });
+    }
+
+    const { activo } = req.body || {};
+    if (activo !== false) {
+      return res.status(400).json({ success: false, message: 'Solo se permite deshabilitar la cuenta de abogado.' });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    const roleCode = (usuario.role?.codigo || '').toLowerCase();
+    if (roleCode !== 'abogado') {
+      return res.status(409).json({ success: false, message: 'Solo se pueden deshabilitar cuentas con rol de abogado.' });
+    }
+
+    if (!usuario.activo) {
+      return res.json({
+        success: true,
+        user: { id: usuario.id, persona_id: usuario.persona_id, rol_id: usuario.rol_id, activo: usuario.activo },
+      });
+    }
+
+    const updated = await prisma.usuario.update({
+      where: { id },
+      data: { activo: false },
+    });
+
+    return res.json({
+      success: true,
+      user: { id: updated.id, persona_id: updated.persona_id, rol_id: updated.rol_id, activo: updated.activo },
+    });
+  } catch (error) {
+    console.error('Error actualizando estado del usuario:', error);
+    return res.status(500).json({ success: false, message: 'Error actualizando estado del usuario' });
   }
 };
 
@@ -2418,6 +2495,7 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  setUserActive,
   getUserPerfil,
   updateUserPerfil,
   getUserEspecialidades,

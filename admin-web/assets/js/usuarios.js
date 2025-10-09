@@ -10,6 +10,8 @@ let currentVerificationPersonaId = null;
 let verificationModalInstance = null;
 let verificationLoading = false;
 let currentVerificationEstado = null;
+let verificationActionsLocked = false;
+
 
 const API_BASE_URL = '/api';
 
@@ -105,31 +107,80 @@ function personaNombreCompleto(persona = {}) {
     .filter(Boolean)
     .join(' ');
 }
+const LAWYER_ROLE_CODE = 'abogado';
 
 function normalizeArchivoRecord(record) {
   if (!record) return null;
+
+  if (typeof record === 'string') {
+    const trimmed = record.trim();
+    if (!trimmed) return null;
+    return normalizeArchivoRecord({ ruta: trimmed });
+  }
+
   const ruta = String(record.ruta ?? '').trim();
-  const isAbsolute = /^https?:\/\//i.test(ruta);
-  const normalizedPath = !ruta
+  const explicitUrl = typeof record.url === 'string' ? record.url.trim() : '';
+  const reference = ruta || explicitUrl;
+  const isAbsolute = /^https?:\/\//i.test(reference);
+  const normalizedPath = !reference
     ? null
     : isAbsolute
-    ? ruta
-    : ruta.startsWith('/')
-    ? ruta
-    : `/${ruta}`;
-  const fullUrl = record.url
+    ? reference
+    : reference.startsWith('/')
+    ? reference
+    : `/${reference}`;
+  const fullUrl = explicitUrl
     || (!normalizedPath
       ? null
       : isAbsolute
       ? normalizedPath
       : `https://blob.vercel-storage.com${normalizedPath}`);
+
+  const hasMetadata = record.id != null
+    || (record.tamano != null && !Number.isNaN(Number(record.tamano)))
+    || (typeof record.tipo === 'string' && record.tipo.trim() !== '');
+
   return {
-    id: record.id,
+    id: record.id ?? null,
     ruta,
-    tamano: record.tamano,
-    tipo: record.tipo,
+    tamano: record.tamano ?? null,
+    tipo: record.tipo ?? null,
     url: fullUrl,
+    isLinkOnly: !hasMetadata && isAbsolute,
+    hasMetadata,
   };
+}
+
+function getRoleCode(user) {
+  return (user?.role?.codigo || '').toLowerCase();
+}
+
+function getLawyerAccountsByPersona(personaId) {
+  if (personaId == null) return [];
+  return users.filter((u) => u.persona_id === personaId && getRoleCode(u) === LAWYER_ROLE_CODE);
+}
+
+function personaHasLawyerAccount(personaId) {
+  return getLawyerAccountsByPersona(personaId).length > 0;
+}
+
+function personaHasActiveLawyerAccount(personaId) {
+  return getLawyerAccountsByPersona(personaId).some((u) => u.activo);
+}
+
+function getDeleteRestrictionReason(user) {
+  const roleCode = getRoleCode(user);
+  if (roleCode === LAWYER_ROLE_CODE) {
+    return 'No puedes eliminar una cuenta con rol de abogado.';
+  }
+  const verification = mapVerificationFromUser(user);
+  if (verification.exists) {
+    return 'No puedes eliminar a un cliente que envió credenciales de verificación.';
+  }
+  if (personaHasLawyerAccount(user?.persona_id)) {
+    return 'No puedes eliminar a un cliente que tiene una cuenta de abogado asociada.';
+  }
+  return null;
 }
 
 function mapColegiaturaRecord(record) {
@@ -186,6 +237,43 @@ function verificationBadgeInfo(verification) {
   const className = VERIFICATION_STATE_CLASSES[estado] || VERIFICATION_STATE_CLASSES.NONE;
   return { text: estado, className };
 }
+
+
+function renderArchivoLink(containerId, archivo, { fallbackLabel, emptyText = 'No disponible' } = {}) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.textContent = '';
+  container.classList.remove('text-muted');
+
+  if (!archivo || !(archivo.url || archivo.ruta)) {
+    container.textContent = emptyText;
+    container.classList.add('text-muted');
+    return;
+  }
+
+  const href = archivo.url || archivo.ruta;
+  const reference = (archivo.ruta || archivo.url || '').split('?')[0];
+  const derivedLabel = reference && reference.includes('/')
+    ? reference.split('/').pop()
+    : reference;
+  const label = fallbackLabel || derivedLabel || 'Ver archivo';
+
+  const link = document.createElement('a');
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = label;
+  link.className = 'link-primary fw-semibold';
+  container.appendChild(link);
+
+  if (archivo.isLinkOnly) {
+    const badge = document.createElement('span');
+    badge.className = 'badge bg-light text-dark border ms-2';
+    badge.textContent = 'Enlace externo';
+    container.appendChild(badge);
+  }
+}
 /* ----------------- Bootstrap ------------------- */
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -214,7 +302,7 @@ function setupEventListeners() {
   document.getElementById('verificacionRechazarBtn')?.addEventListener('click', () => handleVerificationAction('RECHAZADA'));
   document.getElementById('verificacionObservarBtn')?.addEventListener('click', () => handleVerificationAction('OBSERVADA'));
 
-
+  document.getElementById('verificacionDisableLawyerBtn')?.addEventListener('click', handleDisableLawyerFromModal);
   // Estudio: búsqueda de existentes
   document.getElementById('buscarEstudio')?.addEventListener('input', debounce(handleBuscarEstudio, 250));
 
@@ -232,7 +320,7 @@ async function loadUsers() {
       ...u,
       role: u.role ?? roles.find(r => r.id === u.rol_id) ?? { id: u.rol_id, codigo: 'desconocido', nombre: 'Desconocido' }
     }));
-    renderUsersTable(users);
+    filterUsers();
   } catch (e) {
     showAlert(`No se pudieron cargar usuarios: ${e.message}`, 'danger');
     renderUsersTable([]);
@@ -301,34 +389,50 @@ function renderUsersTable(usersToRender) {
 
   tbody.innerHTML = usersToRender.map(user => {
     const p = user.persona ?? {};
+    const roleCode = getRoleCode(user);
     const badgeClass = getRoleBadge(user.role?.codigo);
     const verificationInfo = verificationBadgeInfo(mapVerificationFromUser(user));
     const verificationBadge = `<span class="badge ${verificationInfo.className}">${escapeHtml(verificationInfo.text)}</span>`;
-    const abogadoActions = (user.role?.codigo === 'abogado')
+    const isLawyer = roleCode === LAWYER_ROLE_CODE;
+    const activeBadge = user.activo ? '' : ' <span class="badge bg-secondary">Deshabilitado</span>';
+    const disableTitle = isLawyer
+      ? (user.activo ? 'Deshabilitar cuenta de abogado' : 'Cuenta de abogado deshabilitada')
+      : '';
+    const disableButton = isLawyer
+      ? `<button class="btn btn-sm btn-outline-dark me-1" title="${escapeHtml(disableTitle)}" ${user.activo ? `onclick="disableLawyer(${user.id})"` : 'disabled'}><i class="bi bi-person-slash"></i></button>`
+      : '';
+    const abogadoActions = isLawyer
       ? `
         <button class="btn btn-sm btn-outline-primary me-1" title="Especialidades" onclick="openEspecialidadesModal(${user.id})"><i class="bi bi-stars"></i></button>
         <button class="btn btn-sm btn-outline-secondary me-1" title="Estudio" onclick="openEstudioModal(${user.id})"><i class="bi bi-building"></i></button>
         <button class="btn btn-sm btn-outline-info me-1" title="Disponibilidad" onclick="openDisponibilidadModal(${user.id})"><i class="bi bi-calendar-week"></i></button>
+        ${disableButton}
       `
       : '';
 
-      const verificationButton = p.id
+    const verificationButton = p.id
       ? `<button class="btn btn-sm btn-outline-success me-1" title="Revisar verificación" onclick="openVerificacionModal(${user.id})"><i class="bi bi-patch-check"></i></button>`
       : '';
+
+    const deleteReason = getDeleteRestrictionReason(user);
+    const deleteButton = deleteReason
+      ? `<button class="btn btn-sm btn-outline-secondary" title="${escapeHtml(deleteReason)}" disabled><i class="bi bi-trash"></i></button>`
+      : `<button class="btn btn-sm btn-danger" title="Eliminar" onclick="deleteUser(${user.id})"><i class="bi bi-trash"></i></button>`;
+
     return `
       <tr>
         <td>${(p.primer_nombre ?? '')} ${(p.apellido_paterno ?? '')}</td>
         <td>${p.dni ?? ''}</td>
         <td>${p.telefono ?? 'N/A'}</td>
         <td>${p.correo ?? ''}</td>
-        <td><span class="badge ${badgeClass}">${user.role?.nombre ?? ''}</span></td>
+        <td><span class="badge ${badgeClass}">${user.role?.nombre ?? ''}</span>${activeBadge}</td>
         <td>${verificationBadge}</td>
         <td>${user.creado_el ? formatDate(user.creado_el) : ''}</td>
         <td class="text-center">
           <div class="btn-group">
             <button class="btn btn-sm btn-warning me-1" title="Editar" onclick="editUser(${user.id})"><i class="bi bi-pencil"></i></button>
             ${verificationButton}${abogadoActions}
-            <button class="btn btn-sm btn-danger" title="Eliminar" onclick="deleteUser(${user.id})"><i class="bi bi-trash"></i></button>
+            ${deleteButton}
           </div>
         </td>
       </tr>
@@ -884,11 +988,72 @@ function setVerificationLoading(isLoading) {
   if (isLoading) {
     setVerificationButtonsEnabled(false);
   } else {
-    const user = users.find(u => u.id === currentVerificationUserId);
-    const hasApplication = user ? mapVerificationFromUser(user).exists : false;
-    setVerificationButtonsEnabled(hasApplication);
+    updateVerificationControls();
+
   }
 }
+
+
+function updateVerificationControls() {
+  const disableBtn = document.getElementById('verificacionDisableLawyerBtn');
+  const notice = document.getElementById('verificacionDisableNotice');
+  const user = users.find(u => u.id === currentVerificationUserId);
+
+  if (!user) {
+    verificationActionsLocked = false;
+    setVerificationButtonsEnabled(false);
+    if (disableBtn) {
+      disableBtn.classList.add('d-none');
+      disableBtn.disabled = true;
+      disableBtn.dataset.userId = '';
+    }
+    if (notice) {
+      notice.textContent = '';
+      notice.classList.add('d-none');
+    }
+    return;
+  }
+
+  const verification = mapVerificationFromUser(user);
+  const personaId = user.persona?.id ?? user.persona_id ?? null;
+  const hasApplication = Boolean(verification.exists && personaId != null);
+  const hasLawyerAccount = personaId != null ? personaHasLawyerAccount(personaId) : false;
+  const hasActiveLawyer = personaId != null ? personaHasActiveLawyerAccount(personaId) : false;
+
+  verificationActionsLocked = hasApplication && hasLawyerAccount;
+
+  if (disableBtn) {
+    if (hasLawyerAccount) {
+      disableBtn.classList.remove('d-none');
+      const activeAccount = hasActiveLawyer
+        ? getLawyerAccountsByPersona(personaId).find((u) => u.activo)
+        : null;
+      disableBtn.dataset.userId = activeAccount ? String(activeAccount.id) : '';
+      disableBtn.disabled = !activeAccount;
+    } else {
+      disableBtn.classList.add('d-none');
+      disableBtn.disabled = true;
+      disableBtn.dataset.userId = '';
+    }
+  }
+
+  if (notice) {
+    if (hasLawyerAccount) {
+      const message = hasActiveLawyer
+        ? 'La persona ya cuenta con acceso de abogado aprobado. Deshabilita la cuenta para impedir su ingreso. El estado de la postulación no puede modificarse desde aquí.'
+        : 'La cuenta de abogado se encuentra deshabilitada. El estado de la postulación permanece aprobado y no puede modificarse desde aquí.';
+      notice.textContent = message;
+      notice.classList.remove('d-none');
+    } else {
+      notice.textContent = '';
+      notice.classList.add('d-none');
+    }
+  }
+
+  const canModify = hasApplication && !verificationLoading && !hasLawyerAccount;
+  setVerificationButtonsEnabled(canModify);
+}
+
 
 function populateVerificationModal(user) {
   const persona = user.persona ?? {};
@@ -927,6 +1092,8 @@ function populateVerificationModal(user) {
     currentVerificationPersonaId = null;
     if (obsInput) obsInput.value = '';
     if (obsPrevias) obsPrevias.classList.add('d-none');
+    updateVerificationControls();
+
     return;
   }
 
@@ -936,10 +1103,11 @@ function populateVerificationModal(user) {
     setVerificationButtonsEnabled(false);
     if (obsInput) obsInput.value = '';
     if (obsPrevias) obsPrevias.classList.add('d-none');
+    updateVerificationControls();
+
     return;
   }
 
-  setVerificationButtonsEnabled(!verificationLoading);
 
   const setText = (id, value, emptyText = 'No registrado') => {
     const el = document.getElementById(id);
@@ -978,13 +1146,14 @@ function populateVerificationModal(user) {
     container.innerHTML = '';
     container.classList.add('d-none');
 
-    if (!record) return;
+    if (!record || record.isLinkOnly) return;
     const url = record.url || record.ruta;
     if (!url) return;
 
     const type = String(record.tipo || '').toLowerCase();
-    const rawName = String(record.ruta || record.url || '').trim();
-    const fileName = rawName ? rawName.split('/').pop() : null;
+    const rawReference = String(record.ruta || record.url || '').trim();
+    const sanitizedReference = rawReference.includes('?') ? rawReference.split('?')[0] : rawReference;
+    const fileName = sanitizedReference ? sanitizedReference.split('/').pop() : null;
     const sizeLabel = formatFileSize(record.tamano);
     const details = [];
     if (fileName) details.push(fileName);
@@ -1037,10 +1206,7 @@ function populateVerificationModal(user) {
   setLink('verificacionLinkedin', verification.linkedin_url, verification.linkedin_url);
 
   const tituloArchivo = verification.titulo;
-  const tituloLabel = tituloArchivo?.ruta
-    ? tituloArchivo.ruta.split('/').pop() || 'Ver archivo'
-    : 'Ver archivo';
-  setLink('verificacionTituloArchivo', tituloArchivo?.url || tituloArchivo?.ruta, tituloLabel);
+  renderArchivoLink('verificacionTituloArchivo', tituloArchivo);
   setFilePreview('verificacionTituloPreview', tituloArchivo);
 
 
@@ -1052,10 +1218,7 @@ function populateVerificationModal(user) {
   setText('verificacionFechaVigencia', colegiatura?.fecha_vigencia_hasta ? formatDate(colegiatura.fecha_vigencia_hasta) : '', 'No registrada');
 
   const carnetArchivo = colegiatura?.carnet_archivo;
-  const carnetLabel = carnetArchivo?.ruta
-    ? carnetArchivo.ruta.split('/').pop() || 'Ver archivo'
-    : 'Ver archivo';
-  setLink('verificacionCarnetArchivo', carnetArchivo?.url || carnetArchivo?.ruta, carnetLabel);
+  renderArchivoLink('verificacionCarnetArchivo', carnetArchivo);
   setFilePreview('verificacionCarnetPreview', carnetArchivo);
 
   const actualizado = verification.actualizado_el || verification.creado_el;
@@ -1074,10 +1237,78 @@ function populateVerificationModal(user) {
   if (obsInput) {
     obsInput.value = verification.observaciones ?? '';
   }
+  updateVerificationControls();
+}
+
+async function handleDisableLawyerFromModal() {
+  const btn = document.getElementById('verificacionDisableLawyerBtn');
+  const userIdStr = btn?.dataset.userId || '';
+  const lawyerId = parseInt(userIdStr, 10);
+
+  if (!btn || Number.isNaN(lawyerId)) {
+    showAlert('No se encontró una cuenta de abogado activa para deshabilitar.', 'warning');
+    return;
+  }
+
+  await disableLawyer(lawyerId);
+}
+
+async function disableLawyer(userId, options = {}) {
+  const user = users.find((u) => u.id === userId);
+  if (!user) {
+    showAlert('No se encontró la cuenta de abogado.', 'danger');
+    return;
+  }
+
+  if (!user.activo) {
+    if (!options.silent) {
+      showAlert('La cuenta de abogado ya está deshabilitada.', 'info');
+    }
+    return;
+  }
+
+  const confirmMessage = options.confirmMessage || '¿Deseas deshabilitar el acceso de esta cuenta de abogado?';
+  if (options.askConfirm !== false && !window.confirm(confirmMessage)) {
+    return;
+  }
+
+  try {
+    await apiFetch(`/users/${userId}/activo`, {
+      method: 'PATCH',
+      body: JSON.stringify({ activo: false }),
+    });
+
+    users = users.map((u) => (u.id === userId ? { ...u, activo: false } : u));
+
+    if (!options.silent) {
+      showAlert('Cuenta de abogado deshabilitada.', 'success');
+    }
+
+    filterUsers();
+
+    if (currentVerificationUserId != null) {
+      const currentUser = users.find((u) => u.id === currentVerificationUserId);
+      if (currentUser) {
+        populateVerificationModal(currentUser);
+      } else {
+        updateVerificationControls();
+      }
+    } else {
+      updateVerificationControls();
+    }
+  } catch (e) {
+    showAlert(`Error deshabilitando abogado: ${e.message}`, 'danger');
+  }
 }
 
 async function handleVerificationAction(estado) {
   if (verificationLoading) return;
+
+  if (verificationActionsLocked) {
+    showAlert('Esta persona ya cuenta con un rol de abogado. Deshabilita su cuenta de abogado para restringir el acceso.', 'warning');
+    return;
+  }
+
 
   const personaId = currentVerificationPersonaId;
   if (!personaId) {
@@ -1147,6 +1378,10 @@ function applyVerificationUpdate(userId, application) {
   const user = users[idx];
   user.persona = user.persona ?? {};
 
+  const normalizedTitulo = normalizeArchivoRecord(application.tituloArchivo);
+  const normalizedCarnet = normalizeArchivoRecord(application.colegiatura?.carnetArchivo);
+
+
   const colegiatura = application.colegiatura
     ? {
         id: application.colegiatura.id,
@@ -1155,16 +1390,8 @@ function applyVerificationUpdate(userId, application) {
         numero: application.colegiatura.numero,
         fecha_emision: application.colegiatura.fechaEmision,
         fecha_vigencia_hasta: application.colegiatura.fechaVigenciaHasta,
-        carnet_archivo_id: application.colegiatura.carnetArchivoId ?? application.colegiatura.carnetArchivo?.id ?? null,
-        carnet_archivo: application.colegiatura.carnetArchivo
-          ? {
-              id: application.colegiatura.carnetArchivo.id,
-              ruta: application.colegiatura.carnetArchivo.ruta,
-              tamano: application.colegiatura.carnetArchivo.tamano,
-              tipo: application.colegiatura.carnetArchivo.tipo,
-              url: application.colegiatura.carnetArchivo.url,
-            }
-          : null,
+        carnet_archivo_id: application.colegiatura.carnetArchivoId ?? normalizedCarnet?.id ?? null,
+        carnet_archivo: normalizedCarnet,
         colegio: application.colegiatura.colegio
           ? {
               id: application.colegiatura.colegio.id,
@@ -1184,16 +1411,8 @@ function applyVerificationUpdate(userId, application) {
     aprobado_el: application.aprobadoEl,
     creado_el: application.creadoEl,
     actualizado_el: application.actualizadoEl,
-    titulo_archivo_id: application.tituloArchivoId ?? application.tituloArchivo?.id ?? null,
-    titulo: application.tituloArchivo
-      ? {
-          id: application.tituloArchivo.id,
-          ruta: application.tituloArchivo.ruta,
-          tamano: application.tituloArchivo.tamano,
-          tipo: application.tituloArchivo.tipo,
-          url: application.tituloArchivo.url,
-        }
-      : null,
+    titulo_archivo_id: application.tituloArchivoId ?? normalizedTitulo?.id ?? null,
+    titulo: normalizedTitulo,
     colegiatura_id: colegiatura?.id ?? null,
     colegiatura,
   };
@@ -1206,6 +1425,17 @@ function applyVerificationUpdate(userId, application) {
 
 /* ----------------- Delete usuario ---------------- */
 function deleteUser(userId) {
+  const user = users.find((u) => u.id === userId);
+  if (!user) {
+    showAlert('Usuario no encontrado.', 'danger');
+    return;
+  }
+
+  const restriction = getDeleteRestrictionReason(user);
+  if (restriction) {
+    showAlert(restriction, 'warning');
+    return;
+  }
   currentUserId = userId;
   bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteModal')).show();
 }

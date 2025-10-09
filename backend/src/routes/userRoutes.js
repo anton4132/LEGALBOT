@@ -493,6 +493,7 @@ router.get('/persona/conflicts', userController.checkPersonaConflicts);
  */
 router.get('/:id', userController.getUserById);
 router.put('/:id', userController.updateUser);
+router.patch('/:id/activo', userController.setUserActive);
 router.delete('/:id', userController.deleteUser);
 
 /**

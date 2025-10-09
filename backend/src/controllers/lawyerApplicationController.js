@@ -614,6 +614,20 @@ const reviewApplication = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Solicitud no encontrada' });
     }
 
+    const existingLawyerAccount = await prisma.usuario.findFirst({
+      where: {
+        persona_id: personaId,
+        role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
+      },
+    });
+    if (existingLawyerAccount && estado !== EstadoVerificacion.APROBADA) {
+      return res.status(409).json({
+        success: false,
+        message: 'La persona ya cuenta con un rol de abogado. Deshabilita la cuenta desde la gestión de usuarios para revocar el acceso.',
+      });
+    }
+
+
     const current = application.estado;
     const allowedTransitions = {
       [EstadoVerificacion.PENDIENTE]: [
