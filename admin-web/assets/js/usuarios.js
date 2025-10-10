@@ -118,27 +118,31 @@ function normalizeArchivoRecord(record) {
     return normalizeArchivoRecord({ ruta: trimmed });
   }
 
-  const ruta = String(record.ruta ?? '').trim();
+  const rutaRaw = record.ruta ?? '';
+  const ruta = typeof rutaRaw === 'string' ? rutaRaw.trim() : '';
   const explicitUrl = typeof record.url === 'string' ? record.url.trim() : '';
-  const reference = ruta || explicitUrl;
-  const isAbsolute = /^https?:\/\//i.test(reference);
-  const normalizedPath = !reference
-    ? null
-    : isAbsolute
-    ? reference
-    : reference.startsWith('/')
-    ? reference
-    : `/${reference}`;
+
+  const preferUrl = explicitUrl || ruta;
+  const resolvePath = (value) => {
+    if (!value) return null;
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.startsWith('/')) return value;
+    return `/${value}`;
+  };
+
+  const normalizedReference = resolvePath(preferUrl);
   const fullUrl = explicitUrl
-    || (!normalizedPath
-      ? null
-      : isAbsolute
-      ? normalizedPath
-      : `https://blob.vercel-storage.com${normalizedPath}`);
+    || (normalizedReference
+      ? /^https?:\/\//i.test(normalizedReference)
+        ? normalizedReference
+        : `https://blob.vercel-storage.com${normalizedReference}`
+      : null);
 
   const hasMetadata = record.id != null
     || (record.tamano != null && !Number.isNaN(Number(record.tamano)))
     || (typeof record.tipo === 'string' && record.tipo.trim() !== '');
+
+  const isAbsoluteLink = /^https?:\/\//i.test(fullUrl || explicitUrl || ruta);
 
   return {
     id: record.id ?? null,
@@ -146,7 +150,7 @@ function normalizeArchivoRecord(record) {
     tamano: record.tamano ?? null,
     tipo: record.tipo ?? null,
     url: fullUrl,
-    isLinkOnly: !hasMetadata && isAbsolute,
+    isLinkOnly: !hasMetadata && isAbsoluteLink,
     hasMetadata,
   };
 }
@@ -157,7 +161,7 @@ function inferArchivoMimeType(record) {
   const explicitType = String(record.tipo ?? '').trim().toLowerCase();
   if (explicitType) return explicitType;
 
-  const reference = String(record.ruta ?? record.url ?? '').trim();
+  const reference = String(record.url ?? record.ruta ?? '').trim();
   if (!reference) return '';
   const sanitized = reference.includes('?') ? reference.split('?')[0] : reference;
   const segments = sanitized.split('.');

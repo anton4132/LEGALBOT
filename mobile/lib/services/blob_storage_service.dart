@@ -25,12 +25,14 @@ class BlobUploadResult {
   });
 
   factory BlobUploadResult.fromJson(Map<String, dynamic> json) {
-    final path = (json['pathname'] as String?) ?? (json['path'] as String?) ?? '';
+    final path =
+        (json['pathname'] as String?) ?? (json['path'] as String?) ?? '';
     return BlobUploadResult(
       url: (json['url'] as String?) ?? '',
       pathname: path.startsWith('/') ? path : '/$path',
       size: (json['size'] as num?)?.toInt() ?? 0,
-      contentType: json['contentType'] as String? ?? json['mimeType'] as String?,
+      contentType:
+          json['contentType'] as String? ?? json['mimeType'] as String?,
     );
   }
 
@@ -65,19 +67,30 @@ class BlobStorageService {
     return sanitized.isEmpty ? 'archivo' : sanitized;
   }
 
-  static String _buildPath({
-    required String fileName,
-    String? prefix,
-  }) {
+  static String _normalizePrefix(String? prefix) {
+    final raw = prefix?.trim() ?? '';
+    if (raw.isEmpty) {
+      return '';
+    }
+
+    var normalized = raw;
+    while (normalized.startsWith('/')) {
+      normalized = normalized.substring(1);
+    }
+    while (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
+
+  static String _buildPath({required String fileName, String? prefix}) {
     final now = DateTime.now().toUtc();
     final random = Random().nextInt(1 << 32).toRadixString(16);
     final sanitizedName = _sanitizeFileName(fileName);
-    final resolvedPrefix = prefix?.trim() ?? '';
+    final normalizedPrefix = _normalizePrefix(prefix);
     final segments = <String>[
-      if (resolvedPrefix.isNotEmpty) resolvedPrefix,
       '${now.year}',
-      '${now.month.toString().padLeft(2, '0')}',
-      '${now.day.toString().padLeft(2, '0')}',
+      if (normalizedPrefix.isNotEmpty) normalizedPrefix,
       '${now.millisecondsSinceEpoch}_${random}_${sanitizedName}',
     ];
     return segments.join('/');
@@ -96,7 +109,9 @@ class BlobStorageService {
     final queryParameters = <String, String>{
       'access': isPublic ? 'public' : 'private',
     };
-    final uri = Uri.parse('$_baseUrl/$path').replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      '$_baseUrl/$path',
+    ).replace(queryParameters: queryParameters);
     final response = await http
         .put(
           uri,
@@ -120,6 +135,7 @@ class BlobStorageService {
     }
     return BlobUploadResult.fromJson(decoded);
   }
+
   static Future<bool> delete(String path) async {
     final resolved = path.trim();
     if (resolved.isEmpty) {
@@ -135,15 +151,11 @@ class BlobStorageService {
       return value.startsWith('/') ? value.substring(1) : value;
     }
 
-    final normalized = extractPath(resolved);    final uri = Uri.parse('$_baseUrl/$normalized');
+    final normalized = extractPath(resolved);
+    final uri = Uri.parse('$_baseUrl/$normalized');
     try {
       final response = await http
-          .delete(
-            uri,
-            headers: {
-              'Authorization': 'Bearer $_token',
-            },
-          )
+          .delete(uri, headers: {'Authorization': 'Bearer $_token'})
           .timeout(_timeout);
       if (response.statusCode == 404) {
         return true;
@@ -159,6 +171,7 @@ class BlobStorageService {
     }
     return false;
   }
+
   static String _defaultUploadPrefix() {
     final session = SessionService.instance.session;
     if (session is UserSession) {
