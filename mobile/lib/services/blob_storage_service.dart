@@ -102,6 +102,8 @@ class BlobStorageService {
     String? contentType,
     String? prefix,
     bool isPublic = true,
+    bool allowOverwrite = false,
+
   }) async {
     final resolvedContentType = contentType ?? _guessContentType(fileName);
     final resolvedPrefix = prefix ?? _defaultUploadPrefix();
@@ -118,6 +120,8 @@ class BlobStorageService {
           headers: {
             'Authorization': 'Bearer $_token',
             'Content-Type': resolvedContentType,
+            if (allowOverwrite) 'x-vercel-blob-allow-overwrite': 'true',
+
           },
           body: bytes,
         )
@@ -176,7 +180,7 @@ class BlobStorageService {
     final session = SessionService.instance.session;
     if (session is UserSession) {
       final role = session.rolCodigo ?? 'usuario';
-      return 'usuarios/${session.usuarioId}/$role';
+      return '${session.usuarioId}/$role';
     }
     return 'uploads/public';
   }

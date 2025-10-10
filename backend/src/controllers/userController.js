@@ -223,7 +223,7 @@ async function deleteBlobFile(path) {
 async function cleanupOldAvatarArchivos(tx, userId, keepId = null) {
   const where = {
     usuario_id: userId,
-    ruta: { contains: '/perfil/avatar/' },
+    ruta: { contains: '/perfil/' },
   };
 
   if (keepId != null) {

@@ -953,8 +953,9 @@ void _removeExistingCarnetFile() {
         final upload = await BlobStorageService.upload(
           bytes: bytes,
           fileName: tituloArchivo.name,
-          prefix:
-              'usuarios/${session.usuarioId}/postulaciones/titulos',
+          prefix: '${session.usuarioId}/postulaciones',
+                    allowOverwrite: true,
+
         );
         tituloArchivoUpload = upload.toArchivoReference();
         tituloArchivoId = null;
@@ -965,7 +966,9 @@ void _removeExistingCarnetFile() {
         final upload = await BlobStorageService.upload(
           bytes: bytes,
           fileName: carnetArchivo.name,
-          prefix: 'usuarios/${session.usuarioId}/postulaciones/carnets',
+          prefix: '${session.usuarioId}/postulaciones',
+                    allowOverwrite: true,
+
         );
         carnetArchivoUpload = upload.toArchivoReference();
         carnetArchivoId = null;

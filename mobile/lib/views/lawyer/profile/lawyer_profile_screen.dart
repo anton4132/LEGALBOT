@@ -667,7 +667,9 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
         final upload = await BlobStorageService.upload(
           bytes: bytes,
           fileName: avatarFile.name,
-          prefix: 'usuarios/${session.usuarioId}/perfil/avatar',
+          prefix: '${session.usuarioId}/perfil',
+                    allowOverwrite: true,
+
         );
         avatarArchivoUpload = ArchivoReference(
           id: _existingAvatarArchivo?.id,
