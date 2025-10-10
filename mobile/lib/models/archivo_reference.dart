@@ -37,15 +37,8 @@ class ArchivoReference {
     if (url != null && url!.trim().isNotEmpty) {
       return url;
     }
-    if (ruta == null || ruta!.trim().isEmpty) {
-      return null;
-    }
-    final normalized = ruta!.trim();
-    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-      return normalized;
-    }
-    final path = normalized.startsWith('/') ? normalized : '/$normalized';
-    return 'https://blob.vercel-storage.com$path';
+     final resolved = BlobConfig.resolvePublicUrl(ruta);
+    return resolved;
   }
 
   String? get fileName {
