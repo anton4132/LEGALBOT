@@ -643,8 +643,9 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     setState(() => _savingProfile = true);
     try {
       if (avatarFile != null) {
-        final String? previousPath = _existingAvatarArchivo?.ruta;
-        if (previousPath != null && previousPath.trim().isNotEmpty) {
+   final String? previousPath =
+            _existingAvatarArchivo?.ruta ?? _existingAvatarArchivo?.resolvedUrl;
+          if (previousPath != null && previousPath.trim().isNotEmpty) {
           try {
             await BlobStorageService.delete(previousPath);
           } catch (error, stackTrace) {
@@ -668,7 +669,8 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
           bytes: bytes,
           fileName: avatarFile.name,
           prefix: '${session.usuarioId}/perfil',
-                    allowOverwrite: true,
+          allowOverwrite: true,
+          existingPath: previousPath,
 
         );
         avatarArchivoUpload = ArchivoReference(

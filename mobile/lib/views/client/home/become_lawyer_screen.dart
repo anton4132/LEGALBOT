@@ -949,12 +949,32 @@ void _removeExistingCarnetFile() {
     setState(() => _isSubmitting = true);
     try {
       if (tituloArchivo != null) {
+        final String? previousTituloPath = !_retainExistingTitulo
+            ? _existingTituloArchivo?.ruta ??
+                _existingTituloArchivo?.resolvedUrl
+            : null;
+            final bool reuseTituloPath = previousTituloPath != null &&
+            !BlobStorageService.isLegacyPath(previousTituloPath);
+
+        if (previousTituloPath != null && previousTituloPath.trim().isNotEmpty) {
+          try {
+            await BlobStorageService.delete(previousTituloPath);
+          } catch (error, stackTrace) {
+            debugPrint(
+              'No se pudo eliminar el archivo de título anterior: '
+              '$error\n$stackTrace',
+            );
+          }
+        }
+
         final bytes = await _readFileBytes(tituloArchivo);
         final upload = await BlobStorageService.upload(
           bytes: bytes,
           fileName: tituloArchivo.name,
           prefix: '${session.usuarioId}/postulaciones',
-                    allowOverwrite: true,
+         allowOverwrite: reuseTituloPath,
+          existingPath: reuseTituloPath ? previousTituloPath : null,
+
 
         );
         tituloArchivoUpload = upload.toArchivoReference();
@@ -962,12 +982,28 @@ void _removeExistingCarnetFile() {
       }
 
       if (carnetArchivo != null) {
+
+         final String? previousCarnetPath = !_retainExistingCarnet
+            ? _existingCarnetArchivo?.ruta ??
+                _existingCarnetArchivo?.resolvedUrl
+            : null;
+        if (previousCarnetPath != null && previousCarnetPath.trim().isNotEmpty) {
+          try {
+            await BlobStorageService.delete(previousCarnetPath);
+          } catch (error, stackTrace) {
+            debugPrint(
+              'No se pudo eliminar el archivo de carnet anterior: '
+              '$error\n$stackTrace',
+            );
+          }
+        }
         final bytes = await _readFileBytes(carnetArchivo);
         final upload = await BlobStorageService.upload(
           bytes: bytes,
           fileName: carnetArchivo.name,
           prefix: '${session.usuarioId}/postulaciones',
-                    allowOverwrite: true,
+          allowOverwrite: true,
+          existingPath: previousCarnetPath,
 
         );
         carnetArchivoUpload = upload.toArchivoReference();

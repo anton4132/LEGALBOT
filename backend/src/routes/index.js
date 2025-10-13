@@ -7,6 +7,8 @@ const dashboardRoutes = require('./dashboardRoutes');
 const userRoutes = require('./userRoutes');
 const roleRoutes = require('./roleRoutes');
 const serviceRoutes = require('./serviceRoutes');
+const planRoutes = require('./planRoute');
+const planServiceRoutes = require('./planServiceRoute');
 const especialidadRoutes = require('./especialidadRoute');
 const estudioRoutes = require('./estudioRoute');
 const lawyerRoutes = require('./lawyerRoutes');
@@ -23,6 +25,8 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/users', userRoutes);     // /api/users/...
 router.use('/roles', roleRoutes);     // /api/roles/...
 router.use('/services', serviceRoutes);
+router.use('/plans', planRoutes);
+router.use('/plan-services', planServiceRoutes);
 router.use('/especialidades', especialidadRoutes);
 router.use('/estudios', estudioRoutes);
 router.use('/lawyers', lawyerRoutes);

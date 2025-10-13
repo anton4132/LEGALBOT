@@ -1,7 +1,7 @@
 // controllers/lawyerVerification.controller.js
 const { EstadoVerificacion } = require('@prisma/client');
 const { prisma } = require('../config/database');
-const { resolveBlobPublicUrl } = require('../utils/blob');
+const { resolveBlobPublicUrl, deleteBlob } = require('../utils/blob');
 
 
 // ---------- helpers ----------
@@ -379,14 +379,40 @@ const submitApplication = async (req, res) => {
     }
 
     // Transacción: upsert de verificación, colegio y colegiatura
+    const blobsToDelete = [];
     const result = await prisma.$transaction(async (tx) => {
+      const archivoIdsToDelete = [];
+
       // 1) verificación (si existe y quedó OBSERVADA, vuelve a PENDIENTE y no borra URLs)
       let verification = await tx.verificacionabogado.findUnique({
         where: { persona_id: personaId },
+        include: {
+          titulo: true,
+          colegiatura: { include: { carnet_archivo: true } },
+        },
       });
+
+      let colegiatura = verification?.colegiatura ||
+        (await tx.colegiaturaabogado.findUnique({
+          where: { persona_id: personaId },
+          include: { carnet_archivo: true },
+        }));
+
+      const previousTituloArchivo =
+        verification?.titulo?.usuario_id === usuarioId ? verification.titulo : null;
+      const previousCarnetArchivo =
+        colegiatura?.carnet_archivo?.usuario_id === usuarioId
+          ? colegiatura.carnet_archivo
+          : null;
 
       let tituloArchivoIdToUse = verification?.titulo_archivo_id ?? null;
       if (tituloArchivo) {
+        if (previousTituloArchivo?.ruta) {
+          blobsToDelete.push(previousTituloArchivo.ruta);
+        }
+        if (previousTituloArchivo?.id) {
+          archivoIdsToDelete.push(previousTituloArchivo.id);
+        }
         const created = await tx.archivo.create({
           data: {
             usuario_id: usuarioId,
@@ -457,12 +483,16 @@ const submitApplication = async (req, res) => {
         }));
 
       // 3) colegiatura: upsert por persona_id + validar unicidad (colegio_id, numero)
-      let colegiatura = await tx.colegiaturaabogado.findUnique({
-        where: { persona_id: personaId },
-      });
+      
 
       let carnetArchivoIdToUse = colegiatura?.carnet_archivo_id ?? null;
       if (carnetArchivo) {
+        if (previousCarnetArchivo?.ruta) {
+          blobsToDelete.push(previousCarnetArchivo.ruta);
+        }
+        if (previousCarnetArchivo?.id) {
+          archivoIdsToDelete.push(previousCarnetArchivo.id);
+        }
         const createdCarnet = await tx.archivo.create({
           data: {
             usuario_id: usuarioId,
@@ -531,10 +561,28 @@ const submitApplication = async (req, res) => {
         });
       }
 
+      if (archivoIdsToDelete.length) {
+        await tx.archivo.deleteMany({
+          where: {
+            id: { in: archivoIdsToDelete },
+            usuario_id: usuarioId,
+          },
+        });
+      }
+
       // devolver payload completo
       return fetchApplicationWithRelations(tx, { persona_id: personaId });
 
     });
+
+    if (archivoIdsToDelete.length) {
+      await tx.archivo.deleteMany({
+        where: {
+          id: { in: archivoIdsToDelete },
+          usuario_id: usuarioId,
+        },
+      });
+    }
 
     return res.status(verificationWasCreated(result) ? 201 : 200).json({
       success: true,

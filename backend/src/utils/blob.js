@@ -86,6 +86,34 @@ function normalizeBlobPath(pathOrUrl) {
   return sanitized.replace(/^\//, '');
 }
 
+async function deleteBlob(path) {
+  const normalized = normalizeBlobPath(path);
+  if (!normalized) {
+    return false;
+  }
+
+  const token = resolveBlobToken();
+  if (!token) {
+    console.warn('No se configuró BLOB_READ_WRITE_TOKEN; omitiendo eliminación de blob');
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${DEFAULT_BLOB_API_BASE_URL}/${normalized}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.ok || response.status === 404) {
+      return true;
+    }
+    console.warn('Error eliminando blob:', response.status, await response.text());
+  } catch (error) {
+    console.warn('No se pudo eliminar el blob:', error);
+  }
+
+  return false;
+}
+
 module.exports = {
   BLOB_API_BASE_URL: DEFAULT_BLOB_API_BASE_URL,
   DEFAULT_BLOB_PUBLIC_BASE_URL,
@@ -94,4 +122,5 @@ module.exports = {
   resolveBlobPublicBaseUrl,
   resolveBlobPublicUrl,
   normalizeBlobPath,
+  deleteBlob,
 };

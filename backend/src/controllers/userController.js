@@ -1,11 +1,7 @@
 // controllers/userController.js
 const { prisma } = require('../config/database');
-const {
-  BLOB_API_BASE_URL,
-  resolveBlobPublicUrl,
-  resolveBlobToken,
-  normalizeBlobPath,
-} = require('../utils/blob');
+const { resolveBlobPublicUrl, deleteBlob } = require('../utils/blob');
+
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 
@@ -195,31 +191,6 @@ function mapVerificacionResponse(record) {
   };
 }
 
-
-async function deleteBlobFile(path) {
-  const normalized = normalizeBlobPath(path);
-  if (!normalized) {
-    return false;
-  }
-  const token = resolveBlobToken();
-  if (!token) {
-    console.warn('No se configuró BLOB_READ_WRITE_TOKEN; omitiendo eliminación de blob');
-    return false;
-  }
-  try {
-    const response = await fetch(`${BLOB_API_BASE_URL}/${normalized}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (response.ok || response.status === 404) {
-      return true;
-    }
-    console.warn('Error eliminando blob:', response.status, await response.text());
-  } catch (error) {
-    console.warn('No se pudo eliminar el blob:', error);
-  }
-  return false;
-}
 async function cleanupOldAvatarArchivos(tx, userId, keepId = null) {
   const where = {
     usuario_id: userId,
@@ -250,7 +221,7 @@ async function cleanupOldAvatarArchivos(tx, userId, keepId = null) {
   }
 
   for (const archivo of deletable) {
-    await deleteBlobFile(archivo.ruta);
+    await deleteBlob(archivo.ruta);
   }
 
   const ids = deletable.map((archivo) => archivo.id);
@@ -282,7 +253,7 @@ async function resolveAvatarArchivo(tx, userId, avatarArchivoPayload, avatarArch
       const newRuta = archivoInput.ruta || existing.ruta;
       const rutaChanged = newRuta && newRuta !== existing.ruta;
       if (rutaChanged && existing.ruta && existing.ruta !== newRuta) {
-        await deleteBlobFile(existing.ruta);
+        await deleteBlob(existing.ruta);
       }
       if (rutaChanged) updates.ruta = newRuta;
       if (archivoInput.tamano != null && archivoInput.tamano !== existing.tamano) {

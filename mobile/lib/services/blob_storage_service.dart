@@ -95,7 +95,47 @@ class BlobStorageService {
     ];
     return segments.join('/');
   }
+  static String? _normalizeExistingPath(String? existingPath) {
+    final trimmed = existingPath?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
 
+    String path = trimmed;
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      final uri = Uri.tryParse(path);
+      if (uri != null) {
+        path = uri.path;
+      }
+    }
+
+    while (path.startsWith('/')) {
+      path = path.substring(1);
+    }
+
+    if (path.isEmpty) {
+      return null;
+    }
+
+    return path;
+  }
+
+  static bool isLegacyPath(String? pathOrUrl) {
+    final normalized = _normalizeExistingPath(pathOrUrl);
+    if (normalized == null) {
+      return false;
+    }
+
+    final lower = normalized.toLowerCase();
+    if (lower.contains('/usuarios/')) {
+      return true;
+    }
+    if (lower.contains('/perfil/avatar/')) {
+      return true;
+    }
+
+    return false;
+  }
   static Future<BlobUploadResult> upload({
     required List<int> bytes,
     required String fileName,
@@ -103,11 +143,16 @@ class BlobStorageService {
     String? prefix,
     bool isPublic = true,
     bool allowOverwrite = false,
+        String? existingPath,
+
 
   }) async {
     final resolvedContentType = contentType ?? _guessContentType(fileName);
     final resolvedPrefix = prefix ?? _defaultUploadPrefix();
-    final path = _buildPath(fileName: fileName, prefix: resolvedPrefix);
+    final normalizedExistingPath = _normalizeExistingPath(existingPath);
+    final shouldAllowOverwrite = allowOverwrite || normalizedExistingPath != null;
+    final path = normalizedExistingPath ??
+        _buildPath(fileName: fileName, prefix: resolvedPrefix);
     final queryParameters = <String, String>{
       'access': isPublic ? 'public' : 'private',
     };
@@ -120,8 +165,7 @@ class BlobStorageService {
           headers: {
             'Authorization': 'Bearer $_token',
             'Content-Type': resolvedContentType,
-            if (allowOverwrite) 'x-vercel-blob-allow-overwrite': 'true',
-
+            if (shouldAllowOverwrite) 'x-vercel-blob-allow-overwrite': 'true',
           },
           body: bytes,
         )
