@@ -987,6 +987,8 @@ void _removeExistingCarnetFile() {
             ? _existingCarnetArchivo?.ruta ??
                 _existingCarnetArchivo?.resolvedUrl
             : null;
+             final bool reuseCarnetPath = previousCarnetPath != null &&
+            !BlobStorageService.isLegacyPath(previousCarnetPath);
         if (previousCarnetPath != null && previousCarnetPath.trim().isNotEmpty) {
           try {
             await BlobStorageService.delete(previousCarnetPath);
@@ -1002,8 +1004,8 @@ void _removeExistingCarnetFile() {
           bytes: bytes,
           fileName: carnetArchivo.name,
           prefix: '${session.usuarioId}/postulaciones',
-          allowOverwrite: true,
-          existingPath: previousCarnetPath,
+          allowOverwrite: reuseCarnetPath,
+          existingPath: reuseCarnetPath ? previousCarnetPath : null,
 
         );
         carnetArchivoUpload = upload.toArchivoReference();

@@ -21,7 +21,6 @@ class LawyerProfileScreen extends StatefulWidget {
     this.initialSubsection = LawyerProfileSubsection.profile,
     this.onSubsectionChanged,
     this.embedded = false,
-
   });
 
   final LawyerProfileSubsection initialSubsection;
@@ -643,9 +642,12 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     setState(() => _savingProfile = true);
     try {
       if (avatarFile != null) {
-   final String? previousPath =
+        final String? previousPath =
             _existingAvatarArchivo?.ruta ?? _existingAvatarArchivo?.resolvedUrl;
-          if (previousPath != null && previousPath.trim().isNotEmpty) {
+        final bool reuseExistingPath =
+            previousPath != null &&
+            !BlobStorageService.isLegacyPath(previousPath);
+        if (previousPath != null && previousPath.trim().isNotEmpty) {
           try {
             await BlobStorageService.delete(previousPath);
           } catch (error, stackTrace) {
@@ -669,9 +671,8 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
           bytes: bytes,
           fileName: avatarFile.name,
           prefix: '${session.usuarioId}/perfil',
-          allowOverwrite: true,
-          existingPath: previousPath,
-
+          allowOverwrite: reuseExistingPath,
+          existingPath: reuseExistingPath ? previousPath : null,
         );
         avatarArchivoUpload = ArchivoReference(
           id: _existingAvatarArchivo?.id,
@@ -1203,20 +1204,17 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                    color: AppColors.buttonColor,
-                  ),
+                  color: AppColors.buttonColor,
                 ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
-          _buildCurrentSection()
+          _buildCurrentSection(),
         ],
       ),
     );
-    return RefreshIndicator(
-      onRefresh: _loadInitialData,
-      child: scrollable,
-    );
+    return RefreshIndicator(onRefresh: _loadInitialData, child: scrollable);
   }
 
   Widget _buildCurrentSection() {
