@@ -328,7 +328,6 @@ model tarifacomision {
   tipo        String
   activo      Boolean  @default(true)
 
-  // NUEVOS CAMPOS (versionado, ámbitos y cálculo)
   servicio_id      Int?
   plan_id          Int?
   rol_aplica       rol_aplica_tc    @default(ambos)

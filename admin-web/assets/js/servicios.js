@@ -390,16 +390,18 @@ function renderPlansTable() {
         <span class="badge rounded-pill text-bg-primary">${serviciosAsignados}</span>
       </td>
       <td>${formatDateTime(plan.actualizado_el)}</td>
-      <td class="text-end">
-        <div class="btn-group" role="group">
-          <button class="btn btn-sm btn-outline-primary" data-action="link-service" data-id="${plan.id}">
-            <i class="bi bi-link-45deg"></i> Añadir servicio
+      <div class="d-flex flex-wrap gap-2 justify-content-end">
+          <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1" data-action="link-service" data-id="${plan.id}">
+            <i class="bi bi-link-45deg"></i>
+            <span>Vincular servicio</span>
           </button>
-          <button class="btn btn-sm btn-outline-secondary" data-action="edit-plan" data-id="${plan.id}">
+          <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" data-action="edit-plan" data-id="${plan.id}">
             <i class="bi bi-pencil"></i>
+            <span>Editar plan</span>
           </button>
-          <button class="btn btn-sm btn-outline-danger" data-action="delete-plan" data-id="${plan.id}">
+          <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" data-action="delete-plan" data-id="${plan.id}">
             <i class="bi bi-trash"></i>
+            <span>Eliminar</span>
           </button>
         </div>
       </td>
@@ -618,12 +620,16 @@ function renderPlanServicesTable(planId) {
         <td>${formatDateRange(item.vigencia_desde, item.vigencia_hasta)}</td>
         <td>${item.activo ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
         <td class="text-end">
-          <button class="btn btn-sm btn-outline-secondary me-2" data-action="edit-plan-service" data-id="${item.id}">
-            <i class="bi bi-pencil"></i>
-          </button>
-          <button class="btn btn-sm btn-outline-danger" data-action="delete-plan-service" data-id="${item.id}">
-            <i class="bi bi-trash"></i>
-          </button>
+          <div class="d-flex flex-wrap gap-2 justify-content-end">
+            <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" data-action="edit-plan-service" data-id="${item.id}">
+              <i class="bi bi-pencil"></i>
+              <span>Editar</span>
+            </button>
+            <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" data-action="delete-plan-service" data-id="${item.id}">
+              <i class="bi bi-trash"></i>
+              <span>Eliminar</span>
+            </button>
+          </div>
         </td>
       `;
       tbody.appendChild(row);
@@ -705,17 +711,28 @@ async function savePlanServiceLink() {
 
   const servicioId = parseInt(document.getElementById('planServiceServicio').value, 10);
   const activo = document.getElementById('planServiceActivo').checked;
-  const vigenciaDesde = document.getElementById('planServiceVigenciaDesde').value;
-  const vigenciaHasta = document.getElementById('planServiceVigenciaHasta').value;
+  const vigenciaDesdeInput = document.getElementById('planServiceVigenciaDesde');
+  const vigenciaHastaInput = document.getElementById('planServiceVigenciaHasta');
+
+  const vigenciaDesdeISO = parseDateTimeLocalInput(vigenciaDesdeInput);
+  const vigenciaHastaISO = parseDateTimeLocalInput(vigenciaHastaInput);
+
+  if (vigenciaDesdeInput?.value && !vigenciaDesdeISO) {
+    showAlert('La fecha de vigencia desde no es válida', 'danger');
+    return;
+  }
+
+  if (vigenciaHastaInput?.value && !vigenciaHastaISO) {
+    showAlert('La fecha de vigencia hasta no es válida', 'danger');
+    return;
+  }
 
   if (!servicioId) {
     showAlert('Selecciona un servicio para vincular', 'danger');
     return;
   }
 
-  const vigenciaDesdeISO = vigenciaDesde ? new Date(vigenciaDesde).toISOString() : null;
-  const vigenciaHastaISO = vigenciaHasta ? new Date(vigenciaHasta).toISOString() : null;
-
+  
   if (vigenciaDesdeISO && vigenciaHastaISO && new Date(vigenciaDesdeISO) >= new Date(vigenciaHastaISO)) {
     showAlert('La vigencia hasta debe ser posterior a la vigencia desde', 'danger');
     return;
@@ -832,11 +849,13 @@ function renderServicesTable(list) {
       <td>${formatDateTime(service.fecha_creada)}</td>
       <td>${formatDateTime(service.fecha_modificada)}</td>
       <td class="text-end">
-        <div class="btn-group" role="group">
-          <button class="btn btn-sm btn-outline-secondary" data-action="edit-service" data-id="${service.id}"><i class="bi bi-pencil"></i></button>
-          <button class="btn btn-sm ${service.activo ? 'btn-outline-warning' : 'btn-outline-success'}" data-action="toggle-service" data-id="${service.id}" data-activo="${service.activo}">
-            ${service.activo ? '<i class="bi bi-slash-circle"></i>' : '<i class="bi bi-check-circle"></i>'}
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
+          <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" data-action="edit-service" data-id="${service.id}">
+            <i class="bi bi-pencil"></i>
+            <span>Editar</span>
           </button>
+          <button class="btn btn-sm ${service.activo ? 'btn-outline-warning' : 'btn-outline-success'} d-inline-flex align-items-center gap-1" data-action="toggle-service" data-id="${service.id}" data-activo="${service.activo}">
+            ${service.activo ? '<i class="bi bi-slash-circle"></i><span>Desactivar</span>' : '<i class="bi bi-check-circle"></i><span>Activar</span>'}  </button>
         </div>
       </td>
     `;
@@ -989,6 +1008,37 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+function parseDateTimeLocalInput(input) {
+  if (!input) return null;
+  const value = (input.value || '').trim();
+  if (!value) return null;
+
+  const [datePart, timePart] = value.split('T');
+  if (!datePart || !timePart) return null;
+
+  const [yearStr, monthStr, dayStr] = datePart.split('-');
+  const [hourStr, minuteStr = '0', secondStr = '0'] = timePart.split(':');
+
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+  const second = Number(secondStr);
+
+  if ([year, month, day, hour, minute, second].some(num => Number.isNaN(num))) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day, hour, minute, second);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+}
+
 
 function formatDateTime(value) {
   if (!value) return '—';
