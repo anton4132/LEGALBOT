@@ -8,6 +8,54 @@ const PARAM_TEMPLATES = {
   estacional: { multiplicadores: [{ desde: '', hasta: '', factor: 1 }] },
 };
 
+const PARAM_SCHEMAS = {
+  fijo: {
+    required: ['monto'],
+    properties: {
+      monto: { type: 'number', min: 0 },
+    },
+  },
+  minimo_mas_variable: {
+    required: ['minimo', 'porcentaje_variable'],
+    properties: {
+      minimo: { type: 'number', min: 0 },
+      porcentaje_variable: { type: 'number', min: 0 },
+    },
+  },
+  paquete: {
+    required: ['tamano_bloque', 'precio_bloque'],
+    properties: {
+      tamano_bloque: { type: 'number', min: 0, exclusive: true },
+      precio_bloque: { type: 'number', min: 0 },
+    },
+  },
+  consumo_ia: {
+    required: ['rate', 'minimo'],
+    properties: {
+      rate: { type: 'number', min: 0 },
+      minimo: { type: 'number', min: 0 },
+    },
+  },
+  estacional: {
+    required: ['multiplicadores'],
+    properties: {
+      multiplicadores: {
+        type: 'array',
+        minItems: 1,
+        items: {
+          required: ['desde', 'hasta', 'factor'],
+          properties: {
+            desde: { type: 'string' },
+            hasta: { type: 'string' },
+            factor: { type: 'number', min: 0 },
+          },
+        },
+      },
+    },
+  },
+};
+
+
 const state = {
   catalogs: {
     servicios: [],
@@ -21,6 +69,7 @@ const state = {
     parametrosPlantilla: PARAM_TEMPLATES,
   },
   filters: {
+    search: '',
     servicio_id: '',
     plan_id: '',
     rol_aplica: '',
@@ -29,6 +78,8 @@ const state = {
     moneda: '',
     ambito_region: '',
     fecha: '',
+    vigencia: 'vigentes',
+    conflictos: '',
   },
   pagination: {
     page: 1,
@@ -88,6 +139,7 @@ async function init() {
 function cacheDom() {
   dom.filters = {
     form: document.getElementById('tc-filters-form'),
+    search: document.getElementById('tc-filter-search'),
     servicio: document.getElementById('tc-filter-servicio'),
     plan: document.getElementById('tc-filter-plan'),
     rol: document.getElementById('tc-filter-rol'),
@@ -96,6 +148,8 @@ function cacheDom() {
     moneda: document.getElementById('tc-filter-moneda'),
     region: document.getElementById('tc-filter-region'),
     fecha: document.getElementById('tc-filter-fecha'),
+    vigencia: document.getElementById('tc-filter-vigencia'),
+    conflictos: document.getElementById('tc-filter-conflictos'),
     reset: document.getElementById('tc-filters-reset'),
   };
   dom.table = {
@@ -162,6 +216,9 @@ function cacheDom() {
     },
     step3Simulate: document.getElementById('tc-step3-simular'),
     step3Result: document.getElementById('tc-step3-result'),
+    labels: {
+      incluyeImpuesto: document.querySelector('label[for="tc-input-incluye-impuesto"]'),
+    },
   };
   dom.quickAccess = {
     serviciosBtn: document.getElementById('tc-open-servicios'),
@@ -206,6 +263,9 @@ function cacheDom() {
       activo: document.getElementById('tc-econfig-activo'),
     },
   };
+  if (dom.wizard.labels?.incluyeImpuesto) {
+    dom.wizard.labels.defaultIncluyeImpuesto = dom.wizard.labels.incluyeImpuesto.textContent.trim();
+  }
 }
 
 
@@ -313,6 +373,30 @@ function bindEvents() {
   if (dom.wizard.inputs.tipoCalculo) {
     dom.wizard.inputs.tipoCalculo.addEventListener('change', handleTipoCalculoChange);
   }
+
+  if (dom.wizard.inputs.servicio) {
+    dom.wizard.inputs.servicio.addEventListener('change', handleWizardServicioChange);
+  }
+  if (dom.wizard.inputs.plan) {
+    dom.wizard.inputs.plan.addEventListener('change', handleWizardPlanChange);
+  }
+  if (dom.wizard.inputs.metodo) {
+    dom.wizard.inputs.metodo.addEventListener('change', handleWizardMetodoChange);
+  }
+  if (dom.wizard.inputs.vigenciaDesde) {
+    dom.wizard.inputs.vigenciaDesde.addEventListener('change', () => {
+      updateImpuestoLabel(dom.wizard.inputs.vigenciaDesde.value || dom.wizard.inputs.vigenciaHasta.value || null);
+    });
+  }
+  if (dom.wizard.inputs.vigenciaHasta) {
+    dom.wizard.inputs.vigenciaHasta.addEventListener('change', () => {
+      updateImpuestoLabel(dom.wizard.inputs.vigenciaDesde.value || dom.wizard.inputs.vigenciaHasta.value || null);
+    });
+  }
+  if (dom.wizard.inputs.activo) {
+    dom.wizard.inputs.activo.addEventListener('change', updateCodigoReadonlyState);
+  }
+
   if (dom.wizard.step3Simulate) {
     dom.wizard.step3Simulate.addEventListener('click', simulateFromWizard);
   }
@@ -440,6 +524,187 @@ function apiDelete(path) {
     return apiRequest('DELETE', path);
   }
 
+  function generateCodigo() {
+    const timestamp = new Date();
+    const parts = [
+      timestamp.getFullYear(),
+      `${timestamp.getMonth() + 1}`.padStart(2, '0'),
+      `${timestamp.getDate()}`.padStart(2, '0'),
+      `${timestamp.getHours()}`.padStart(2, '0'),
+      `${timestamp.getMinutes()}`.padStart(2, '0'),
+      `${timestamp.getSeconds()}`.padStart(2, '0'),
+    ];
+    return `TC-${parts.join('')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  }
+  
+  function normalizeNullableValue(value) {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const numeric = Number(trimmed);
+      if (!Number.isNaN(numeric) && `${numeric}` === trimmed) {
+        return numeric;
+      }
+      return trimmed;
+    }
+    return value;
+  }
+  
+  function normalizeDateValue(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toISOString();
+  }
+  
+  function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+    const minDate = new Date(-8640000000000000);
+    const maxDate = new Date(8640000000000000);
+    const startA = aStart ? new Date(aStart) : minDate;
+    const endA = aEnd ? new Date(aEnd) : maxDate;
+    const startB = bStart ? new Date(bStart) : minDate;
+    const endB = bEnd ? new Date(bEnd) : maxDate;
+    if (Number.isNaN(startA.getTime()) || Number.isNaN(endA.getTime()) || Number.isNaN(startB.getTime()) || Number.isNaN(endB.getTime())) {
+      return true;
+    }
+    return startA <= endB && startB <= endA;
+  }
+  
+  function findImpuestoVigente(fecha) {
+    const target = fecha ? new Date(fecha) : new Date();
+    if (Number.isNaN(target.getTime())) return null;
+    return state.catalogs.impuestos.find((imp) => {
+      if (imp.activo === false) return false;
+      const desde = imp.vigencia_desde ? new Date(imp.vigencia_desde) : null;
+      const hasta = imp.vigencia_hasta ? new Date(imp.vigencia_hasta) : null;
+      if (desde && target < desde) return false;
+      if (hasta && target > hasta) return false;
+      return true;
+    }) || null;
+  }
+  
+  function updateImpuestoLabel(fecha) {
+    if (!dom.wizard.labels?.incluyeImpuesto) return;
+    const label = dom.wizard.labels.incluyeImpuesto;
+    const impuesto = findImpuestoVigente(fecha);
+    if (impuesto) {
+      let porcentaje = '';
+      if (impuesto.porcentaje !== undefined && impuesto.porcentaje !== null) {
+        const numeric = Number(impuesto.porcentaje);
+        if (Number.isFinite(numeric)) {
+          porcentaje = ` ${numeric.toFixed(2)}%`;
+        }
+      }
+      const nombre = impuesto.nombre || impuesto.codigo || 'Impuesto';
+      label.textContent = `Incluye impuesto (${nombre}${porcentaje})`;
+    } else {
+      label.textContent = dom.wizard.labels.defaultIncluyeImpuesto || 'Incluye impuesto';
+    }
+  }
+  
+  function getPlansByServicio(servicioId) {
+    const id = Number(servicioId);
+    if (!servicioId) return state.catalogs.planes || [];
+    return (state.catalogs.planes || []).filter((plan) => Number(plan.servicio_id) === id);
+  }
+  
+  function refreshPlanOptionsForSelect(select, servicioId, emptyLabel = 'Todos') {
+    if (!select) return;
+    const current = select.value;
+    const planes = getPlansByServicio(servicioId);
+    fillSelect(select, planes, { value: 'id', label: 'nombre' }, true, emptyLabel);
+    if (current && Array.from(select.options).some((option) => option.value === current)) {
+      select.value = current;
+    } else if (select.value !== current) {
+      select.dispatchEvent(new Event('change'));
+    }
+  }
+  
+  function syncPlanDependencies() {
+    const filtroServicio = dom.filters.servicio?.value || '';
+    refreshPlanOptionsForSelect(dom.filters.plan, filtroServicio, 'Todos');
+    const wizardServicio = dom.wizard.inputs?.servicio?.value || '';
+    refreshPlanOptionsForSelect(dom.wizard.inputs?.plan, wizardServicio, 'Todos');
+    refreshPlanOptionsForSelect(dom.wizard.inputs?.step3Plan, wizardServicio, 'Todos');
+    const simulatorServicio = dom.simulator.inputs?.servicio?.value || '';
+    refreshPlanOptionsForSelect(dom.simulator.inputs?.plan, simulatorServicio, 'Todos');
+  }
+  
+  function ensureCodigoValue() {
+    if (!dom.wizard.inputs?.codigo) return;
+    if (!dom.wizard.inputs.codigo.value) {
+      const generated = generateCodigo();
+      dom.wizard.inputs.codigo.value = generated;
+      state.wizard.data = { ...state.wizard.data, codigo: generated };
+    }
+  }
+  
+  function validateParametrosSchema(tipo, parametros) {
+    const schema = PARAM_SCHEMAS[tipo];
+    if (!schema) return { valid: true };
+    const errors = [];
+    if (schema.required) {
+      schema.required.forEach((key) => {
+        if (parametros[key] === undefined || parametros[key] === null || parametros[key] === '') {
+          errors.push(`El parámetro "${key}" es obligatorio.`);
+        }
+      });
+    }
+    if (schema.properties) {
+      Object.entries(schema.properties).forEach(([key, rule]) => {
+        const value = parametros[key];
+        if (value === undefined || value === null) return;
+        if (rule.type === 'number') {
+          const number = Number(value);
+          if (Number.isNaN(number)) {
+            errors.push(`"${key}" debe ser numérico.`);
+            return;
+          }
+          if (rule.min !== undefined && number < rule.min) {
+            errors.push(`"${key}" debe ser mayor o igual a ${rule.min}.`);
+          }
+          if (rule.exclusive && number <= rule.min) {
+            errors.push(`"${key}" debe ser mayor a ${rule.min}.`);
+          }
+        } else if (rule.type === 'array') {
+          if (!Array.isArray(value)) {
+            errors.push(`"${key}" debe ser un arreglo.`);
+            return;
+          }
+          if (rule.minItems && value.length < rule.minItems) {
+            errors.push(`"${key}" debe contener al menos ${rule.minItems} elemento(s).`);
+          }
+          if (rule.items) {
+            value.forEach((item, index) => {
+              if (rule.items.required) {
+                rule.items.required.forEach((prop) => {
+                  if (item[prop] === undefined || item[prop] === null || item[prop] === '') {
+                    errors.push(`"${key}[${index}].${prop}" es obligatorio.`);
+                  }
+                });
+              }
+              if (rule.items.properties) {
+                Object.entries(rule.items.properties).forEach(([prop, propRule]) => {
+                  const propValue = item[prop];
+                  if (propRule.type === 'number' && propValue !== undefined && propValue !== null) {
+                    const number = Number(propValue);
+                    if (Number.isNaN(number)) {
+                      errors.push(`"${key}[${index}].${prop}" debe ser numérico.`);
+                    } else if (propRule.min !== undefined && number < propRule.min) {
+                      errors.push(`"${key}[${index}].${prop}" debe ser mayor o igual a ${propRule.min}.`);
+                    }
+                  }
+                });
+              }
+            });
+          }
+        }
+      });
+    }
+    return { valid: errors.length === 0, message: errors.join('\n') };
+  }
 async function loadCatalogs() {
   try {
     const data = await apiGet('/tarifas/catalogs');
@@ -456,6 +721,8 @@ async function loadCatalogs() {
     };
     state.quick.econconfig = data.econconfig || null;
     populateCatalogSelects();
+    syncPlanDependencies();
+    updateImpuestoLabel(dom.wizard.inputs?.vigenciaDesde?.value || dom.wizard.inputs?.vigenciaHasta?.value || null);
   } catch (error) {
     console.error('Error cargando catálogos', error);
     window.alert(error.message || 'No se pudieron cargar los catálogos de tarifas');
@@ -478,6 +745,9 @@ function populateCatalogSelects() {
   fillSelect(dom.simulator.inputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
   fillSelect(dom.simulator.inputs.moneda, monedas.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, econconfig?.moneda_defecto || '');
   fillSelect(dom.simulator.inputs.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, 'Todos');
+  if (wizardInputs.rol && !wizardInputs.rol.value) {
+    wizardInputs.rol.value = 'ambos';
+  }
   fillSelect(dom.simulator.inputs.region, regiones.map((r) => ({ id: r, nombre: r })), { value: 'id', label: 'nombre' }, true, 'Todos');
   fillSelect(dom.wizard.inputs.step3Plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
   fillSelect(dom.wizard.inputs.step3Metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, 'Todos');
@@ -510,6 +780,7 @@ function fillSelect(select, items, { value, label }, allowEmpty = true, emptyLab
 
 function resetFilters() {
   state.filters = {
+    search: '',
     servicio_id: '',
     plan_id: '',
     rol_aplica: '',
@@ -518,7 +789,10 @@ function resetFilters() {
     moneda: '',
     ambito_region: '',
     fecha: '',
+    vigencia: 'vigentes',
+    conflictos: '',
   };
+  if (dom.filters.search) dom.filters.search.value = '';
   if (dom.filters.servicio) dom.filters.servicio.value = '';
   if (dom.filters.plan) dom.filters.plan.value = '';
   if (dom.filters.rol) dom.filters.rol.value = '';
@@ -527,7 +801,11 @@ function resetFilters() {
   if (dom.filters.moneda) dom.filters.moneda.value = '';
   if (dom.filters.region) dom.filters.region.value = '';
   if (dom.filters.fecha) dom.filters.fecha.value = '';
+  if (dom.filters.vigencia) dom.filters.vigencia.value = 'vigentes';
+  if (dom.filters.conflictos) dom.filters.conflictos.checked = false;
   state.pagination.page = 1;
+  syncPlanDependencies();
+
 }
 
 async function loadRules() {
@@ -672,6 +950,7 @@ function formatDate(value) {
 
 function applyFilters() {
   state.filters = {
+    search: dom.filters.search?.value.trim() || '',
     servicio_id: dom.filters.servicio?.value || '',
     plan_id: dom.filters.plan?.value || '',
     rol_aplica: dom.filters.rol?.value || '',
@@ -680,6 +959,8 @@ function applyFilters() {
     moneda: dom.filters.moneda?.value || '',
     ambito_region: dom.filters.region?.value || '',
     fecha: dom.filters.fecha?.value || '',
+    vigencia: dom.filters.vigencia?.value || '',
+    conflictos: dom.filters.conflictos?.checked || '',
   };
   state.pagination.page = 1;
   loadRules();
@@ -749,6 +1030,8 @@ function toggleWizard(open) {
     hideConflict();
     if (dom.wizard.form) dom.wizard.form.reset();
     if (dom.wizard.step3Result) dom.wizard.step3Result.innerHTML = '';
+    if (dom.wizard.inputs.codigo) dom.wizard.inputs.codigo.readOnly = false;
+    updateImpuestoLabel(null);
     updateWizardUi();
   }
 
@@ -794,7 +1077,7 @@ function mapRuleToWizard(rule, isClone) {
     descripcion: rule.descripcion || '',
     servicio_id: rule.servicio_id ?? '',
     plan_id: rule.plan_id ?? '',
-    rol_aplica: rule.rol_aplica || 'cliente',
+    rol_aplica: rule.rol_aplica || 'ambos',
     moneda: rule.moneda || state.catalogs.econconfig?.moneda_defecto || '',
     metodo_pago: rule.metodo_pago || '',
     ambito_region: rule.ambito_region || '',
@@ -814,11 +1097,16 @@ function populateWizardForm() {
   const inputs = dom.wizard.inputs;
   if (!inputs) return;
   dom.wizard.title.textContent =
-    state.wizard.mode === 'edit' ? `Editar regla ${data.codigo}` : state.wizard.mode === 'clone' ? 'Clonar regla' : 'Nueva regla';
-  inputs.codigo.value = data.codigo || '';
+  state.wizard.mode === 'edit'
+  ? `Editar regla ${data.codigo}`
+  : state.wizard.mode === 'clone'
+    ? 'Clonar regla'
+    : 'Nueva regla';  inputs.codigo.value = data.codigo || '';
+  ensureCodigoValue();
   inputs.servicio.value = data.servicio_id || '';
+  syncPlanDependencies();
   inputs.plan.value = data.plan_id || '';
-  inputs.rol.value = data.rol_aplica || 'cliente';
+  inputs.rol.value = data.rol_aplica || 'ambos';
   const defaultMoneda = state.catalogs.econconfig?.moneda_defecto || '';
   inputs.moneda.value = data.moneda || defaultMoneda;
   state.wizard.data.moneda = inputs.moneda.value;
@@ -838,6 +1126,8 @@ function populateWizardForm() {
   inputs.step3Consumo.value = 0;
   inputs.step3Fecha.value = new Date().toISOString().substring(0, 10);
   handleTipoCalculoChange();
+  updateCodigoReadonlyState();
+  updateImpuestoLabel(inputs.vigenciaDesde.value || inputs.vigenciaHasta.value || null);
   goToWizardStep(1, true);
 }
 
@@ -891,10 +1181,23 @@ function validateCurrentStep() {
 
 function captureStep1() {
   const inputs = dom.wizard.inputs;
+  ensureCodigoValue();
   const codigo = inputs.codigo.value.trim();
   if (!codigo) {
     inputs.codigo.setCustomValidity('El código es obligatorio');
     inputs.codigo.reportValidity();
+    if (inputs.descripcion.value.length > 160) {
+      inputs.descripcion.setCustomValidity('La descripción no puede exceder 160 caracteres');
+      inputs.descripcion.reportValidity();
+      return false;
+    }
+    inputs.descripcion.setCustomValidity('');
+    if (!inputs.servicio.value) {
+      inputs.servicio.setCustomValidity('Debe seleccionar un servicio');
+      inputs.servicio.reportValidity();
+      return false;
+    }
+    inputs.servicio.setCustomValidity('');
     return false;
   }
   inputs.codigo.setCustomValidity('');
@@ -949,6 +1252,18 @@ function captureStep2() {
     window.alert('El JSON de parámetros no es válido');
     return false;
   }
+  if (inputs.descripcion.value.length > 160) {
+    inputs.descripcion.setCustomValidity('La descripción no puede exceder 160 caracteres');
+    inputs.descripcion.reportValidity();
+    return false;
+  }
+  inputs.descripcion.setCustomValidity('');
+  if (!inputs.servicio.value) {
+    inputs.servicio.setCustomValidity('Debe seleccionar un servicio');
+    inputs.servicio.reportValidity();
+    return false;
+  }
+  inputs.servicio.setCustomValidity('');
   if (tipo === 'estacional' && (!inputs.valor.value || Number(inputs.valor.value) < 0)) {
     inputs.valor.setCustomValidity('Debe establecer un valor base para reglas estacionales');
     inputs.valor.reportValidity();
@@ -992,7 +1307,32 @@ function handleTipoCalculoChange() {
   const valorGroup = dom.wizard.inputs.valor.closest('.form-group');
   if (valorGroup) {
     valorGroup.classList.toggle('d-none', !showValor);
-  }}
+  }
+}
+
+function handleWizardServicioChange() {
+  const servicioId = dom.wizard.inputs.servicio.value;
+  syncPlanDependencies();
+  if (!getPlansByServicio(servicioId).some((plan) => `${plan.id}` === dom.wizard.inputs.plan.value)) {
+    dom.wizard.inputs.plan.value = '';
+  }
+  dom.wizard.inputs.step3Plan.value = dom.wizard.inputs.plan.value || '';
+}
+
+function handleWizardPlanChange() {
+  dom.wizard.inputs.step3Plan.value = dom.wizard.inputs.plan.value || '';
+}
+
+function handleWizardMetodoChange() {
+  dom.wizard.inputs.step3Metodo.value = dom.wizard.inputs.metodo.value || '';
+}
+
+function updateCodigoReadonlyState() {
+  if (!dom.wizard.inputs.codigo) return;
+  const isDraft = !dom.wizard.inputs.activo?.checked;
+  const shouldLock = state.wizard.mode === 'edit' && !isDraft;
+  dom.wizard.inputs.codigo.readOnly = shouldLock;
+}
 
 function cloneTemplate(tipo) {
   const template = state.catalogs.parametrosPlantilla?.[tipo] || PARAM_TEMPLATES[tipo] || {};
@@ -1004,6 +1344,9 @@ async function saveWizard() {
   hideConflict();
   try {
     const payload = buildRulePayload(state.wizard.data);
+    if (!validateRuleBusiness(payload)) {
+      return;
+    }
     let response;
     if (state.wizard.mode === 'edit' && state.wizard.id) {
       response = await apiPut(`/tarifas/${state.wizard.id}`, payload);
@@ -1046,6 +1389,62 @@ function buildRulePayload(data) {
     incluye_impuesto: !!data.incluye_impuesto,
     activo: data.activo !== false,
   };
+}
+
+function validateRuleBusiness(payload) {
+  if (!payload) return true;
+  if (!validateUniqueCombination(payload)) {
+    return false;
+  }
+  if (payload.activo && !validateOverlap(payload)) {
+    return false;
+  }
+  return true;
+}
+
+function sameScopeValue(ruleValue, payloadValue) {
+  return normalizeNullableValue(ruleValue) === normalizeNullableValue(payloadValue);
+}
+
+function validateUniqueCombination(payload) {
+  const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
+  const duplicate = state.rules.find((rule) => {
+    if (currentId && rule.id === currentId) return false;
+    if (!!rule.activo !== !!payload.activo) return false;
+    if (!sameScopeValue(rule.servicio_id, payload.servicio_id)) return false;
+    if (!sameScopeValue(rule.plan_id, payload.plan_id)) return false;
+    if (!sameScopeValue(rule.rol_aplica, payload.rol_aplica)) return false;
+    if (!sameScopeValue(rule.ambito_region, payload.ambito_region)) return false;
+    if (!sameScopeValue(rule.metodo_pago, payload.metodo_pago)) return false;
+    if (normalizeDateValue(rule.vigencia_desde) !== normalizeDateValue(payload.vigencia_desde)) return false;
+    if (normalizeDateValue(rule.vigencia_hasta) !== normalizeDateValue(payload.vigencia_hasta)) return false;
+    return true;
+  });
+  if (duplicate) {
+    window.alert('Ya existe una regla con la misma combinación y vigencia. Ajusta los valores antes de continuar.');
+    return false;
+  }
+  return true;
+}
+
+function validateOverlap(payload) {
+  const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
+  const conflicting = state.rules.find((rule) => {
+    if (!rule.activo) return false;
+    if (currentId && rule.id === currentId) return false;
+    if (!sameScopeValue(rule.servicio_id, payload.servicio_id)) return false;
+    if (!sameScopeValue(rule.plan_id, payload.plan_id)) return false;
+    if (!sameScopeValue(rule.rol_aplica, payload.rol_aplica)) return false;
+    if (!sameScopeValue(rule.ambito_region, payload.ambito_region)) return false;
+    if (!sameScopeValue(rule.metodo_pago, payload.metodo_pago)) return false;
+    if (!sameScopeValue(rule.moneda, payload.moneda)) return false;
+    return rangesOverlap(rule.vigencia_desde, rule.vigencia_hasta, payload.vigencia_desde, payload.vigencia_hasta);
+  });
+  if (conflicting) {
+    window.alert(`La nueva vigencia se solapa con la regla activa ${conflicting.codigo}. Ajusta fechas o prioridad.`);
+    return false;
+  }
+  return true;
 }
 
 function showConflict(conflicts, message) {
@@ -1195,7 +1594,7 @@ function createEmptyRule() {
     descripcion: '',
     servicio_id: '',
     plan_id: '',
-    rol_aplica: 'cliente',
+    rol_aplica: 'ambos',
     moneda: state.catalogs.econconfig?.moneda_defecto || '',
     metodo_pago: '',
     ambito_region: '',
@@ -1220,8 +1619,8 @@ function debounce(fn, delay = 300) {
   }
   
   function getBootstrapModal(element) {
-    if (!element || !bootstrap?.Modal) return null;
-    return bootstrap.Modal.getOrCreateInstance(element);
+    if (!element || !bootstrapLib?.Modal) return null;
+    return bootstrapLib.Modal.getOrCreateInstance(element);
   }
   
   async function openServiciosModal() {

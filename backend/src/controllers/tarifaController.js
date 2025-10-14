@@ -95,6 +95,10 @@ function buildListWhere(query) {
   const region = query.ambito_region?.trim();
   const fecha = parseDate(query.fecha);
 
+  const search = query.search?.trim();
+  const vigencia = query.vigencia?.trim();
+  const andClauses = [];
+
   if (servicioId !== null) {
     where.servicio_id = servicioId;
   }
@@ -117,20 +121,58 @@ function buildListWhere(query) {
     where.ambito_region = region;
   }
   if (fecha) {
-    where.AND = [
-      {
+    andClauses.push({
+      OR: [
+        { vigencia_desde: null },
+        { vigencia_desde: { lte: fecha } },
+      ],
+    });
+    andClauses.push({
+      OR: [
+        { vigencia_hasta: null },
+        { vigencia_hasta: { gte: fecha } },
+      ],
+    });
+  }
+  if (vigencia) {
+    const reference = fecha || (() => {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      return now;
+    })();
+    if (vigencia === 'vigentes') {
+      andClauses.push({
         OR: [
           { vigencia_desde: null },
-          { vigencia_desde: { lte: fecha } },
+          { vigencia_desde: { lte: reference } },
         ],
-      },
-      {
+      });
+      andClauses.push({
         OR: [
           { vigencia_hasta: null },
-          { vigencia_hasta: { gte: fecha } },
+          { vigencia_hasta: { gte: reference } },
         ],
-      },
-    ];
+      });
+    } else if (vigencia === 'futuras') {
+      andClauses.push({
+        vigencia_desde: { gt: reference },
+      });
+    } else if (vigencia === 'vencidas') {
+      andClauses.push({
+        vigencia_hasta: { lt: reference },
+      });
+    }
+  }
+  if (search) {
+    andClauses.push({
+      OR: [
+        { codigo: { contains: search, mode: 'insensitive' } },
+        { descripcion: { contains: search, mode: 'insensitive' } },
+      ],
+    });
+  }
+  if (andClauses.length) {
+    where.AND = where.AND ? where.AND.concat(andClauses) : andClauses;
   }
   return where;
 }
@@ -182,15 +224,75 @@ async function findConflicts(data, excludeId) {
   });
   return overlaps.map((item) => serializeTarifa(item));
 }
+function sameScope(a, b) {
+  const fields = ['servicio_id', 'plan_id', 'rol_aplica', 'ambito_region', 'metodo_pago', 'moneda'];
+  return fields.every((field) => {
+    const valueA = a[field] ?? null;
+    const valueB = b[field] ?? null;
+    return valueA === valueB;
+  });
+}
+
+function periodsOverlap(aDesde, aHasta, bDesde, bHasta) {
+  const startA = aDesde ? new Date(aDesde).getTime() : Number.NEGATIVE_INFINITY;
+  const endA = aHasta ? new Date(aHasta).getTime() : Number.POSITIVE_INFINITY;
+  const startB = bDesde ? new Date(bDesde).getTime() : Number.NEGATIVE_INFINITY;
+  const endB = bHasta ? new Date(bHasta).getTime() : Number.POSITIVE_INFINITY;
+  return startA <= endB && startB <= endA;
+}
+
+function collectConflictIds(records) {
+  const ids = new Set();
+  for (let i = 0; i < records.length; i += 1) {
+    for (let j = i + 1; j < records.length; j += 1) {
+      const a = records[i];
+      const b = records[j];
+      if (!sameScope(a, b)) continue;
+      if (a.activo === false && b.activo === false) continue;
+      if (periodsOverlap(a.vigencia_desde, a.vigencia_hasta, b.vigencia_desde, b.vigencia_hasta)) {
+        ids.add(a.id);
+        ids.add(b.id);
+      }
+    }
+  }
+  return Array.from(ids);
+}
+
 
 async function getTarifas(req, res) {
   try {
     const page = parseIntOrNull(req.query.page) || 1;
     const perPage = parseIntOrNull(req.query.per_page) || 20;
     const where = buildListWhere(req.query);
+    let filteredWhere = { ...where };
+    if (req.query.conflictos === 'true') {
+      const scopeCandidates = await prisma.tarifacomision.findMany({
+        where,
+        select: {
+          id: true,
+          servicio_id: true,
+          plan_id: true,
+          rol_aplica: true,
+          ambito_region: true,
+          metodo_pago: true,
+          moneda: true,
+          vigencia_desde: true,
+          vigencia_hasta: true,
+          activo: true,
+        },
+      });
+      const conflictIds = collectConflictIds(scopeCandidates);
+      if (!conflictIds.length) {
+        return res.json({ items: [], total: 0, page: 1, perPage });
+      }
+      filteredWhere = {
+        ...where,
+        id: { in: conflictIds },
+      };
+    }
     const [items, total] = await Promise.all([
       prisma.tarifacomision.findMany({
-        where,
+        where: filteredWhere,
         include: {
           servicio: { select: { id: true, codigo: true, nombre: true } },
           plan: { select: { id: true, nombre: true } },
@@ -202,7 +304,7 @@ async function getTarifas(req, res) {
         skip: (page - 1) * perPage,
         take: perPage,
       }),
-      prisma.tarifacomision.count({ where }),
+      prisma.tarifacomision.count({ where: filteredWhere }),
     ]);
     res.json({
       items: items.map((item) => serializeTarifa(item)),
@@ -215,6 +317,7 @@ async function getTarifas(req, res) {
     res.status(500).json({ success: false, message: 'Error obteniendo tarifas' });
   }
 }
+
 
 async function getTarifa(req, res) {
   try {

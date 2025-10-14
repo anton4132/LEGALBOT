@@ -51,6 +51,15 @@
               <div class="card-body">
                 <h5 class="card-title mb-3">Filtros</h5>
                 <form id="tc-filters-form" class="row g-3 align-items-end" autocomplete="off">
+                  <div class="col-12 col-lg-4 form-group">
+                    <label for="tc-filter-search" class="form-label">Buscar</label>
+                    <input
+                      type="text"
+                      id="tc-filter-search"
+                      class="form-control"
+                      placeholder="Código o descripción"
+                    />
+                  </div>
                   <div class="col-12 col-md-6 col-lg-3 form-group">
                     <label for="tc-filter-servicio" class="form-label">Servicio</label>
                     <select id="tc-filter-servicio" class="form-select">
@@ -81,6 +90,14 @@
                     </select>
                   </div>
                   <div class="col-12 col-md-6 col-lg-2 form-group">
+                    <label for="tc-filter-vigencia" class="form-label">Estado de vigencia</label>
+                    <select id="tc-filter-vigencia" class="form-select">
+                      <option value="vigentes">Vigentes hoy</option>
+                      <option value="futuras">Futuras</option>
+                      <option value="vencidas">Vencidas</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6 col-lg-2 form-group">
                     <label for="tc-filter-metodo" class="form-label">Método de pago</label>
                     <select id="tc-filter-metodo" class="form-select">
                       <option value="">Todos</option>
@@ -101,6 +118,12 @@
                   <div class="col-12 col-md-6 col-lg-2 form-group">
                     <label for="tc-filter-fecha" class="form-label">Fecha vigencia</label>
                     <input type="date" id="tc-filter-fecha" class="form-control" />
+                  </div>
+                  <div class="col-12 col-md-6 col-lg-2 form-group d-flex align-items-center">
+                    <div class="form-check mt-4">
+                      <input type="checkbox" class="form-check-input" id="tc-filter-conflictos" />
+                      <label class="form-check-label" for="tc-filter-conflictos">Solo con solapamientos</label>
+                    </div>
                   </div>
                   <div class="col-12 d-flex justify-content-end gap-2">
                     <button type="reset" id="tc-filters-reset" class="btn btn-outline-secondary">Limpiar</button>

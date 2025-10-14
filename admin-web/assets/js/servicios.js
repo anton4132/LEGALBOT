@@ -249,8 +249,7 @@ function setupPlanServiceModal() {
               </div>
             </form>
           </div>
-          <div class="modal-footer d-flex justify-content-between">
-            <button type="button" class="btn btn-outline-secondary" id="planServiceResetBtn">Registrar nuevo</button>
+            <div class="modal-footer d-flex justify-content-end">
             <div class="d-flex gap-2">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
               <button type="button" class="btn btn-primary" id="planServiceSaveBtn">Guardar vinculación</button>
@@ -268,7 +267,6 @@ function setupPlanServiceModal() {
     populatePlanServiceOptions();
   });
   document.getElementById('planServiceSaveBtn').addEventListener('click', savePlanServiceLink);
-  document.getElementById('planServiceResetBtn').addEventListener('click', resetPlanServiceForm);
   const tbody = document.getElementById('planServicesTableBody');
   tbody.addEventListener('click', handlePlanServiceTableAction);
 }
