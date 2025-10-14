@@ -54,19 +54,25 @@ const PARAM_SCHEMAS = {
     },
   },
 };
+function cloneTemplateFromCatalogs(tipo, catalogs) {
+  const template = catalogs?.parametrosPlantilla?.[tipo] || PARAM_TEMPLATES[tipo] || {};
+  return JSON.parse(JSON.stringify(template));
+}
+
+const initialCatalogsState = {
+  servicios: [],
+  planes: [],
+  monedas: [],
+  metodos_pago: [],
+  regiones: [],
+  econconfig: null,
+  impuestos: [],
+  pasarelas: [],
+  parametrosPlantilla: PARAM_TEMPLATES,
+};
 
 const state = {
-  catalogs: {
-    servicios: [],
-    planes: [],
-    monedas: [],
-    metodos_pago: [],
-    regiones: [],
-    econconfig: null,
-    impuestos: [],
-    pasarelas: [],
-    parametrosPlantilla: PARAM_TEMPLATES,
-  },
+  catalogs: initialCatalogsState,
   filters: {
     rol_aplica: '',
     activo: '',
@@ -85,7 +91,7 @@ const state = {
     mode: 'create',
     id: null,
     sourceId: null,
-    data: createEmptyRule(),
+    data: null,
     conflicts: [],
   },
   simulator: {
@@ -111,6 +117,7 @@ const state = {
     econconfig: null,
   },
 };
+state.wizard.data = createEmptyRule(initialCatalogsState);
 
 const dom = {};
 const bootstrapLib = typeof window !== 'undefined' ? window.bootstrap : undefined;
@@ -1327,11 +1334,10 @@ function updateCodigoReadonlyState() {
   dom.wizard.inputs.codigo.readOnly = shouldLock;
 }
 
-function cloneTemplate(tipo) {
-  const template = state.catalogs.parametrosPlantilla?.[tipo] || PARAM_TEMPLATES[tipo] || {};
-  return JSON.parse(JSON.stringify(template));
+function cloneTemplate(tipo, catalogs) {
+  const sourceCatalogs = catalogs !== undefined ? catalogs : state.catalogs;
+  return cloneTemplateFromCatalogs(tipo, sourceCatalogs);
 }
-
 async function saveWizard() {
   if (!captureStep1() || !captureStep2()) return;
   hideConflict();
@@ -1581,14 +1587,16 @@ function toggleSimulator(open) {
     }
   }
 
-function createEmptyRule() {
-  return {
+  function createEmptyRule(catalogs) {
+    const sourceCatalogs = catalogs !== undefined ? catalogs : state.catalogs;
+    const econconfig = sourceCatalogs?.econconfig;
+    return {
     codigo: '',
     descripcion: '',
     servicio_id: '',
     plan_id: '',
     rol_aplica: 'ambos',
-    moneda: state.catalogs.econconfig?.moneda_defecto || '',
+    moneda: econconfig?.moneda_defecto || '',
     metodo_pago: '',
     ambito_region: '',
     prioridad: '',
@@ -1596,7 +1604,7 @@ function createEmptyRule() {
     vigencia_hasta: '',
     tipo_calculo: 'fijo',
     valor: '',
-    parametros: cloneTemplate('fijo'),
+    parametros: cloneTemplateFromCatalogs('fijo', sourceCatalogs),
     incluye_impuesto: false,
     activo: true,
   };
