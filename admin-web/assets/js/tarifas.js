@@ -106,7 +106,8 @@ function cacheDom() {
   };
   dom.actions = {
     newRule: document.getElementById('tc-new-rule-btn'),
-    exportCsv: document.getElementById('tc-export-btn'),
+    exportCsv: document.getElementById('tc-export-csv-btn'),
+    exportExcel: document.getElementById('tc-export-excel-btn'),
     toggleSimulator: document.getElementById('tc-simulator-toggle'),
   };
   dom.simulator = {
@@ -165,7 +166,7 @@ function cacheDom() {
   dom.quickAccess = {
     serviciosBtn: document.getElementById('tc-open-servicios'),
     impuestosBtn: document.getElementById('tc-open-impuestos'),
-    econfigBtn: document.getElementById('tc-open-econfig'),
+    econconfigBtn: document.getElementById('tc-open-econconfig'),
     servicios: {
       modal: document.getElementById('tc-servicios-modal'),
       tableBody: document.querySelector('#tc-servicios-table tbody'),
@@ -196,8 +197,8 @@ function cacheDom() {
       reset: document.getElementById('tc-impuestos-reset'),
       delete: document.getElementById('tc-impuestos-delete'),
     },
-    econfig: {
-      modal: document.getElementById('tc-econfig-modal'),
+    econconfig: {
+        modal: document.getElementById('tc-econfig-modal'),
       form: document.getElementById('tc-econfig-form'),
       moneda: document.getElementById('tc-econfig-moneda'),
       decimales: document.getElementById('tc-econfig-decimales'),
@@ -274,6 +275,11 @@ function bindEvents() {
   if (dom.actions.exportCsv) {
     dom.actions.exportCsv.addEventListener('click', exportCsv);
   }
+
+  if (dom.actions.exportExcel) {
+    dom.actions.exportExcel.addEventListener('click', exportExcel);
+  }
+
   if (dom.table.body) {
     dom.table.body.addEventListener('click', handleTableAction);
   }
@@ -326,9 +332,10 @@ function bindEvents() {
   if (dom.quickAccess?.impuestosBtn) {
     dom.quickAccess.impuestosBtn.addEventListener('click', openImpuestosModal);
   }
-  if (dom.quickAccess?.econfigBtn) {
-    dom.quickAccess.econfigBtn.addEventListener('click', openEconfigModal);
+  if (dom.quickAccess?.econconfigBtn) {
+    dom.quickAccess.econconfigBtn.addEventListener('click', openEconfigModal);
   }
+  
   if (dom.quickAccess?.servicios.search) {
     dom.quickAccess.servicios.search.addEventListener('input', debounce(refreshServiciosList, 250));
   }
@@ -362,8 +369,8 @@ function bindEvents() {
   if (dom.quickAccess?.impuestos.delete) {
     dom.quickAccess.impuestos.delete.addEventListener('click', deactivateImpuesto);
   }
-  if (dom.quickAccess?.econfig.form) {
-    dom.quickAccess.econfig.form.addEventListener('submit', submitEconfigForm);
+  if (dom.quickAccess?.econconfig.form) {
+    dom.quickAccess.econconfig.form.addEventListener('submit', submitEconfigForm);
   }
 }
 
@@ -380,6 +387,17 @@ function buildUrl(path, params) {
   return url;
 }
 
+function escapeHtml(value) {
+    if (value === undefined || value === null) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  
 async function apiRequest(method, path, body, params) {
   const url = buildUrl(path, params);
   const options = {
@@ -1528,7 +1546,7 @@ function debounce(fn, delay = 300) {
       const config = response?.config || response || null;
       state.quick.econconfig = config;
       populateEconfigForm(config);
-      const modal = getBootstrapModal(dom.quickAccess.econfig.modal);
+      const modal = getBootstrapModal(dom.quickAccess.econconfig.modal);
       modal?.show();
     } catch (error) {
       console.error('Error obteniendo econconfig:', error);
@@ -1537,7 +1555,7 @@ function debounce(fn, delay = 300) {
   }
   
   function populateEconfigForm(config) {
-    const inputs = dom.quickAccess.econfig;
+    const inputs = dom.quickAccess.econconfig;
     if (!inputs) return;
     if (!config) {
       inputs.form.reset();
@@ -1555,7 +1573,7 @@ function debounce(fn, delay = 300) {
   
   async function submitEconfigForm(event) {
     event.preventDefault();
-    const inputs = dom.quickAccess.econfig;
+    const inputs = dom.quickAccess.econconfig;
     if (!inputs) return;
     const payload = {
       moneda_defecto: inputs.moneda.value.trim().toUpperCase(),
@@ -1579,7 +1597,7 @@ function debounce(fn, delay = 300) {
       populateCatalogSelects();
       hydrateSimulatorInputs();
       window.alert('Configuración guardada correctamente');
-      const modal = getBootstrapModal(dom.quickAccess.econfig.modal);
+      const modal = getBootstrapModal(dom.quickAccess.econconfig.modal);
       modal?.hide();
     } catch (error) {
       console.error('Error guardando econconfig:', error);
@@ -1620,3 +1638,42 @@ function exportCsv() {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+function exportExcel() {
+    if (!state.rules.length) {
+      window.alert('No hay reglas para exportar.');
+      return;
+    }
+    const headers = ['Código', 'Descripción', 'Servicio', 'Plan', 'Rol', 'Moneda', 'Método de pago', 'Región', 'Tipo de cálculo', 'Vigencia desde', 'Vigencia hasta', 'Prioridad', 'Activo'];
+    const rows = state.rules.map((rule) => [
+      rule.codigo,
+      rule.descripcion || '',
+      rule.servicio ? rule.servicio.nombre : 'Todos',
+      rule.plan ? rule.plan.nombre : 'Todos',
+      rule.rol_aplica,
+      rule.moneda || state.catalogs.econconfig?.moneda_defecto || '',
+      rule.metodo_pago || '*',
+      rule.ambito_region || '*',
+      rule.tipo_calculo,
+      rule.vigencia_desde || '',
+      rule.vigencia_hasta || '',
+      rule.prioridad ?? '',
+      rule.activo ? 'Sí' : 'No',
+    ]);
+    const headerRow = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>`;
+    const bodyRows = rows
+      .map((row) => `<tr>${row.map((value) => `<td>${escapeHtml(value)}</td>`).join('')}</tr>`)
+      .join('');
+    const tableHtml = `<table><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table>`;
+    const blob = new Blob(['\ufeff' + tableHtml], {
+      type: 'application/vnd.ms-excel;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `tarifas_${new Date().toISOString().substring(0, 10)}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }

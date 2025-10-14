@@ -15,7 +15,9 @@
           <li class="nav-item mb-2"><a class="nav-link" href="/dashboard" id="menu-home">Home</a></li>
           <li class="nav-item mb-2"><a class="nav-link" href="/pages/usuarios.html" id="menu-usuarios">Gestión de Usuarios</a></li>
           <li class="nav-item mb-2"><a class="nav-link active" href="/tarifas" id="menu-tarifas">Tarifas &amp; Comisiones</a></li>
+          <li class="nav-item mb-2"><a class="nav-link" href="/almacenamiento" id="menu-almacenamiento">Almacenamiento</a></li>
           <li class="nav-item mb-2"><a class="nav-link" href="/servicios" id="menu-servicios">Servicios</a></li>
+          <li class="nav-item mb-2"><a class="nav-link" href="/estadisticas" id="menu-estadisticas">Estadísticas</a></li>
           <li class="nav-item mt-auto"><a class="nav-link text-danger" href="#" onclick="logout()">Cerrar sesión</a></li>
         </ul>
       </nav>
@@ -39,7 +41,8 @@
                 <p class="text-muted mb-0">Administra reglas por servicio, plan, rol y condiciones económicas.</p>
               </div>
               <div class="d-flex flex-wrap gap-2">
-                <button id="tc-export-btn" class="btn btn-outline-secondary">Exportar CSV</button>
+                <button id="tc-export-csv-btn" class="btn btn-outline-secondary">Exportar CSV</button>
+                <button id="tc-export-excel-btn" class="btn btn-outline-secondary">Exportar Excel</button>
                 <button id="tc-new-rule-btn" class="btn btn-primary">Nueva regla</button>
               </div>
             </div>
@@ -225,8 +228,7 @@
               <div class="quick-access-buttons">
                 <button type="button" id="tc-open-servicios" class="btn btn-outline-primary">Servicios</button>
                 <button type="button" id="tc-open-impuestos" class="btn btn-outline-primary">Impuestos</button>
-                <button type="button" id="tc-open-econfig" class="btn btn-outline-primary">eConfig</button>
-              </div>
+                <button type="button" id="tc-open-econconfig" class="btn btn-outline-primary">econconfig</button>              </div>
             </div>
           </section>
 

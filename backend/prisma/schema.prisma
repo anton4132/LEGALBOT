@@ -305,20 +305,6 @@ enum rol_aplica_tc {
   ambos
 }
 
-/// Quién absorbe el fee de pasarela
-enum quien_absorbe_psp {
-  cliente
-  plataforma
-  abogado
-  mixto
-}
-
-/// Reglas de redondeo para presentación/precio final
-enum regla_redondeo {
-  dos_decimales
-  a_0_05
-  entero_superior
-}
 
 model tarifacomision {
   id          Int      @id @default(autoincrement())
@@ -370,6 +356,14 @@ model impuesto {
 }
 
 /// Configuración económica global (1 fila activa)
+
+/// Reglas de redondeo para presentación/precio final
+enum regla_redondeo {
+  dos_decimales
+  a_0_05
+  entero_superior
+}
+
 model econconfig {
   id             Int            @id @default(autoincrement())
   moneda_defecto String         @db.Char(3)
@@ -390,6 +384,14 @@ model pasarela {
   reglas_metodo pasarelametodo[]
 
   @@index([activo])
+}
+
+/// Quién absorbe el fee de pasarela
+enum quien_absorbe_psp {
+  cliente
+  plataforma
+  abogado
+  mixto
 }
 
 model pasarelametodo {
