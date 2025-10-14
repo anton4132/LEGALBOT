@@ -55,7 +55,6 @@ const PARAM_SCHEMAS = {
   },
 };
 
-
 const state = {
   catalogs: {
     servicios: [],
@@ -69,17 +68,10 @@ const state = {
     parametrosPlantilla: PARAM_TEMPLATES,
   },
   filters: {
-    search: '',
-    servicio_id: '',
-    plan_id: '',
     rol_aplica: '',
     activo: '',
     metodo_pago: '',
-    moneda: '',
-    ambito_region: '',
-    fecha: '',
     vigencia: 'vigentes',
-    conflictos: '',
   },
   pagination: {
     page: 1,
@@ -139,17 +131,10 @@ async function init() {
 function cacheDom() {
   dom.filters = {
     form: document.getElementById('tc-filters-form'),
-    search: document.getElementById('tc-filter-search'),
-    servicio: document.getElementById('tc-filter-servicio'),
-    plan: document.getElementById('tc-filter-plan'),
     rol: document.getElementById('tc-filter-rol'),
     estado: document.getElementById('tc-filter-estado'),
     metodo: document.getElementById('tc-filter-metodo'),
-    moneda: document.getElementById('tc-filter-moneda'),
-    region: document.getElementById('tc-filter-region'),
-    fecha: document.getElementById('tc-filter-fecha'),
     vigencia: document.getElementById('tc-filter-vigencia'),
-    conflictos: document.getElementById('tc-filter-conflictos'),
     reset: document.getElementById('tc-filters-reset'),
   };
   dom.table = {
@@ -219,7 +204,10 @@ function cacheDom() {
     labels: {
       incluyeImpuesto: document.querySelector('label[for="tc-input-incluye-impuesto"]'),
     },
+    manualBackdrop: null,
+
   };
+  
   dom.quickAccess = {
     serviciosBtn: document.getElementById('tc-open-servicios'),
     impuestosBtn: document.getElementById('tc-open-impuestos'),
@@ -623,8 +611,6 @@ function apiDelete(path) {
   }
   
   function syncPlanDependencies() {
-    const filtroServicio = dom.filters.servicio?.value || '';
-    refreshPlanOptionsForSelect(dom.filters.plan, filtroServicio, 'Todos');
     const wizardServicio = dom.wizard.inputs?.servicio?.value || '';
     refreshPlanOptionsForSelect(dom.wizard.inputs?.plan, wizardServicio, 'Todos');
     refreshPlanOptionsForSelect(dom.wizard.inputs?.step3Plan, wizardServicio, 'Todos');
@@ -731,11 +717,9 @@ async function loadCatalogs() {
 
 function populateCatalogSelects() {
   const { servicios, planes, monedas, metodos_pago, regiones, econconfig } = state.catalogs;
-  fillSelect(dom.filters.servicio, servicios, { value: 'id', label: (s) => `${s.codigo} - ${s.nombre}` });
-  fillSelect(dom.filters.plan, planes, { value: 'id', label: 'nombre' });
+
   fillSelect(dom.filters.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true);
-  fillSelect(dom.filters.moneda, monedas.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true);
-  fillSelect(dom.filters.region, regiones.map((r) => ({ id: r, nombre: r })), { value: 'id', label: 'nombre' }, true);
+  
   const wizardInputs = dom.wizard.inputs;
   fillSelect(wizardInputs.servicio, servicios, { value: 'id', label: (s) => `${s.codigo} - ${s.nombre}` }, true, 'Todos');
   fillSelect(wizardInputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
@@ -777,32 +761,17 @@ function fillSelect(select, items, { value, label }, allowEmpty = true, emptyLab
     select.value = current;
   }
 }
-
 function resetFilters() {
   state.filters = {
-    search: '',
-    servicio_id: '',
-    plan_id: '',
     rol_aplica: '',
     activo: '',
     metodo_pago: '',
-    moneda: '',
-    ambito_region: '',
-    fecha: '',
     vigencia: 'vigentes',
-    conflictos: '',
   };
-  if (dom.filters.search) dom.filters.search.value = '';
-  if (dom.filters.servicio) dom.filters.servicio.value = '';
-  if (dom.filters.plan) dom.filters.plan.value = '';
   if (dom.filters.rol) dom.filters.rol.value = '';
   if (dom.filters.estado) dom.filters.estado.value = '';
   if (dom.filters.metodo) dom.filters.metodo.value = '';
-  if (dom.filters.moneda) dom.filters.moneda.value = '';
-  if (dom.filters.region) dom.filters.region.value = '';
-  if (dom.filters.fecha) dom.filters.fecha.value = '';
   if (dom.filters.vigencia) dom.filters.vigencia.value = 'vigentes';
-  if (dom.filters.conflictos) dom.filters.conflictos.checked = false;
   state.pagination.page = 1;
   syncPlanDependencies();
 
@@ -950,21 +919,15 @@ function formatDate(value) {
 
 function applyFilters() {
   state.filters = {
-    search: dom.filters.search?.value.trim() || '',
-    servicio_id: dom.filters.servicio?.value || '',
-    plan_id: dom.filters.plan?.value || '',
     rol_aplica: dom.filters.rol?.value || '',
     activo: dom.filters.estado?.value || '',
     metodo_pago: dom.filters.metodo?.value || '',
-    moneda: dom.filters.moneda?.value || '',
-    ambito_region: dom.filters.region?.value || '',
-    fecha: dom.filters.fecha?.value || '',
     vigencia: dom.filters.vigencia?.value || '',
-    conflictos: dom.filters.conflictos?.checked || '',
   };
   state.pagination.page = 1;
   loadRules();
 }
+
 
 function handleTableAction(event) {
   const button = event.target.closest('button[data-action]');
@@ -1001,39 +964,69 @@ async function toggleRule(id) {
 }
 
 function toggleWizard(open) {
-    if (!dom.wizard.modal) return;
+  if (!dom.wizard.modal) return;
+
+  if (dom.wizard.modalInstance) {
     if (open) {
       state.wizard.open = true;
-      if (dom.wizard.modalInstance) {
-        dom.wizard.modalInstance.show();
-      } else {
-        dom.wizard.modal.classList.remove('d-none');
-        updateWizardUi();
-      }
+      updateWizardUi();
+      dom.wizard.modalInstance.show();
     } else {
-      if (dom.wizard.modalInstance) {
-        dom.wizard.modalInstance.hide();
-      } else {
-        dom.wizard.modal.classList.add('d-none');
-        resetWizardFormState();
-      }
+      dom.wizard.modalInstance.hide();
     }
+    return;
   }
-  
-  function resetWizardFormState() {
-    state.wizard.open = false;
-    state.wizard.step = 1;
-    state.wizard.mode = 'create';
-    state.wizard.id = null;
-    state.wizard.sourceId = null;
-    state.wizard.data = createEmptyRule();
-    hideConflict();
-    if (dom.wizard.form) dom.wizard.form.reset();
-    if (dom.wizard.step3Result) dom.wizard.step3Result.innerHTML = '';
-    if (dom.wizard.inputs.codigo) dom.wizard.inputs.codigo.readOnly = false;
-    updateImpuestoLabel(null);
+
+  if (open) {
+    state.wizard.open = true;
+    dom.wizard.modal.classList.remove('d-none');
+    dom.wizard.modal.classList.add('show');
+    dom.wizard.modal.style.display = 'block';
+    dom.wizard.modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    createWizardFallbackBackdrop();
     updateWizardUi();
+  } else {
+    dom.wizard.modal.classList.remove('show');
+    dom.wizard.modal.style.display = 'none';
+    dom.wizard.modal.setAttribute('aria-hidden', 'true');
+    dom.wizard.modal.classList.add('d-none');
+    document.body.classList.remove('modal-open');
+    removeWizardFallbackBackdrop();
+    resetWizardFormState();
   }
+}
+
+function createWizardFallbackBackdrop() {
+  if (dom.wizard.manualBackdrop) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop fade show';
+  backdrop.dataset.tcWizardBackdrop = 'true';
+  document.body.appendChild(backdrop);
+  dom.wizard.manualBackdrop = backdrop;
+}
+
+function removeWizardFallbackBackdrop() {
+  if (!dom.wizard.manualBackdrop) return;
+  dom.wizard.manualBackdrop.remove();
+  dom.wizard.manualBackdrop = null;
+}
+
+function resetWizardFormState() {
+  state.wizard.open = false;
+  state.wizard.step = 1;
+  state.wizard.mode = 'create';
+  state.wizard.id = null;
+  state.wizard.sourceId = null;
+  state.wizard.data = createEmptyRule();
+  hideConflict();
+  if (dom.wizard.form) dom.wizard.form.reset();
+  if (dom.wizard.step3Result) dom.wizard.step3Result.innerHTML = '';
+  if (dom.wizard.inputs.codigo) dom.wizard.inputs.codigo.readOnly = false;
+  updateImpuestoLabel(null);
+  updateWizardUi();
+}
+
 
 async function openWizard(mode, id) {
   hideConflict();

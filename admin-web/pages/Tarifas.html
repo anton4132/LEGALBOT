@@ -51,28 +51,7 @@
               <div class="card-body">
                 <h5 class="card-title mb-3">Filtros</h5>
                 <form id="tc-filters-form" class="row g-3 align-items-end" autocomplete="off">
-                  <div class="col-12 col-lg-4 form-group">
-                    <label for="tc-filter-search" class="form-label">Buscar</label>
-                    <input
-                      type="text"
-                      id="tc-filter-search"
-                      class="form-control"
-                      placeholder="Código o descripción"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6 col-lg-3 form-group">
-                    <label for="tc-filter-servicio" class="form-label">Servicio</label>
-                    <select id="tc-filter-servicio" class="form-select">
-                      <option value="">Todos</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6 col-lg-3 form-group">
-                    <label for="tc-filter-plan" class="form-label">Plan</label>
-                    <select id="tc-filter-plan" class="form-select">
-                      <option value="">Todos</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group">
+                  <div class="col-12 col-md-6 col-xl-3 form-group">
                     <label for="tc-filter-rol" class="form-label">Rol aplica</label>
                     <select id="tc-filter-rol" class="form-select">
                       <option value="">Todos</option>
@@ -81,7 +60,7 @@
                       <option value="ambos">Ambos</option>
                     </select>
                   </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group">
+                  <div class="col-12 col-md-6 col-xl-3 form-group">
                     <label for="tc-filter-estado" class="form-label">Estado</label>
                     <select id="tc-filter-estado" class="form-select">
                       <option value="">Todos</option>
@@ -89,7 +68,7 @@
                       <option value="false">Inactivo</option>
                     </select>
                   </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group">
+                  <div class="col-12 col-md-6 col-xl-3 form-group">
                     <label for="tc-filter-vigencia" class="form-label">Estado de vigencia</label>
                     <select id="tc-filter-vigencia" class="form-select">
                       <option value="vigentes">Vigentes hoy</option>
@@ -97,34 +76,13 @@
                       <option value="vencidas">Vencidas</option>
                     </select>
                   </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group">
+                  <div class="col-12 col-md-6 col-xl-3 form-group">
                     <label for="tc-filter-metodo" class="form-label">Método de pago</label>
                     <select id="tc-filter-metodo" class="form-select">
                       <option value="">Todos</option>
                     </select>
                   </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group">
-                    <label for="tc-filter-moneda" class="form-label">Moneda</label>
-                    <select id="tc-filter-moneda" class="form-select">
-                      <option value="">Todas</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group">
-                    <label for="tc-filter-region" class="form-label">Región</label>
-                    <select id="tc-filter-region" class="form-select">
-                      <option value="">Todas</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group">
-                    <label for="tc-filter-fecha" class="form-label">Fecha vigencia</label>
-                    <input type="date" id="tc-filter-fecha" class="form-control" />
-                  </div>
-                  <div class="col-12 col-md-6 col-lg-2 form-group d-flex align-items-center">
-                    <div class="form-check mt-4">
-                      <input type="checkbox" class="form-check-input" id="tc-filter-conflictos" />
-                      <label class="form-check-label" for="tc-filter-conflictos">Solo con solapamientos</label>
-                    </div>
-                  </div>
+                  
                   <div class="col-12 d-flex justify-content-end gap-2">
                     <button type="reset" id="tc-filters-reset" class="btn btn-outline-secondary">Limpiar</button>
                     <button type="submit" class="btn btn-primary">Aplicar filtros</button>
