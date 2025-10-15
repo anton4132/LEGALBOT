@@ -49,97 +49,247 @@
 
             <section class="card border-0 shadow-sm mb-4">
               <div class="card-body">
-                <h5 class="card-title mb-3">Filtros</h5>
-                <form id="tc-filters-form" class="row g-3 align-items-end" autocomplete="off">
-                  <div class="col-12 col-md-6 col-xl-3 form-group">
-                    <label for="tc-filter-rol" class="form-label">Rol aplica</label>
-                    <select id="tc-filter-rol" class="form-select">
-                      <option value="">Todos</option>
-                      <option value="cliente">Cliente</option>
-                      <option value="abogado">Abogado</option>
-                      <option value="ambos">Ambos</option>
-                    </select>
+                <div class="d-flex flex-wrap gap-2" id="tc-view-switcher">
+                  <button type="button" class="btn btn-primary" data-tc-view-button="reglas">Reglas</button>
+                  <button type="button" class="btn btn-outline-primary" data-tc-view-button="impuestos">Impuestos</button>
+                  <button type="button" class="btn btn-outline-primary" data-tc-view-button="econconfig">Configuración económica</button>
                   </div>
-                  <div class="col-12 col-md-6 col-xl-3 form-group">
-                    <label for="tc-filter-estado" class="form-label">Estado</label>
-                    <select id="tc-filter-estado" class="form-select">
-                      <option value="">Todos</option>
-                      <option value="true">Activo</option>
-                      <option value="false">Inactivo</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6 col-xl-3 form-group">
-                    <label for="tc-filter-vigencia" class="form-label">Estado de vigencia</label>
-                    <select id="tc-filter-vigencia" class="form-select">
-                      <option value="vigentes">Vigentes hoy</option>
-                      <option value="futuras">Futuras</option>
-                      <option value="vencidas">Vencidas</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6 col-xl-3 form-group">
-                    <label for="tc-filter-metodo" class="form-label">Método de pago</label>
-                    <select id="tc-filter-metodo" class="form-select">
-                      <option value="">Todos</option>
-                    </select>
-                  </div>
-                  
-                  <div class="col-12 d-flex justify-content-end gap-2">
-                    <button type="reset" id="tc-filters-reset" class="btn btn-outline-secondary">Limpiar</button>
-                    <button type="submit" class="btn btn-primary">Aplicar filtros</button>
-                  </div>
-                </form>
               </div>
             </section>
 
-            <section class="card border-0 shadow-sm">
-              <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Listado de reglas</h5>
-                <button id="tc-simulator-toggle" type="button" class="btn btn-outline-primary btn-sm">Panel simulador</button>
-              </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table id="tc-table" class="table table-hover mb-0 align-middle">
-                    <thead class="table-light">
-                      <tr>
-                        <th>Código</th>
-                        <th>Servicio</th>
-                        <th>Plan</th>
-                        <th>Rol</th>
-                        <th>Moneda</th>
-                        <th>Método pago</th>
-                        <th>Región</th>
-                        <th>Tipo cálculo</th>
-                        <th>Vigencia</th>
-                        <th>Prioridad</th>
-                        <th>Activo</th>
-                        <th class="text-end">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody id="tc-table-body"></tbody>
-                  </table>
+            <div data-tc-view="reglas" class="tc-view">
+              <section class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                  <h5 class="card-title mb-3">Filtros</h5>
+                  <form id="tc-filters-form" class="row g-3 align-items-end" autocomplete="off">
+                    <div class="col-12 col-md-6 col-xl-3 form-group">
+                      <label for="tc-filter-rol" class="form-label">Rol aplica</label>
+                      <select id="tc-filter-rol" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="cliente">Cliente</option>
+                        <option value="abogado">Abogado</option>
+                        <option value="ambos">Ambos</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3 form-group">
+                      <label for="tc-filter-estado" class="form-label">Estado</label>
+                      <select id="tc-filter-estado" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="true">Activo</option>
+                        <option value="false">Inactivo</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3 form-group">
+                      <label for="tc-filter-vigencia" class="form-label">Estado de vigencia</label>
+                      <select id="tc-filter-vigencia" class="form-select">
+                        <option value="vigentes">Vigentes hoy</option>
+                        <option value="futuras">Futuras</option>
+                        <option value="vencidas">Vencidas</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3 form-group">
+                      <label for="tc-filter-metodo" class="form-label">Método de pago</label>
+                      <select id="tc-filter-metodo" class="form-select">
+                        <option value="">Todos</option>
+                      </select>
+                    </div>
+
+                    <div class="col-12 d-flex justify-content-end gap-2">
+                      <button type="reset" id="tc-filters-reset" class="btn btn-outline-secondary">Limpiar</button>
+                      <button type="submit" class="btn btn-primary">Aplicar filtros</button>
+                    </div>
+                  </form>
                 </div>
-                <div id="tc-empty-state" class="alert alert-info text-center m-3 d-none" role="status">
-                  No se encontraron reglas que coincidan con los filtros aplicados.
+              </section>
+
+              <section class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                  <h5 class="card-title mb-0">Listado de reglas</h5>
+                  <button id="tc-simulator-toggle" type="button" class="btn btn-outline-primary btn-sm">Panel simulador</button>
                 </div>
-              </div>
-              <div class="card-footer bg-white border-0">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-                  <div class="d-flex align-items-center gap-2">
-                    <label for="tc-rows-per-page" class="form-label mb-0">Filas por página</label>
-                    <select id="tc-rows-per-page" class="form-select form-select-sm" style="max-width: 120px;">
-                      <option value="10">10</option>
-                      <option value="20">20</option>
-                      <option value="50">50</option>
-                    </select>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table id="tc-table" class="table table-hover mb-0 align-middle">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Código</th>
+                          <th>Servicio</th>
+                          <th>Plan</th>
+                          <th>Rol</th>
+                          <th>Moneda</th>
+                          <th>Método pago</th>
+                          <th>Región</th>
+                          <th>Tipo cálculo</th>
+                          <th>Vigencia</th>
+                          <th>Prioridad</th>
+                          <th>Activo</th>
+                          <th class="text-end">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody id="tc-table-body"></tbody>
+                    </table>
                   </div>
-                  <div class="d-flex align-items-center gap-2" id="tc-pagination"></div>
+                  <div id="tc-empty-state" class="alert alert-info text-center m-3 d-none" role="status">
+                    No se encontraron reglas que coincidan con los filtros aplicados.
+                  </div>
+                </div>
+                <div class="card-footer bg-white border-0">
+                  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                      <label for="tc-rows-per-page" class="form-label mb-0">Filas por página</label>
+                      <select id="tc-rows-per-page" class="form-select form-select-sm" style="max-width: 120px;">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                      </select>
+                    </div>
+                    <div class="d-flex align-items-center gap-2" id="tc-pagination"></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div data-tc-view="impuestos" class="tc-view d-none">
+              <div class="row g-4">
+                <div class="col-12 col-xl-7">
+                  <section class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-0 d-flex flex-column flex-md-row gap-3 justify-content-between align-items-md-center">
+                      <div>
+                        <h5 class="card-title mb-0">Lista de impuestos</h5>
+                        <small class="text-muted">Incluye porcentajes, vigencias y estado actual.</small>
+                      </div>
+                      <div class="d-flex align-items-center gap-2">
+                        <label for="tc-impuestos-estado" class="form-label mb-0">Estado</label>
+                        <select id="tc-impuestos-estado" class="form-select form-select-sm" style="min-width: 160px;">
+                          <option value="">Todos</option>
+                          <option value="true">Activos</option>
+                          <option value="false">Inactivos</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="card-body p-0">
+                      <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="tc-impuestos-table">
+                          <thead class="table-light">
+                            <tr>
+                              <th>Código</th>
+                              <th>Nombre</th>
+                              <th>%</th>
+                              <th>Incluido</th>
+                              <th>Vigencia</th>
+                              <th>Activo</th>
+                              <th class="text-end">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody id="tc-impuestos-table-body"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+                <div class="col-12 col-xl-5">
+                  <section class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                      <h5 class="card-title">Registrar / editar impuesto</h5>
+                      <p class="text-muted small">Validamos automáticamente solapes de vigencia para impuestos activos.</p>
+                      <form id="tc-impuestos-form" class="row g-3" autocomplete="off">
+                        <input type="hidden" id="tc-impuestos-id" />
+                        <div class="col-12">
+                          <label for="tc-impuestos-codigo" class="form-label">Código <span class="text-danger">*</span></label>
+                          <input type="text" class="form-control" id="tc-impuestos-codigo" required />
+                        </div>
+                        <div class="col-12">
+                          <label for="tc-impuestos-nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                          <input type="text" class="form-control" id="tc-impuestos-nombre" required />
+                        </div>
+                        <div class="col-12 col-sm-6">
+                          <label for="tc-impuestos-porcentaje" class="form-label">Porcentaje (%) <span class="text-danger">*</span></label>
+                          <input type="number" class="form-control" id="tc-impuestos-porcentaje" min="0" step="0.01" required />
+                        </div>
+                        <div class="col-12 col-sm-6">
+                          <div class="form-check form-switch mt-4">
+                            <input class="form-check-input" type="checkbox" role="switch" id="tc-impuestos-incluido" />
+                            <label class="form-check-label" for="tc-impuestos-incluido">Incluido en precio</label>
+                          </div>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                          <label for="tc-impuestos-vigencia-desde" class="form-label">Vigencia desde</label>
+                          <input type="date" class="form-control" id="tc-impuestos-vigencia-desde" />
+                        </div>
+                        <div class="col-12 col-sm-6">
+                          <label for="tc-impuestos-vigencia-hasta" class="form-label">Vigencia hasta</label>
+                          <input type="date" class="form-control" id="tc-impuestos-vigencia-hasta" />
+                        </div>
+                        <div class="col-12">
+                          <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="tc-impuestos-activo" checked />
+                            <label class="form-check-label" for="tc-impuestos-activo">Activo</label>
+                          </div>
+                        </div>
+                        <div class="col-12 d-flex justify-content-between gap-2">
+                          <button type="button" class="btn btn-outline-secondary" id="tc-impuestos-reset">Limpiar</button>
+                          <button type="submit" class="btn btn-primary">Guardar</button>
+                        </div>
+                      </form>
+                    </div>
+                  </section>
                 </div>
               </div>
-            </section>
+            </div>
+
+            <div data-tc-view="econconfig" class="tc-view d-none">
+              <section class="card border-0 shadow-sm">
+                <div class="card-body">
+                  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+                    <div>
+                      <h5 class="card-title mb-0">Configuración económica</h5>
+                      <p class="text-muted small mb-0">Solo puede existir una configuración activa. Ajusta moneda, decimales y regla de redondeo.</p>
+                    </div>
+                    <div class="text-muted small" id="tc-econfig-actualizado">&nbsp;</div>
+                  </div>
+                  <form id="tc-econfig-form" class="row g-3" autocomplete="off">
+                    <div class="col-12 col-md-4">
+                      <label for="tc-econfig-moneda" class="form-label">Moneda por defecto <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" id="tc-econfig-moneda" maxlength="3" required />
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label for="tc-econfig-decimales" class="form-label">Decimales <span class="text-danger">*</span></label>
+                      <input type="number" class="form-control" id="tc-econfig-decimales" min="0" max="6" required />
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label for="tc-econfig-regla" class="form-label">Regla de redondeo</label>
+                      <select id="tc-econfig-regla" class="form-select">
+                        <option value="dos_decimales">Dos decimales</option>
+                        <option value="a_0_05">Múltiplo 0.05</option>
+                        <option value="entero_superior">Entero superior</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="tc-econfig-activo" checked />
+                        <label class="form-check-label" for="tc-econfig-activo">Configuración activa</label>
+                      </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                      <label for="tc-econfig-preview" class="form-label">Previsualización de redondeo</label>
+                      <div class="input-group">
+                        <input type="number" class="form-control" id="tc-econfig-preview" step="0.01" placeholder="Importe base" />
+                        <span class="input-group-text" id="tc-econfig-preview-result">—</span>
+                      </div>
+                      <small class="text-muted">Introduce un importe para ver cómo se aplica la regla actual.</small>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end gap-2">
+                      <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                    </div>
+                  </form>
+                </div>
+              </section>
+            </div>
           </div>
         </main>
       </div>
     </div>
+
 
     <div class="offcanvas offcanvas-end" tabindex="-1" id="tc-simulator-panel" aria-labelledby="tc-simulator-title">
       <div class="offcanvas-header border-bottom">
@@ -199,19 +349,6 @@
             <h5 class="modal-title" id="tc-wizard-title">Nueva regla</h5>
             <button id="tc-wizard-close" class="btn-close" type="button" aria-label="Cerrar"></button>
           </div>
-
-          <section class="card quick-access-card">
-            <div class="quick-access-header">
-              <div>
-                <h2 class="h5 mb-1">Accesos rápidos</h2>
-                <p class="text-muted mb-0">Gestiona catálogos relacionados sin abandonar esta vista.</p>
-              </div>
-              <div class="quick-access-buttons">
-                <button type="button" id="tc-open-servicios" class="btn btn-outline-primary">Servicios</button>
-                <button type="button" id="tc-open-impuestos" class="btn btn-outline-primary">Impuestos</button>
-                <button type="button" id="tc-open-econconfig" class="btn btn-outline-primary">econconfig</button>              </div>
-            </div>
-          </section>
 
           <div class="modal-body">
             <div class="d-flex flex-column flex-md-row gap-2 mb-3">
@@ -357,205 +494,14 @@
     </div>
 
 
-     <!-- Modales de accesos rápidos -->
-     <div class="modal fade" id="tc-servicios-modal" tabindex="-1" aria-labelledby="tc-servicios-modal-title" aria-hidden="true">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+     <div class="modal fade" id="tc-impuestos-history-modal" tabindex="-1" aria-labelledby="tc-impuestos-history-title" aria-hidden="true">
+    <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <div>
-              <h5 class="modal-title" id="tc-servicios-modal-title">Gestionar servicios</h5>
-              <p class="text-muted small mb-0">Crea o edita servicios sin abandonar Tarifas &amp; Comisiones.</p>
-            </div>
+            <h5 class="modal-title" id="tc-impuestos-history-title">Historial del impuesto</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
-          <div class="modal-body">
-            <div class="row g-4">
-              <div class="col-lg-7">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <h6 class="mb-0">Servicios existentes</h6>
-                  <div class="d-flex gap-2">
-                    <input type="search" id="tc-servicios-search" class="form-control form-control-sm" placeholder="Buscar por código o nombre" />
-                    <select id="tc-servicios-estado" class="form-select form-select-sm" style="max-width: 150px;">
-                      <option value="">Todos</option>
-                      <option value="true">Activos</option>
-                      <option value="false">Inactivos</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="table-responsive border rounded">
-                  <table class="table table-sm align-middle mb-0" id="tc-servicios-table">
-                    <thead class="table-light">
-                      <tr>
-                        <th>Código</th>
-                        <th>Nombre</th>
-                        <th>Estado</th>
-                        <th>Planes vigentes</th>
-                        <th>Tarifas vigentes</th>
-                      </tr>
-                    </thead>
-                    <tbody></tbody>
-                  </table>
-                </div>
-              </div>
-              <div class="col-lg-5">
-                <form id="tc-servicios-form" class="quick-form" autocomplete="off">
-                  <input type="hidden" id="tc-servicios-id" />
-                  <div class="mb-3">
-                    <label for="tc-servicios-codigo" class="form-label">Código <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="tc-servicios-codigo" required />
-                  </div>
-                  <div class="mb-3">
-                    <label for="tc-servicios-nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="tc-servicios-nombre" required />
-                  </div>
-                  <div class="mb-3">
-                    <label for="tc-servicios-descripcion" class="form-label">Descripción</label>
-                    <textarea class="form-control" id="tc-servicios-descripcion" rows="3"></textarea>
-                  </div>
-                  <div class="form-check form-switch mb-3">
-                    <input class="form-check-input" type="checkbox" role="switch" id="tc-servicios-activo" checked />
-                    <label class="form-check-label" for="tc-servicios-activo">Activo</label>
-                  </div>
-                  <div class="d-flex justify-content-between align-items-center gap-2">
-                    <button type="button" class="btn btn-outline-secondary" id="tc-servicios-reset">Limpiar</button>
-                    <div class="d-flex gap-2">
-                      <button type="button" class="btn btn-outline-danger" id="tc-servicios-delete">Desactivar</button>
-                      <button type="submit" class="btn btn-primary">Guardar</button>
-                    </div>
-                  </div>
-                  <p class="text-muted small mt-3 mb-0">Selecciona un servicio de la tabla para editarlo o utiliza "Limpiar" para crear uno nuevo.</p>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="tc-impuestos-modal" tabindex="-1" aria-labelledby="tc-impuestos-modal-title" aria-hidden="true">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
-            <div>
-              <h5 class="modal-title" id="tc-impuestos-modal-title">Gestionar impuestos</h5>
-              <p class="text-muted small mb-0">Administra tasas y vigencias aplicables al cálculo de tarifas.</p>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-          </div>
-          <div class="modal-body">
-            <div class="row g-4">
-              <div class="col-lg-7">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <h6 class="mb-0">Listado de impuestos</h6>
-                  <select id="tc-impuestos-estado" class="form-select form-select-sm" style="max-width: 160px;">
-                    <option value="">Todos</option>
-                    <option value="true">Activos</option>
-                    <option value="false">Inactivos</option>
-                  </select>
-                </div>
-                <div class="table-responsive border rounded">
-                  <table class="table table-sm align-middle mb-0" id="tc-impuestos-table">
-                    <thead class="table-light">
-                      <tr>
-                        <th>Código</th>
-                        <th>Nombre</th>
-                        <th>Porcentaje</th>
-                        <th>Incluido</th>
-                        <th>Vigencia</th>
-                        <th>Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody></tbody>
-                  </table>
-                </div>
-              </div>
-              <div class="col-lg-5">
-                <form id="tc-impuestos-form" class="quick-form" autocomplete="off">
-                  <input type="hidden" id="tc-impuestos-id" />
-                  <div class="mb-3">
-                    <label for="tc-impuestos-codigo" class="form-label">Código <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="tc-impuestos-codigo" required />
-                  </div>
-                  <div class="mb-3">
-                    <label for="tc-impuestos-nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="tc-impuestos-nombre" required />
-                  </div>
-                  <div class="mb-3">
-                    <label for="tc-impuestos-porcentaje" class="form-label">Porcentaje (%) <span class="text-danger">*</span></label>
-                    <input type="number" class="form-control" id="tc-impuestos-porcentaje" min="0" step="0.01" required />
-                  </div>
-                  <div class="row g-2 mb-3">
-                    <div class="col">
-                      <label for="tc-impuestos-vigencia-desde" class="form-label">Vigencia desde</label>
-                      <input type="date" class="form-control" id="tc-impuestos-vigencia-desde" />
-                    </div>
-                    <div class="col">
-                      <label for="tc-impuestos-vigencia-hasta" class="form-label">Vigencia hasta</label>
-                      <input type="date" class="form-control" id="tc-impuestos-vigencia-hasta" />
-                    </div>
-                  </div>
-                  <div class="form-check form-switch mb-2">
-                    <input class="form-check-input" type="checkbox" role="switch" id="tc-impuestos-incluido" />
-                    <label class="form-check-label" for="tc-impuestos-incluido">Incluido en el precio base</label>
-                  </div>
-                  <div class="form-check form-switch mb-3">
-                    <input class="form-check-input" type="checkbox" role="switch" id="tc-impuestos-activo" checked />
-                    <label class="form-check-label" for="tc-impuestos-activo">Activo</label>
-                  </div>
-                  <div class="d-flex justify-content-between align-items-center gap-2">
-                    <button type="button" class="btn btn-outline-secondary" id="tc-impuestos-reset">Limpiar</button>
-                    <div class="d-flex gap-2">
-                      <button type="button" class="btn btn-outline-danger" id="tc-impuestos-delete">Desactivar</button>
-                      <button type="submit" class="btn btn-primary">Guardar</button>
-                    </div>
-                  </div>
-                  <p class="text-muted small mt-3 mb-0">Las vigencias ayudan a prevenir solapes en cálculos de tarifas.</p>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="tc-econfig-modal" tabindex="-1" aria-labelledby="tc-econfig-modal-title" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <div>
-              <h5 class="modal-title" id="tc-econfig-modal-title">Configuración económica</h5>
-              <p class="text-muted small mb-0">Define parámetros globales usados en cálculos, simulaciones y redondeos.</p>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-          </div>
-          <div class="modal-body">
-            <form id="tc-econfig-form" class="quick-form" autocomplete="off">
-              <div class="mb-3">
-                <label for="tc-econfig-moneda" class="form-label">Moneda por defecto <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="tc-econfig-moneda" maxlength="3" required />
-              </div>
-              <div class="mb-3">
-                <label for="tc-econfig-decimales" class="form-label">Decimales <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="tc-econfig-decimales" min="0" max="6" required />
-              </div>
-              <div class="mb-3">
-                <label for="tc-econfig-regla" class="form-label">Regla de redondeo</label>
-                <select id="tc-econfig-regla" class="form-select">
-                  <option value="dos_decimales">Dos decimales</option>
-                  <option value="a_0_05">Multiplo 0.05</option>
-                  <option value="entero_superior">Entero superior</option>
-                </select>
-              </div>
-              <div class="form-check form-switch mb-4">
-                <input class="form-check-input" type="checkbox" role="switch" id="tc-econfig-activo" checked />
-                <label class="form-check-label" for="tc-econfig-activo">Config. activa</label>
-              </div>
-              <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
-                <button type="submit" class="btn btn-primary">Guardar cambios</button>
-              </div>
-            </form>
-          </div>
+          <div class="modal-body" id="tc-impuestos-history-content"></div>
         </div>
       </div>
     </div>

@@ -503,45 +503,20 @@ function resolveVigenciaMatch(entity, fecha) {
 }
 
 async function fetchEconomyContext() {
-  const [econconfig, impuestosRaw, pasarelasRaw] = await Promise.all([
+  const [econconfig, impuestosRaw] = await Promise.all([
     prisma.econconfig.findFirst({
       where: { activo: true },
       orderBy: { actualizado_el: 'desc' },
     }),
     prisma.impuesto.findMany({ where: { activo: true } }),
-    prisma.pasarela.findMany({
-      where: { activo: true },
-      include: {
-        reglas_metodo: { where: { activo: true } },
-      },
-    }),
   ]);
   const impuestos = impuestosRaw.map((imp) => ({
     ...imp,
     porcentaje: valueToRate(imp.porcentaje),
   }));
-  const metodosPsp = [];
-  pasarelasRaw.forEach((pasarela) => {
-    metodosPsp.push({
-      metodo_pago: '*',
-      porcentaje: valueToRate(pasarela.porcentaje),
-      fijo: decimalToNumber(pasarela.fijo) || 0,
-      quien_absorbe_psp: pasarela.quien_absorbe,
-    });
-    pasarela.reglas_metodo.forEach((regla) => {
-      metodosPsp.push({
-        metodo_pago: regla.metodo_pago,
-        porcentaje: valueToRate(regla.porcentaje ?? pasarela.porcentaje),
-        fijo: decimalToNumber(regla.fijo ?? pasarela.fijo) || 0,
-        quien_absorbe_psp: regla.quien_absorbe ?? pasarela.quien_absorbe,
-      });
-    });
-  });
   return {
     econconfig,
     impuestos,
-    pasarelas: pasarelasRaw,
-    metodosPsp,
   };
 }
 
@@ -594,11 +569,6 @@ async function getCatalogs(req, res) {
     if (econ.econconfig?.moneda_defecto) {
       monedasSet.add(econ.econconfig.moneda_defecto);
     }
-    econ.metodosPsp.forEach((m) => {
-      if (m.metodo_pago && m.metodo_pago !== '*') {
-        metodosSet.add(m.metodo_pago);
-      }
-    });
     const response = {
       servicios,
       planes,
@@ -608,7 +578,6 @@ async function getCatalogs(req, res) {
       roles: ['cliente', 'abogado', 'ambos'],
       econconfig: econ.econconfig,
       impuestos: econ.impuestos,
-      pasarelas: econ.pasarelas,
       parametrosPlantilla: PARAM_TEMPLATES,
     };
     res.json(response);
@@ -692,16 +661,6 @@ function computeSubtotal(rule, consumo) {
   }
 }
 
-function selectPspMethod(context, metodoPago) {
-  const metodo = metodoPago || context.metodo_pago || null;
-  if (!context.metodosPsp || context.metodosPsp.length === 0) {
-    return { porcentaje: 0, fijo: 0, quien_absorbe_psp: 'plataforma' };
-  }
-  const specific = context.metodosPsp.find((m) => metodo && m.metodo_pago === metodo);
-  if (specific) return specific;
-  const wildcard = context.metodosPsp.find((m) => m.metodo_pago === '*');
-  return wildcard || { porcentaje: 0, fijo: 0, quien_absorbe_psp: 'plataforma' };
-}
 
 async function simulateTarifa(req, res) {
   try {
@@ -800,24 +759,17 @@ async function simulateTarifa(req, res) {
     const impuestoTotal = selected.incluye_impuesto
       ? 0
       : applicableTaxes.reduce((acc, imp) => acc + subtotalBase * imp.porcentaje, 0);
-    const metodoPsp = selectPspMethod(context, metodo);
-    const feePsp = subtotalBase * (metodoPsp.porcentaje || 0) + (metodoPsp.fijo || 0);
-    const totalCliente = subtotalBase + impuestoTotal + feePsp;
-    const netoAbogado = subtotalBase - feePsp;
 
     const subtotal = applyRounding(subtotalBase, context.econconfig);
     const impuestos = applyRounding(impuestoTotal, context.econconfig);
-    const fee = applyRounding(feePsp, context.econconfig);
-    const total = applyRounding(totalCliente, context.econconfig);
-    const neto = applyRounding(netoAbogado, context.econconfig);
-
+    const total = applyRounding(subtotalBase + impuestoTotal, context.econconfig);
+    const neto = subtotal;
     res.json({
       success: true,
       regla: serializeTarifa(selected),
       desglose: {
         subtotal,
         impuestos,
-        feePsp: fee,
         totalCliente: total,
         netoAbogado: neto,
         moneda,
@@ -826,7 +778,6 @@ async function simulateTarifa(req, res) {
           nombre: imp.nombre,
           porcentaje: imp.porcentaje,
         })),
-        pasarela: metodoPsp,
       },
       contexto: {
         econconfig: context.econconfig,

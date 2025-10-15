@@ -67,7 +67,6 @@ const initialCatalogsState = {
   regiones: [],
   econconfig: null,
   impuestos: [],
-  pasarelas: [],
   parametrosPlantilla: PARAM_TEMPLATES,
 };
 
@@ -110,11 +109,13 @@ const state = {
     },
   },
   quick: {
-    servicios: [],
     impuestos: [],
-    currentServicioId: null,
     currentImpuestoId: null,
     econconfig: null,
+    impuestosLoaded: false,
+  },
+  ui: {
+    view: 'reglas',
   },
 };
 state.wizard.data = createEmptyRule(initialCatalogsState);
@@ -133,6 +134,7 @@ async function init() {
   resetFilters();
   await loadRules();
   hydrateSimulatorInputs();
+  updateViewVisibility();
 }
 
 function cacheDom() {
@@ -214,49 +216,35 @@ function cacheDom() {
     manualBackdrop: null,
 
   };
-  
-  dom.quickAccess = {
-    serviciosBtn: document.getElementById('tc-open-servicios'),
-    impuestosBtn: document.getElementById('tc-open-impuestos'),
-    econconfigBtn: document.getElementById('tc-open-econconfig'),
-    servicios: {
-      modal: document.getElementById('tc-servicios-modal'),
-      tableBody: document.querySelector('#tc-servicios-table tbody'),
-      search: document.getElementById('tc-servicios-search'),
-      estado: document.getElementById('tc-servicios-estado'),
-      form: document.getElementById('tc-servicios-form'),
-      id: document.getElementById('tc-servicios-id'),
-      codigo: document.getElementById('tc-servicios-codigo'),
-      nombre: document.getElementById('tc-servicios-nombre'),
-      descripcion: document.getElementById('tc-servicios-descripcion'),
-      activo: document.getElementById('tc-servicios-activo'),
-      reset: document.getElementById('tc-servicios-reset'),
-      delete: document.getElementById('tc-servicios-delete'),
-    },
-    impuestos: {
-      modal: document.getElementById('tc-impuestos-modal'),
-      tableBody: document.querySelector('#tc-impuestos-table tbody'),
-      estado: document.getElementById('tc-impuestos-estado'),
-      form: document.getElementById('tc-impuestos-form'),
-      id: document.getElementById('tc-impuestos-id'),
-      codigo: document.getElementById('tc-impuestos-codigo'),
-      nombre: document.getElementById('tc-impuestos-nombre'),
-      porcentaje: document.getElementById('tc-impuestos-porcentaje'),
-      vigenciaDesde: document.getElementById('tc-impuestos-vigencia-desde'),
-      vigenciaHasta: document.getElementById('tc-impuestos-vigencia-hasta'),
-      incluido: document.getElementById('tc-impuestos-incluido'),
-      activo: document.getElementById('tc-impuestos-activo'),
-      reset: document.getElementById('tc-impuestos-reset'),
-      delete: document.getElementById('tc-impuestos-delete'),
-    },
-    econconfig: {
-        modal: document.getElementById('tc-econfig-modal'),
-      form: document.getElementById('tc-econfig-form'),
-      moneda: document.getElementById('tc-econfig-moneda'),
-      decimales: document.getElementById('tc-econfig-decimales'),
-      regla: document.getElementById('tc-econfig-regla'),
-      activo: document.getElementById('tc-econfig-activo'),
-    },
+  dom.views = {
+    buttons: Array.from(document.querySelectorAll('[data-tc-view-button]')),
+    containers: Array.from(document.querySelectorAll('[data-tc-view]')),
+  };
+  dom.impuestos = {
+    tableBody: document.getElementById('tc-impuestos-table-body'),
+    estado: document.getElementById('tc-impuestos-estado'),
+    form: document.getElementById('tc-impuestos-form'),
+    id: document.getElementById('tc-impuestos-id'),
+    codigo: document.getElementById('tc-impuestos-codigo'),
+    nombre: document.getElementById('tc-impuestos-nombre'),
+    porcentaje: document.getElementById('tc-impuestos-porcentaje'),
+    vigenciaDesde: document.getElementById('tc-impuestos-vigencia-desde'),
+    vigenciaHasta: document.getElementById('tc-impuestos-vigencia-hasta'),
+    incluido: document.getElementById('tc-impuestos-incluido'),
+    activo: document.getElementById('tc-impuestos-activo'),
+    reset: document.getElementById('tc-impuestos-reset'),
+    historyModal: document.getElementById('tc-impuestos-history-modal'),
+    historyContent: document.getElementById('tc-impuestos-history-content'),
+  };
+  dom.econconfig = {
+    form: document.getElementById('tc-econfig-form'),
+    moneda: document.getElementById('tc-econfig-moneda'),
+    decimales: document.getElementById('tc-econfig-decimales'),
+    regla: document.getElementById('tc-econfig-regla'),
+    activo: document.getElementById('tc-econfig-activo'),
+    previewInput: document.getElementById('tc-econfig-preview'),
+    previewResult: document.getElementById('tc-econfig-preview-result'),
+    updatedLabel: document.getElementById('tc-econfig-actualizado'),
   };
   if (dom.wizard.labels?.incluyeImpuesto) {
     dom.wizard.labels.defaultIncluyeImpuesto = dom.wizard.labels.incluyeImpuesto.textContent.trim();
@@ -404,52 +392,64 @@ function bindEvents() {
         }
       });
     });
+  } if (dom.views?.buttons?.length) {
+    dom.views.buttons.forEach((button) => {
+      button.addEventListener('click', () => switchView(button.getAttribute('data-tc-view-button')));
+    });
   }
-  if (dom.quickAccess?.serviciosBtn) {
-    dom.quickAccess.serviciosBtn.addEventListener('click', openServiciosModal);
+  if (dom.impuestos?.estado) {
+    dom.impuestos.estado.addEventListener('change', () => refreshImpuestosList());
   }
-  if (dom.quickAccess?.impuestosBtn) {
-    dom.quickAccess.impuestosBtn.addEventListener('click', openImpuestosModal);
+  if (dom.impuestos?.tableBody) {
+    dom.impuestos.tableBody.addEventListener('click', handleImpuestoTableClick);
   }
-  if (dom.quickAccess?.econconfigBtn) {
-    dom.quickAccess.econconfigBtn.addEventListener('click', openEconfigModal);
+  if (dom.impuestos?.form) {
+    dom.impuestos.form.addEventListener('submit', submitImpuestoForm);
   }
-  
-  if (dom.quickAccess?.servicios.search) {
-    dom.quickAccess.servicios.search.addEventListener('input', debounce(refreshServiciosList, 250));
+  if (dom.impuestos?.reset) {
+    dom.impuestos.reset.addEventListener('click', resetImpuestoForm);
   }
-  if (dom.quickAccess?.servicios.estado) {
-    dom.quickAccess.servicios.estado.addEventListener('change', refreshServiciosList);
+  if (dom.econconfig?.form) {
+    dom.econconfig.form.addEventListener('submit', submitEconfigForm);
   }
-  if (dom.quickAccess?.servicios.tableBody) {
-    dom.quickAccess.servicios.tableBody.addEventListener('click', handleServicioRowClick);
+  if (dom.econconfig?.previewInput) {
+    dom.econconfig.previewInput.addEventListener('input', updateEconfigPreview);
   }
-  if (dom.quickAccess?.servicios.form) {
-    dom.quickAccess.servicios.form.addEventListener('submit', submitServicioForm);
+  ['moneda', 'decimales', 'regla'].forEach((key) => {
+    const input = dom.econconfig?.[key];
+    if (input) {
+      input.addEventListener('change', updateEconfigPreview);
+      input.addEventListener('input', updateEconfigPreview);
+    }
+  });
+  if (dom.pasarelas?.tableBody) {
+    dom.pasarelas.tableBody.addEventListener('click', handlePasarelaTableClick);
   }
-  if (dom.quickAccess?.servicios.reset) {
-    dom.quickAccess.servicios.reset.addEventListener('click', resetServicioForm);
+  if (dom.pasarelas?.form) {
+    dom.pasarelas.form.addEventListener('submit', submitPasarelaForm);
   }
-  if (dom.quickAccess?.servicios.delete) {
-    dom.quickAccess.servicios.delete.addEventListener('click', deactivateServicio);
+  if (dom.pasarelas?.reset) {
+    dom.pasarelas.reset.addEventListener('click', resetPasarelaForm);
   }
-  if (dom.quickAccess?.impuestos.estado) {
-    dom.quickAccess.impuestos.estado.addEventListener('change', refreshImpuestosList);
+  if (dom.pasarelas?.methods?.tableBody) {
+    dom.pasarelas.methods.tableBody.addEventListener('click', handlePasarelaMetodoTableClick);
   }
-  if (dom.quickAccess?.impuestos.tableBody) {
-    dom.quickAccess.impuestos.tableBody.addEventListener('click', handleImpuestoRowClick);
+  if (dom.pasarelas?.methods?.form) {
+    dom.pasarelas.methods.form.addEventListener('submit', submitPasarelaMetodoForm);
   }
-  if (dom.quickAccess?.impuestos.form) {
-    dom.quickAccess.impuestos.form.addEventListener('submit', submitImpuestoForm);
+  if (dom.pasarelas?.methods?.reset) {
+    dom.pasarelas.methods.reset.addEventListener('click', resetPasarelaMetodoForm);
   }
-  if (dom.quickAccess?.impuestos.reset) {
-    dom.quickAccess.impuestos.reset.addEventListener('click', resetImpuestoForm);
+  if (dom.pasarelas?.simulator?.run) {
+    dom.pasarelas.simulator.run.addEventListener('click', runPasarelaSimulation);
   }
-  if (dom.quickAccess?.impuestos.delete) {
-    dom.quickAccess.impuestos.delete.addEventListener('click', deactivateImpuesto);
-  }
-  if (dom.quickAccess?.econconfig.form) {
-    dom.quickAccess.econconfig.form.addEventListener('submit', submitEconfigForm);
+  if (dom.pasarelas?.simulator?.importe) {
+    dom.pasarelas.simulator.importe.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        runPasarelaSimulation();
+      }
+    });
   }
 }
 
@@ -514,10 +514,18 @@ function apiPost(path, body) {
 
 function apiPut(path, body) {
   return apiRequest('PUT', path, body);
+  
 }
+
+function apiPatch(path, body) {
+  return apiRequest('PATCH', path, body);
+}
+
 function apiDelete(path) {
     return apiRequest('DELETE', path);
   }
+
+
 
   function generateCodigo() {
     const timestamp = new Date();
@@ -709,7 +717,6 @@ async function loadCatalogs() {
       regiones: data.regiones || [],
       econconfig: data.econconfig || null,
       impuestos: data.impuestos || [],
-      pasarelas: data.pasarelas || [],
       parametrosPlantilla: data.parametrosPlantilla || PARAM_TEMPLATES,
     };
     state.quick.econconfig = data.econconfig || null;
@@ -922,6 +929,13 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('es-PE', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function applyFilters() {
@@ -1618,179 +1632,53 @@ function debounce(fn, delay = 300) {
       }, delay);
     };
   }
-  
   function getBootstrapModal(element) {
     if (!element || !bootstrapLib?.Modal) return null;
     return bootstrapLib.Modal.getOrCreateInstance(element);
   }
   
-  async function openServiciosModal() {
-    await refreshServiciosList();
-    resetServicioForm();
-    const modal = getBootstrapModal(dom.quickAccess.servicios.modal);
-    modal?.show();
-  }
-  
-  async function refreshServiciosList() {
-    if (!dom.quickAccess?.servicios) return;
-    const search = dom.quickAccess.servicios.search?.value?.trim();
-    const estado = dom.quickAccess.servicios.estado?.value || '';
-    try {
-      const params = {};
-      if (search) params.search = search;
-      if (estado) params.estado = estado;
-      params.orderBy = 'nombre';
-      const response = await apiGet('/services', params);
-      state.quick.servicios = Array.isArray(response) ? response : response.items || response;
-      renderServiciosTable();
-    } catch (error) {
-      console.error('Error cargando servicios:', error);
-      window.alert(error.message || 'No se pudieron cargar los servicios.');
+  function switchView(view) {
+    const allowed = ['reglas', 'impuestos', 'econconfig'];
+    const normalized = allowed.includes(view) ? view : 'reglas';
+    if (state.ui.view !== normalized) {
+      state.ui.view = normalized;
+    }
+    updateViewVisibility();
+    if (normalized === 'impuestos') {
+      refreshImpuestosList();
+    } else if (normalized === 'econconfig') {
+      loadEconfig();
     }
   }
   
-  function renderServiciosTable() {
-    const body = dom.quickAccess.servicios.tableBody;
-    if (!body) return;
-    body.innerHTML = '';
-    if (!state.quick.servicios.length) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 5;
-      cell.className = 'text-center text-muted py-3';
-      cell.textContent = 'No se encontraron servicios con los criterios seleccionados.';
-      row.appendChild(cell);
-      body.appendChild(row);
-      return;
+  function updateViewVisibility() {
+    if (dom.views?.containers) {
+      dom.views.containers.forEach((container) => {
+        const id = container.getAttribute('data-tc-view');
+        const isActive = id === state.ui.view;
+        container.classList.toggle('d-none', !isActive);
+      });
     }
-    const fragment = document.createDocumentFragment();
-    state.quick.servicios.forEach((servicio) => {
-      const row = document.createElement('tr');
-      row.dataset.id = servicio.id;
-      if (servicio.id === state.quick.currentServicioId) {
-        row.classList.add('is-selected');
-      }
-      row.innerHTML = `
-        <td class="fw-semibold">${servicio.codigo}</td>
-        <td>${servicio.nombre}</td>
-        <td><span class="badge ${servicio.activo ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}">${servicio.activo ? 'Activo' : 'Inactivo'}</span></td>
-        <td>${servicio.tienePlanVigente ? 'Sí' : 'No'}</td>
-        <td>${servicio.tieneTarifaVigente ? 'Sí' : 'No'}</td>
-      `;
-      fragment.appendChild(row);
-    });
-    body.appendChild(fragment);
-  }
-  
-  function handleServicioRowClick(event) {
-    const row = event.target.closest('tr[data-id]');
-    if (!row) return;
-    const id = Number(row.dataset.id);
-    const servicio = state.quick.servicios.find((item) => item.id === id);
-    if (servicio) {
-      populateServicioForm(servicio);
+    if (dom.views?.buttons) {
+      dom.views.buttons.forEach((button) => {
+        const id = button.getAttribute('data-tc-view-button');
+        const isActive = id === state.ui.view;
+        button.classList.toggle('btn-primary', isActive);
+        button.classList.toggle('btn-outline-primary', !isActive);
+      });
     }
-  }
-  
-  function populateServicioForm(servicio) {
-    const inputs = dom.quickAccess.servicios;
-    if (!inputs) return;
-    state.quick.currentServicioId = servicio.id;
-    inputs.id.value = servicio.id;
-    inputs.codigo.value = servicio.codigo || '';
-    inputs.nombre.value = servicio.nombre || '';
-    inputs.descripcion.value = servicio.descripcion || '';
-    inputs.activo.checked = servicio.activo !== false;
-    dom.quickAccess.servicios.delete.disabled = servicio.activo === false;
-    Array.from(dom.quickAccess.servicios.tableBody.querySelectorAll('tr')).forEach((row) => {
-      row.classList.toggle('is-selected', Number(row.dataset.id) === servicio.id);
-    });
-  }
-  
-  function resetServicioForm() {
-    const inputs = dom.quickAccess.servicios;
-    if (!inputs) return;
-    state.quick.currentServicioId = null;
-    if (inputs.form) inputs.form.reset();
-    if (inputs.id) inputs.id.value = '';
-    if (inputs.activo) inputs.activo.checked = true;
-    if (inputs.delete) inputs.delete.disabled = true;
-    Array.from(dom.quickAccess.servicios.tableBody?.querySelectorAll('tr') || []).forEach((row) => {
-      row.classList.remove('is-selected');
-    });
-  }
-  
-  async function submitServicioForm(event) {
-    event.preventDefault();
-    const inputs = dom.quickAccess.servicios;
-    if (!inputs) return;
-    const id = inputs.id.value ? Number(inputs.id.value) : null;
-    const payload = {
-      codigo: inputs.codigo.value.trim(),
-      nombre: inputs.nombre.value.trim(),
-      descripcion: inputs.descripcion.value.trim(),
-      activo: inputs.activo.checked,
-    };
-    if (!payload.codigo || !payload.nombre) {
-      window.alert('Código y nombre son obligatorios.');
-      return;
-    }
-    try {
-      if (id) {
-        await apiPut(`/services/${id}`, payload);
-      } else {
-        await apiPost('/services', payload);
-      }
-      await Promise.all([refreshServiciosList(), loadCatalogs()]);
-      window.alert('Servicio guardado correctamente');
-      if (id) {
-        const updated = state.quick.servicios.find((item) => item.id === id);
-        if (updated) {
-          populateServicioForm(updated);
-        }
-      } else {
-        resetServicioForm();
-      }
-    } catch (error) {
-      console.error('Error guardando servicio:', error);
-      window.alert(error.message || 'No se pudo guardar el servicio.');
-    }
-  }
-  
-  async function deactivateServicio() {
-    const inputs = dom.quickAccess.servicios;
-    if (!inputs?.id?.value) return;
-    const id = Number(inputs.id.value);
-    if (!id) return;
-    const confirmed = window.confirm('¿Desea desactivar este servicio?');
-    if (!confirmed) return;
-    try {
-      await apiDelete(`/services/${id}`);
-      await Promise.all([refreshServiciosList(), loadCatalogs()]);
-      window.alert('Servicio desactivado correctamente');
-      resetServicioForm();
-    } catch (error) {
-      console.error('Error desactivando servicio:', error);
-      window.alert(error.message || 'No se pudo desactivar el servicio.');
-    }
-  }
-  
-  async function openImpuestosModal() {
-    await refreshImpuestosList();
-    resetImpuestoForm();
-    const modal = getBootstrapModal(dom.quickAccess.impuestos.modal);
-    modal?.show();
   }
   
   async function refreshImpuestosList() {
-    if (!dom.quickAccess?.impuestos) return;
-    const estado = dom.quickAccess.impuestos.estado?.value || '';
+    if (!dom.impuestos?.tableBody) return;
+    const estado = dom.impuestos.estado?.value || '';
     try {
       const params = {};
       if (estado) params.estado = estado;
       const response = await apiGet('/impuestos', params);
       const items = Array.isArray(response) ? response : response.items || [];
       state.quick.impuestos = items;
+      state.quick.impuestosLoaded = true;
       renderImpuestosTable();
     } catch (error) {
       console.error('Error cargando impuestos:', error);
@@ -1799,13 +1687,13 @@ function debounce(fn, delay = 300) {
   }
   
   function renderImpuestosTable() {
-    const body = dom.quickAccess.impuestos.tableBody;
+    const body = dom.impuestos?.tableBody;
     if (!body) return;
     body.innerHTML = '';
     if (!state.quick.impuestos.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 6;
+      cell.colSpan = 7;
       cell.className = 'text-center text-muted py-3';
       cell.textContent = 'No se registran impuestos con los criterios seleccionados.';
       row.appendChild(cell);
@@ -1817,89 +1705,134 @@ function debounce(fn, delay = 300) {
       const row = document.createElement('tr');
       row.dataset.id = imp.id;
       if (imp.id === state.quick.currentImpuestoId) {
-        row.classList.add('is-selected');
+        row.classList.add('table-active');
       }
       const porcentaje = Number(imp.porcentaje ?? 0);
       row.innerHTML = `
-        <td class="fw-semibold">${imp.codigo}</td>
-        <td>${imp.nombre}</td>
+        <td class="fw-semibold">${escapeHtml(imp.codigo)}</td>
+        <td>${escapeHtml(imp.nombre)}</td>
         <td>${porcentaje.toFixed(2)}%</td>
         <td>${imp.incluido_en_precio ? 'Sí' : 'No'}</td>
         <td>${formatVigencia(imp.vigencia_desde, imp.vigencia_hasta)}</td>
         <td><span class="badge ${imp.activo ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}">${imp.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td class="text-end">
+          <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-primary" data-action="edit" data-id="${imp.id}">Editar</button>
+            <button type="button" class="btn btn-outline-secondary" data-action="toggle" data-id="${imp.id}">${imp.activo ? 'Desactivar' : 'Activar'}</button>
+            <button type="button" class="btn btn-outline-secondary" data-action="history" data-id="${imp.id}">Historial</button>
+          </div>
+        </td>
       `;
       fragment.appendChild(row);
     });
     body.appendChild(fragment);
   }
   
-  function handleImpuestoRowClick(event) {
-    const row = event.target.closest('tr[data-id]');
-    if (!row) return;
-    const id = Number(row.dataset.id);
+  function handleImpuestoTableClick(event) {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const id = Number(button.dataset.id);
+    if (!id) return;
+    const action = button.dataset.action;
     const impuesto = state.quick.impuestos.find((item) => item.id === id);
-    if (impuesto) {
+    if (!impuesto) return;
+    if (action === 'edit') {
       populateImpuestoForm(impuesto);
+    } else if (action === 'toggle') {
+      toggleImpuestoState(impuesto);
+    } else if (action === 'history') {
+      showImpuestoHistory(impuesto);
     }
   }
   
   function populateImpuestoForm(impuesto) {
-    const inputs = dom.quickAccess.impuestos;
-    if (!inputs) return;
+    if (!dom.impuestos?.form) return;
     state.quick.currentImpuestoId = impuesto.id;
-    inputs.id.value = impuesto.id;
-    inputs.codigo.value = impuesto.codigo || '';
-    inputs.nombre.value = impuesto.nombre || '';
-    inputs.porcentaje.value = Number(impuesto.porcentaje ?? 0);
-    inputs.vigenciaDesde.value = impuesto.vigencia_desde ? impuesto.vigencia_desde.substring(0, 10) : '';
-    inputs.vigenciaHasta.value = impuesto.vigencia_hasta ? impuesto.vigencia_hasta.substring(0, 10) : '';
-    inputs.incluido.checked = !!impuesto.incluido_en_precio;
-    inputs.activo.checked = impuesto.activo !== false;
-    inputs.delete.disabled = impuesto.activo === false;
-    Array.from(dom.quickAccess.impuestos.tableBody.querySelectorAll('tr')).forEach((row) => {
-      row.classList.toggle('is-selected', Number(row.dataset.id) === impuesto.id);
+    dom.impuestos.id.value = impuesto.id;
+    dom.impuestos.codigo.value = impuesto.codigo || '';
+    dom.impuestos.nombre.value = impuesto.nombre || '';
+    dom.impuestos.porcentaje.value = Number(impuesto.porcentaje ?? 0);
+    dom.impuestos.vigenciaDesde.value = impuesto.vigencia_desde ? impuesto.vigencia_desde.substring(0, 10) : '';
+    dom.impuestos.vigenciaHasta.value = impuesto.vigencia_hasta ? impuesto.vigencia_hasta.substring(0, 10) : '';
+    dom.impuestos.incluido.checked = !!impuesto.incluido_en_precio;
+    dom.impuestos.activo.checked = impuesto.activo !== false;
+    Array.from(dom.impuestos.tableBody.querySelectorAll('tr')).forEach((row) => {
+      row.classList.toggle('table-active', Number(row.dataset.id) === impuesto.id);
     });
   }
   
   function resetImpuestoForm() {
-    const inputs = dom.quickAccess.impuestos;
-    if (!inputs) return;
+    if (!dom.impuestos?.form) return;
+    dom.impuestos.form.reset();
+    dom.impuestos.id.value = '';
+    dom.impuestos.incluido.checked = false;
+    dom.impuestos.activo.checked = true;
     state.quick.currentImpuestoId = null;
-    if (inputs.form) inputs.form.reset();
-    inputs.id.value = '';
-    inputs.activo.checked = true;
-    inputs.incluido.checked = false;
-    if (inputs.delete) inputs.delete.disabled = true;
-    Array.from(dom.quickAccess.impuestos.tableBody?.querySelectorAll('tr') || []).forEach((row) => {
-      row.classList.remove('is-selected');
+    Array.from(dom.impuestos.tableBody?.querySelectorAll('tr') || []).forEach((row) => row.classList.remove('table-active'));
+  }
+  
+  function parseDateInput(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  }
+  
+  function validateImpuestoPayload(payload, excludeId) {
+    const start = parseDateInput(payload.vigencia_desde);
+    const end = parseDateInput(payload.vigencia_hasta);
+    if (start && end && start > end) {
+      return 'La vigencia hasta debe ser posterior a la vigencia desde.';
+    }
+    if (!payload.activo) {
+      return null;
+    }
+    const overlaps = state.quick.impuestos.some((item) => {
+      if (!item.activo) return false;
+      if (excludeId && item.id === excludeId) return false;
+      const itemStart = parseDateInput(item.vigencia_desde);
+      const itemEnd = parseDateInput(item.vigencia_hasta);
+      const startTime = start ? start.getTime() : Number.NEGATIVE_INFINITY;
+      const endTime = end ? end.getTime() : Number.POSITIVE_INFINITY;
+      const itemStartTime = itemStart ? itemStart.getTime() : Number.NEGATIVE_INFINITY;
+      const itemEndTime = itemEnd ? itemEnd.getTime() : Number.POSITIVE_INFINITY;
+      return startTime <= itemEndTime && itemStartTime <= endTime;
     });
+    if (overlaps) {
+      return 'Existe un impuesto activo con vigencia traslapada. Ajusta las fechas o desactiva el existente.';
+    }
+    return null;
   }
   
   async function submitImpuestoForm(event) {
     event.preventDefault();
-    const inputs = dom.quickAccess.impuestos;
-    if (!inputs) return;
-    const id = inputs.id.value ? Number(inputs.id.value) : null;
-    const codigo = inputs.codigo.value.trim();
-    const nombre = inputs.nombre.value.trim();
-    const porcentaje = inputs.porcentaje.value;
+    if (!dom.impuestos?.form) return;
+    const id = dom.impuestos.id.value ? Number(dom.impuestos.id.value) : null;
+    const codigo = dom.impuestos.codigo.value.trim();
+    const nombre = dom.impuestos.nombre.value.trim();
+    const porcentajeValue = dom.impuestos.porcentaje.value;
     if (!codigo || !nombre) {
       window.alert('Código y nombre son obligatorios.');
       return;
     }
-    if (porcentaje === '' || Number(porcentaje) < 0) {
+    if (porcentajeValue === '' || Number(porcentajeValue) < 0) {
       window.alert('El porcentaje debe ser mayor o igual a 0.');
       return;
     }
     const payload = {
       codigo,
       nombre,
-      porcentaje: Number(porcentaje),
-      incluido_en_precio: inputs.incluido.checked,
-      activo: inputs.activo.checked,
-      vigencia_desde: inputs.vigenciaDesde.value || null,
-      vigencia_hasta: inputs.vigenciaHasta.value || null,
+      porcentaje: Number(porcentajeValue),
+      incluido_en_precio: dom.impuestos.incluido.checked,
+      activo: dom.impuestos.activo.checked,
+      vigencia_desde: dom.impuestos.vigenciaDesde.value || null,
+      vigencia_hasta: dom.impuestos.vigenciaHasta.value || null,
     };
+    const validationMessage = validateImpuestoPayload(payload, id);
+    if (validationMessage) {
+      window.alert(validationMessage);
+      return;
+    }
     try {
       if (id) {
         await apiPut(`/impuestos/${id}`, payload);
@@ -1922,32 +1855,50 @@ function debounce(fn, delay = 300) {
     }
   }
   
-  async function deactivateImpuesto() {
-    const inputs = dom.quickAccess.impuestos;
-    if (!inputs?.id?.value) return;
-    const id = Number(inputs.id.value);
-    if (!id) return;
-    const confirmed = window.confirm('¿Desea desactivar este impuesto?');
+  async function toggleImpuestoState(impuesto) {
+    const nextState = !impuesto.activo;
+    const confirmed = window.confirm(`¿Desea ${nextState ? 'activar' : 'desactivar'} el impuesto ${impuesto.codigo}?`);
     if (!confirmed) return;
     try {
-      await apiDelete(`/impuestos/${id}`);
+      await apiPut(`/impuestos/${impuesto.id}`, { activo: nextState });
       await Promise.all([refreshImpuestosList(), loadCatalogs()]);
-      window.alert('Impuesto desactivado correctamente');
-      resetImpuestoForm();
+      window.alert(`Impuesto ${nextState ? 'activado' : 'desactivado'} correctamente`);
+      if (state.quick.currentImpuestoId === impuesto.id) {
+        const updated = state.quick.impuestos.find((item) => item.id === impuesto.id);
+        if (updated) {
+          populateImpuestoForm(updated);
+        }
+      }
     } catch (error) {
-      console.error('Error desactivando impuesto:', error);
-      window.alert(error.message || 'No se pudo desactivar el impuesto.');
+      console.error('Error actualizando impuesto:', error);
+      window.alert(error.message || 'No se pudo actualizar el impuesto.');
     }
   }
   
-  async function openEconfigModal() {
+  function showImpuestoHistory(impuesto) {
+    if (!dom.impuestos?.historyContent) return;
+    const creado = impuesto.creado_el ? formatDateTime(impuesto.creado_el) : 'Sin registro';
+    dom.impuestos.historyContent.innerHTML = `
+      <dl class="row mb-0">
+        <dt class="col-5">Código</dt><dd class="col-7">${escapeHtml(impuesto.codigo)}</dd>
+        <dt class="col-5">Nombre</dt><dd class="col-7">${escapeHtml(impuesto.nombre)}</dd>
+        <dt class="col-5">Porcentaje</dt><dd class="col-7">${Number(impuesto.porcentaje ?? 0).toFixed(2)}%</dd>
+        <dt class="col-5">Incluido en precio</dt><dd class="col-7">${impuesto.incluido_en_precio ? 'Sí' : 'No'}</dd>
+        <dt class="col-5">Vigencia</dt><dd class="col-7">${formatVigencia(impuesto.vigencia_desde, impuesto.vigencia_hasta)}</dd>
+        <dt class="col-5">Estado</dt><dd class="col-7">${impuesto.activo ? 'Activo' : 'Inactivo'}</dd>
+        <dt class="col-5">Creado el</dt><dd class="col-7">${creado}</dd>
+      </dl>
+    `;
+    const modal = getBootstrapModal(dom.impuestos.historyModal);
+    modal?.show();
+  }
+  
+  async function loadEconfig() {
     try {
       const response = await apiGet('/econconfig');
       const config = response?.config || response || null;
       state.quick.econconfig = config;
       populateEconfigForm(config);
-      const modal = getBootstrapModal(dom.quickAccess.econconfig.modal);
-      modal?.show();
     } catch (error) {
       console.error('Error obteniendo econconfig:', error);
       window.alert(error.message || 'No se pudo cargar la configuración económica.');
@@ -1955,40 +1906,83 @@ function debounce(fn, delay = 300) {
   }
   
   function populateEconfigForm(config) {
-    const inputs = dom.quickAccess.econconfig;
-    if (!inputs) return;
-    if (!config) {
-      inputs.form.reset();
-      inputs.moneda.value = state.catalogs.econconfig?.moneda_defecto || 'PEN';
-      inputs.decimales.value = state.catalogs.econconfig?.decimales ?? 2;
-      inputs.regla.value = state.catalogs.econconfig?.regla_redondeo || 'dos_decimales';
-      inputs.activo.checked = true;
+    if (!dom.econconfig?.form) return;
+    const fallback = state.catalogs.econconfig || {};
+    const current = config || state.quick.econconfig || fallback || {};
+    dom.econconfig.moneda.value = current.moneda_defecto || '';
+    dom.econconfig.decimales.value = current.decimales ?? 2;
+    dom.econconfig.regla.value = current.regla_redondeo || 'dos_decimales';
+    dom.econconfig.activo.checked = current.activo !== false;
+    if (dom.econconfig.updatedLabel) {
+      dom.econconfig.updatedLabel.textContent = current.actualizado_el
+        ? `Actualizado el ${formatDateTime(current.actualizado_el)}`
+        : 'Sin actualizaciones registradas';
+    }
+    updateEconfigPreview();
+  }
+  
+  function updateEconfigPreview() {
+    if (!dom.econconfig?.previewResult) return;
+    const rawValue = dom.econconfig.previewInput?.value;
+    if (!rawValue) {
+      dom.econconfig.previewResult.textContent = '—';
       return;
     }
-    inputs.moneda.value = config.moneda_defecto || '';
-    inputs.decimales.value = config.decimales ?? 2;
-    inputs.regla.value = config.regla_redondeo || 'dos_decimales';
-    inputs.activo.checked = config.activo !== false;
+    const number = Number(rawValue);
+    if (Number.isNaN(number)) {
+      dom.econconfig.previewResult.textContent = 'Valor inválido';
+      return;
+    }
+    const config = {
+      decimales: Number(dom.econconfig.decimales?.value ?? 2),
+      regla_redondeo: dom.econconfig.regla?.value || 'dos_decimales',
+    };
+    const rounded = applyPreviewRounding(number, config);
+    dom.econconfig.previewResult.textContent = Number.isFinite(rounded)
+      ? rounded.toFixed(config.decimales ?? 2)
+      : '—';
+  }
+  
+  function applyPreviewRounding(value, config) {
+    if (!config) return Number((value ?? 0).toFixed(2));
+    const decimales = Number.isInteger(config.decimales) ? config.decimales : 2;
+    const regla = config.regla_redondeo || 'dos_decimales';
+    const factor = 10 ** decimales;
+    const raw = Number(value ?? 0);
+    if (Number.isNaN(raw)) return 0;
+    switch (regla) {
+      case 'a_0_05':
+        return Math.ceil(raw * 20) / 20;
+      case 'entero_superior':
+        return Math.ceil(raw);
+      case 'dos_decimales':
+      default:
+        return Math.round(raw * factor) / factor;
+    }
   }
   
   async function submitEconfigForm(event) {
     event.preventDefault();
-    const inputs = dom.quickAccess.econconfig;
-    if (!inputs) return;
-    const payload = {
-      moneda_defecto: inputs.moneda.value.trim().toUpperCase(),
-      decimales: Number(inputs.decimales.value),
-      regla_redondeo: inputs.regla.value,
-      activo: inputs.activo.checked,
-    };
-    if (!payload.moneda_defecto || payload.moneda_defecto.length !== 3) {
+    if (!dom.econconfig?.form) return;
+    const moneda = dom.econconfig.moneda.value.trim().toUpperCase();
+    const decimalesValue = dom.econconfig.decimales.value;
+    const regla = dom.econconfig.regla.value;
+    const activo = dom.econconfig.activo.checked;
+    if (!moneda || moneda.length !== 3) {
       window.alert('La moneda debe tener 3 caracteres.');
       return;
     }
-    if (!Number.isInteger(payload.decimales) || payload.decimales < 0 || payload.decimales > 6) {
+    const decimales = Number(decimalesValue);
+    if (!Number.isInteger(decimales) || decimales < 0 || decimales > 6) {
       window.alert('Los decimales deben ser un número entre 0 y 6.');
       return;
     }
+    const payload = {
+      moneda_defecto: moneda,
+      decimales,
+      regla_redondeo: regla,
+      activo,
+    };
     try {
       const response = await apiPut('/econconfig', payload);
       const config = response?.config || payload;
@@ -1996,15 +1990,15 @@ function debounce(fn, delay = 300) {
       state.quick.econconfig = config;
       populateCatalogSelects();
       hydrateSimulatorInputs();
+      populateEconfigForm(config);
       window.alert('Configuración guardada correctamente');
-      const modal = getBootstrapModal(dom.quickAccess.econconfig.modal);
-      modal?.hide();
     } catch (error) {
       console.error('Error guardando econconfig:', error);
       window.alert(error.message || 'No se pudo guardar la configuración.');
     }
   }
-
+  
+  
   
 function exportCsv() {
   if (!state.rules.length) {
