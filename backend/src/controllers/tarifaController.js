@@ -537,10 +537,9 @@ function applyRounding(value, econconfig) {
       return Math.round(raw * factor) / factor;
   }
 }
-
 async function getCatalogs(req, res) {
   try {
-    const [servicios, planes, reglas, econ] = await Promise.all([
+    const [servicios, planes, planServicios, reglas, econ] = await Promise.all([
       prisma.servicio.findMany({
         select: { id: true, codigo: true, nombre: true, activo: true },
         orderBy: { nombre: 'asc' },
@@ -548,6 +547,14 @@ async function getCatalogs(req, res) {
       prisma.plan.findMany({
         select: { id: true, nombre: true, activo: true },
         orderBy: { nombre: 'asc' },
+      }),
+      prisma.planservicio.findMany({
+        select: {
+          id: true,
+          plan_id: true,
+          servicio_id: true,
+          activo: true,
+        },
       }),
       prisma.tarifacomision.findMany({
         select: {
@@ -572,6 +579,7 @@ async function getCatalogs(req, res) {
     const response = {
       servicios,
       planes,
+      planServicios,
       monedas: Array.from(monedasSet).sort(),
       metodos_pago: Array.from(metodosSet).sort(),
       regiones: Array.from(regionesSet).sort(),

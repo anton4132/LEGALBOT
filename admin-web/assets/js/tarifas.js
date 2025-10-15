@@ -62,6 +62,7 @@ function cloneTemplateFromCatalogs(tipo, catalogs) {
 const initialCatalogsState = {
   servicios: [],
   planes: [],
+  planServicios: [],
   monedas: [],
   metodos_pago: [],
   regiones: [],
@@ -122,6 +123,9 @@ state.wizard.data = createEmptyRule(initialCatalogsState);
 
 const dom = {};
 const bootstrapLib = typeof window !== 'undefined' ? window.bootstrap : undefined;
+let syncingParamForm = false;
+let syncingParamJson = false;
+
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -182,12 +186,14 @@ function cacheDom() {
     next: document.getElementById('tc-wizard-next'),
     prev: document.getElementById('tc-wizard-prev'),
     save: document.getElementById('tc-wizard-save'),
+    saveInactive: document.getElementById('tc-wizard-save-inactive'),
     form: document.getElementById('tc-wizard-form'),
     steps: Array.from(document.querySelectorAll('[data-tc-step]')),
     indicators: Array.from(document.querySelectorAll('[data-tc-step-indicator]')),
     alert: document.getElementById('tc-conflict-alert'),
     inputs: {
       codigo: document.getElementById('tc-input-codigo'),
+      codigoRegenerar: document.getElementById('tc-btn-codigo-regenerar'),
       servicio: document.getElementById('tc-input-servicio'),
       plan: document.getElementById('tc-input-plan'),
       rol: document.getElementById('tc-input-rol'),
@@ -213,6 +219,7 @@ function cacheDom() {
     labels: {
       incluyeImpuesto: document.querySelector('label[for="tc-input-incluye-impuesto"]'),
     },
+    parametrosForm: document.getElementById('tc-parametros-form'),
     manualBackdrop: null,
 
   };
@@ -248,6 +255,9 @@ function cacheDom() {
   };
   if (dom.wizard.labels?.incluyeImpuesto) {
     dom.wizard.labels.defaultIncluyeImpuesto = dom.wizard.labels.incluyeImpuesto.textContent.trim();
+    if (bootstrapLib?.Tooltip) {
+      dom.wizard.labels.incluyeImpuestoTooltip = bootstrapLib.Tooltip.getOrCreateInstance(dom.wizard.labels.incluyeImpuesto);
+    }
   }
 }
 
@@ -338,6 +348,9 @@ function bindEvents() {
       await runPanelSimulation();
     });
   }
+  if (dom.simulator.inputs?.plan) {
+    dom.simulator.inputs.plan.addEventListener('change', handleSimulatorPlanChange);
+  }
   if (dom.wizard.close) {
     dom.wizard.close.addEventListener('click', () => toggleWizard(false));
   }
@@ -353,15 +366,18 @@ function bindEvents() {
   if (dom.wizard.save) {
     dom.wizard.save.addEventListener('click', saveWizard);
   }
+  if (dom.wizard.saveInactive) {
+    dom.wizard.saveInactive.addEventListener('click', () => saveWizard(true));
+  }
   if (dom.wizard.inputs.tipoCalculo) {
     dom.wizard.inputs.tipoCalculo.addEventListener('change', handleTipoCalculoChange);
+  }
+  if (dom.wizard.inputs.plan) {
+    dom.wizard.inputs.plan.addEventListener('change', handleWizardPlanChange);
   }
 
   if (dom.wizard.inputs.servicio) {
     dom.wizard.inputs.servicio.addEventListener('change', handleWizardServicioChange);
-  }
-  if (dom.wizard.inputs.plan) {
-    dom.wizard.inputs.plan.addEventListener('change', handleWizardPlanChange);
   }
   if (dom.wizard.inputs.metodo) {
     dom.wizard.inputs.metodo.addEventListener('change', handleWizardMetodoChange);
@@ -378,6 +394,20 @@ function bindEvents() {
   }
   if (dom.wizard.inputs.activo) {
     dom.wizard.inputs.activo.addEventListener('change', updateCodigoReadonlyState);
+  }
+  if (dom.wizard.inputs.codigoRegenerar) {
+    dom.wizard.inputs.codigoRegenerar.addEventListener('click', handleCodigoRegenerar);
+  }
+  if (dom.wizard.inputs.parametros) {
+    dom.wizard.inputs.parametros.addEventListener('input', debounce(handleParametrosJsonChange, 400));
+  }
+  if (dom.wizard.parametrosForm) {
+    dom.wizard.parametrosForm.addEventListener('input', handleParametrosFormChange);
+    dom.wizard.parametrosForm.addEventListener('change', handleParametrosFormChange);
+    dom.wizard.parametrosForm.addEventListener('click', handleParametrosFormClick);
+  }
+  if (dom.wizard.alert) {
+    dom.wizard.alert.addEventListener('click', handleConflictAlertClick);
   }
 
   if (dom.wizard.step3Simulate) {
@@ -597,48 +627,264 @@ function apiDelete(path) {
       if (impuesto.porcentaje !== undefined && impuesto.porcentaje !== null) {
         const numeric = Number(impuesto.porcentaje);
         if (Number.isFinite(numeric)) {
-          porcentaje = ` ${numeric.toFixed(2)}%`;
+          const percentageValue = numeric * 100;
+          porcentaje = percentageValue.toLocaleString('es-PE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
         }
       }
       const nombre = impuesto.nombre || impuesto.codigo || 'Impuesto';
-      label.textContent = `Incluye impuesto (${nombre}${porcentaje})`;
+      label.textContent = `Incluye impuesto (${nombre} Vigente${porcentaje ? ` ${porcentaje}%` : ''})`;
     } else {
       label.textContent = dom.wizard.labels.defaultIncluyeImpuesto || 'Incluye impuesto';
     }
   }
-  
-  function getPlansByServicio(servicioId) {
-    const id = Number(servicioId);
-    if (!servicioId) return state.catalogs.planes || [];
-    return (state.catalogs.planes || []).filter((plan) => Number(plan.servicio_id) === id);
+  function getServiciosByPlan(planId) {
+    if (!planId) return state.catalogs.servicios || [];
+    const id = Number(planId);
+    if (!Number.isFinite(id)) return state.catalogs.servicios || [];
+    const relations = (state.catalogs.planServicios || []).filter((rel) => Number(rel.plan_id) === id && rel.activo !== false);
+    if (!relations.length) return state.catalogs.servicios || [];
+    const allowed = new Set(relations.map((rel) => Number(rel.servicio_id)));
+    return (state.catalogs.servicios || []).filter((servicio) => allowed.has(Number(servicio.id)));
   }
   
-  function refreshPlanOptionsForSelect(select, servicioId, emptyLabel = 'Todos') {
+  function refreshServicioOptionsForSelect(select, planId, emptyLabel = 'Todos') {
     if (!select) return;
     const current = select.value;
-    const planes = getPlansByServicio(servicioId);
-    fillSelect(select, planes, { value: 'id', label: 'nombre' }, true, emptyLabel);
+    const servicios = getServiciosByPlan(planId);
+    fillSelect(select, servicios, { value: 'id', label: (s) => `${s.codigo} - ${s.nombre}` }, true, emptyLabel);
     if (current && Array.from(select.options).some((option) => option.value === current)) {
       select.value = current;
     } else if (select.value !== current) {
+      select.value = '';
       select.dispatchEvent(new Event('change'));
     }
   }
   
-  function syncPlanDependencies() {
-    const wizardServicio = dom.wizard.inputs?.servicio?.value || '';
-    refreshPlanOptionsForSelect(dom.wizard.inputs?.plan, wizardServicio, 'Todos');
-    refreshPlanOptionsForSelect(dom.wizard.inputs?.step3Plan, wizardServicio, 'Todos');
-    const simulatorServicio = dom.simulator.inputs?.servicio?.value || '';
-    refreshPlanOptionsForSelect(dom.simulator.inputs?.plan, simulatorServicio, 'Todos');
+  function syncServicioDependencies() {
+    const wizardPlan = dom.wizard.inputs?.plan?.value || '';
+    refreshServicioOptionsForSelect(dom.wizard.inputs?.servicio, wizardPlan, 'Todos');
+    const simulatorPlan = dom.simulator.inputs?.plan?.value || '';
+    refreshServicioOptionsForSelect(dom.simulator.inputs?.servicio, simulatorPlan, 'Todos');
   }
-  
+    
   function ensureCodigoValue() {
     if (!dom.wizard.inputs?.codigo) return;
     if (!dom.wizard.inputs.codigo.value) {
       const generated = generateCodigo();
       dom.wizard.inputs.codigo.value = generated;
       state.wizard.data = { ...state.wizard.data, codigo: generated };
+    }
+  }
+  
+  function cloneParametros(parametros) {
+    try {
+      return JSON.parse(JSON.stringify(parametros ?? {}));
+    } catch (error) {
+      return {};
+    }
+  }
+  
+  function updateParametrosJson(parametros) {
+    if (!dom.wizard.inputs?.parametros) return;
+    syncingParamJson = true;
+    dom.wizard.inputs.parametros.classList.remove('is-invalid');
+    dom.wizard.inputs.parametros.value = JSON.stringify(parametros ?? {}, null, 2);
+    syncingParamJson = false;
+  }
+  
+  function setParametrosState(parametros, { skipForm = false, skipJson = false } = {}) {
+    const normalized = parametros && typeof parametros === 'object' ? parametros : {};
+    state.wizard.data = { ...state.wizard.data, parametros: normalized };
+    if (!skipForm) {
+      renderParametrosForm(dom.wizard.inputs?.tipoCalculo?.value || state.wizard.data.tipo_calculo || 'fijo', normalized);
+    }
+    if (!skipJson) {
+      updateParametrosJson(normalized);
+    }
+  }
+  
+  function renderParametrosForm(tipo, parametros = {}) {
+    if (!dom.wizard.parametrosForm) return;
+    syncingParamForm = true;
+    const container = dom.wizard.parametrosForm;
+    container.innerHTML = '';
+    container.dataset.tipo = tipo;
+  
+    const builders = {
+      fijo: () => renderSimpleParametros(container, tipo, [
+        { key: 'monto', label: 'Monto', min: 0, step: 0.01 },
+      ], parametros),
+      minimo_mas_variable: () => renderSimpleParametros(container, tipo, [
+        { key: 'minimo', label: 'Mínimo', min: 0, step: 0.01 },
+        { key: 'porcentaje_variable', label: 'Porcentaje variable (%)', min: 0, step: 0.01 },
+      ], parametros),
+      paquete: () => renderSimpleParametros(container, tipo, [
+        { key: 'tamano_bloque', label: 'Tamaño de bloque', min: 0, step: 1, help: 'Debe ser mayor a 0.' },
+        { key: 'precio_bloque', label: 'Precio por bloque', min: 0, step: 0.01 },
+      ], parametros),
+      consumo_ia: () => renderSimpleParametros(container, tipo, [
+        { key: 'rate', label: 'Tarifa por unidad', min: 0, step: 0.0001 },
+        { key: 'minimo', label: 'Mínimo facturable', min: 0, step: 0.01 },
+      ], parametros),
+      estacional: () => renderEstacionalParametros(container, parametros),
+    };
+  
+    if (builders[tipo]) {
+      builders[tipo]();
+    }
+    syncingParamForm = false;
+  }
+  
+  function renderSimpleParametros(container, tipo, fields, parametros) {
+    fields.forEach((field) => {
+      const value = parametros?.[field.key];
+      const wrapper = document.createElement('div');
+      wrapper.className = 'col-12 col-md-6 col-lg-4 form-group';
+      const label = document.createElement('label');
+      label.className = 'form-label';
+      label.setAttribute('for', `tc-param-${tipo}-${field.key}`);
+      label.textContent = field.label;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.className = 'form-control';
+      input.id = `tc-param-${tipo}-${field.key}`;
+      if (field.min !== undefined) input.min = field.min;
+      if (field.step !== undefined) input.step = field.step;
+      input.dataset.paramKey = field.key;
+      input.dataset.paramType = 'number';
+      input.value = value ?? '';
+      wrapper.appendChild(label);
+      wrapper.appendChild(input);
+      if (field.help) {
+        const help = document.createElement('div');
+        help.className = 'form-text';
+        help.textContent = field.help;
+        wrapper.appendChild(help);
+      }
+      container.appendChild(wrapper);
+    });
+  }
+  
+  function renderEstacionalParametros(container, parametros) {
+    const rows = Array.isArray(parametros?.multiplicadores) && parametros.multiplicadores.length
+      ? parametros.multiplicadores
+      : [{ desde: '', hasta: '', factor: 1 }];
+    const header = document.createElement('div');
+    header.className = 'col-12';
+    header.innerHTML = '<p class="text-muted small mb-2">Configura multiplicadores por rango de vigencia. No deben solaparse.</p>';
+    container.appendChild(header);
+    rows.forEach((row, index) => {
+      const rowWrapper = document.createElement('div');
+      rowWrapper.className = 'col-12';
+      rowWrapper.dataset.paramIndex = index;
+      const inner = document.createElement('div');
+      inner.className = 'row g-2 align-items-end';
+      inner.innerHTML = `
+        <div class="col-12 col-md-3">
+          <label class="form-label" for="tc-param-estacional-desde-${index}">Desde</label>
+          <input type="date" class="form-control" id="tc-param-estacional-desde-${index}" data-param-collection="multiplicadores" data-param-index="${index}" data-param-key="desde" value="${row.desde ?? ''}" />
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label" for="tc-param-estacional-hasta-${index}">Hasta</label>
+          <input type="date" class="form-control" id="tc-param-estacional-hasta-${index}" data-param-collection="multiplicadores" data-param-index="${index}" data-param-key="hasta" value="${row.hasta ?? ''}" />
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label" for="tc-param-estacional-factor-${index}">Factor</label>
+          <input type="number" class="form-control" id="tc-param-estacional-factor-${index}" min="0" step="0.01" data-param-collection="multiplicadores" data-param-index="${index}" data-param-key="factor" data-param-type="number" value="${row.factor ?? 1}" />
+        </div>
+        <div class="col-12 col-md-3 d-flex gap-2 align-items-end justify-content-end">
+          <button type="button" class="btn btn-outline-danger" data-param-action="remove-multiplicador" data-param-index="${index}" ${rows.length === 1 ? 'disabled' : ''}>Eliminar</button>
+        </div>
+      `;
+      rowWrapper.appendChild(inner);
+      container.appendChild(rowWrapper);
+    });
+    const footer = document.createElement('div');
+    footer.className = 'col-12 d-flex justify-content-end';
+    footer.innerHTML = '<button type="button" class="btn btn-outline-primary" data-param-action="add-multiplicador">Agregar</button>';
+    container.appendChild(footer);
+  }
+  
+  function handleParametrosFormChange(event) {
+    if (syncingParamForm) return;
+    const target = event.target;
+    if (!target || (!target.dataset.paramKey && !target.dataset.paramCollection)) return;
+    const parametros = cloneParametros(state.wizard.data.parametros);
+    if (target.dataset.paramCollection === 'multiplicadores') {
+      const index = Number(target.dataset.paramIndex);
+      if (!Array.isArray(parametros.multiplicadores)) {
+        parametros.multiplicadores = [];
+      }
+      if (!parametros.multiplicadores[index]) {
+        parametros.multiplicadores[index] = { desde: '', hasta: '', factor: 1 };
+      }
+      const key = target.dataset.paramKey;
+      if (key) {
+        if (target.dataset.paramType === 'number') {
+          parametros.multiplicadores[index][key] = target.value === '' ? '' : Number(target.value);
+        } else {
+          parametros.multiplicadores[index][key] = target.value;
+        }
+      }
+    } else if (target.dataset.paramKey) {
+      const key = target.dataset.paramKey;
+      if (target.dataset.paramType === 'number') {
+        parametros[key] = target.value === '' ? '' : Number(target.value);
+      } else {
+        parametros[key] = target.value;
+      }
+    } else {
+      return;
+    }
+    setParametrosState(parametros, { skipForm: true });
+    if (dom.wizard.inputs?.parametros) {
+      dom.wizard.inputs.parametros.classList.remove('is-invalid');
+    }
+  }
+  
+  function handleParametrosFormClick(event) {
+    const button = event.target.closest('[data-param-action]');
+    if (!button) return;
+    const action = button.dataset.paramAction;
+    if (action === 'add-multiplicador') {
+      const parametros = cloneParametros(state.wizard.data.parametros);
+      const list = Array.isArray(parametros.multiplicadores) ? parametros.multiplicadores.slice() : [];
+      list.push({ desde: '', hasta: '', factor: 1 });
+      parametros.multiplicadores = list;
+      setParametrosState(parametros);
+    } else if (action === 'remove-multiplicador') {
+      const index = Number(button.dataset.paramIndex);
+      const parametros = cloneParametros(state.wizard.data.parametros);
+      const list = Array.isArray(parametros.multiplicadores) ? parametros.multiplicadores.slice() : [];
+      if (list.length > 1 && index >= 0 && index < list.length) {
+        list.splice(index, 1);
+        parametros.multiplicadores = list;
+        setParametrosState(parametros);
+      }
+    }
+  }
+  
+  function handleParametrosJsonChange() {
+    if (syncingParamJson) return;
+    if (!dom.wizard.inputs?.parametros) return;
+    const raw = dom.wizard.inputs.parametros.value.trim();
+    if (!raw) {
+      const template = cloneTemplate(dom.wizard.inputs?.tipoCalculo?.value || 'fijo');
+      setParametrosState(template, { skipJson: true });
+      dom.wizard.inputs.parametros.classList.remove('is-invalid');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (dom.wizard.inputs?.parametros) {
+        dom.wizard.inputs.parametros.classList.remove('is-invalid');
+      }
+      setParametrosState(parsed, { skipJson: true });
+    } catch (error) {
+      dom.wizard.inputs.parametros.classList.add('is-invalid');
     }
   }
   
@@ -666,7 +912,7 @@ function apiDelete(path) {
           if (rule.min !== undefined && number < rule.min) {
             errors.push(`"${key}" debe ser mayor o igual a ${rule.min}.`);
           }
-          if (rule.exclusive && number <= rule.min) {
+          if (rule.exclusive && rule.min !== undefined && number <= rule.min) {
             errors.push(`"${key}" debe ser mayor a ${rule.min}.`);
           }
         } else if (rule.type === 'array') {
@@ -695,6 +941,8 @@ function apiDelete(path) {
                       errors.push(`"${key}[${index}].${prop}" debe ser numérico.`);
                     } else if (propRule.min !== undefined && number < propRule.min) {
                       errors.push(`"${key}[${index}].${prop}" debe ser mayor o igual a ${propRule.min}.`);
+                    } else if (propRule.exclusive && propRule.min !== undefined && number <= propRule.min) {
+                      errors.push(`"${key}[${index}].${prop}" debe ser mayor a ${propRule.min}.`);
                     }
                   }
                 });
@@ -706,12 +954,47 @@ function apiDelete(path) {
     }
     return { valid: errors.length === 0, message: errors.join('\n') };
   }
+
+
+  function validateEstacionalRanges(multiplicadores) {
+    if (!Array.isArray(multiplicadores)) {
+      return { valid: true, messages: [] };
+    }
+    const errors = [];
+    const ranges = multiplicadores.map((item, index) => {
+      const desde = item?.desde ? new Date(item.desde) : null;
+      const hasta = item?.hasta ? new Date(item.hasta) : null;
+      const startTime = desde && !Number.isNaN(desde.getTime()) ? desde.getTime() : Number.NEGATIVE_INFINITY;
+      const endTime = hasta && !Number.isNaN(hasta.getTime()) ? hasta.getTime() : Number.POSITIVE_INFINITY;
+      if (desde && Number.isNaN(desde.getTime())) {
+        errors.push(`Fila ${index + 1}: la fecha "desde" es inválida.`);
+      }
+      if (hasta && Number.isNaN(hasta.getTime())) {
+        errors.push(`Fila ${index + 1}: la fecha "hasta" es inválida.`);
+      }
+      if (startTime > endTime) {
+        errors.push(`Fila ${index + 1}: la fecha "hasta" debe ser posterior a "desde".`);
+      }
+      return { index, startTime, endTime };
+    });
+    for (let i = 0; i < ranges.length; i += 1) {
+      for (let j = i + 1; j < ranges.length; j += 1) {
+        const a = ranges[i];
+        const b = ranges[j];
+        if (a.startTime <= b.endTime && b.startTime <= a.endTime) {
+          errors.push(`Las filas ${a.index + 1} y ${b.index + 1} se solapan.`);
+        }
+      }
+    }
+    return { valid: errors.length === 0, messages: errors };
+  }
 async function loadCatalogs() {
   try {
     const data = await apiGet('/tarifas/catalogs');
     state.catalogs = {
       servicios: data.servicios || [],
       planes: data.planes || [],
+      planServicios: data.planServicios || data.plan_servicios || [],
       monedas: data.monedas || [],
       metodos_pago: data.metodos_pago || [],
       regiones: data.regiones || [],
@@ -721,7 +1004,7 @@ async function loadCatalogs() {
     };
     state.quick.econconfig = data.econconfig || null;
     populateCatalogSelects();
-    syncPlanDependencies();
+    syncServicioDependencies();
     updateImpuestoLabel(dom.wizard.inputs?.vigenciaDesde?.value || dom.wizard.inputs?.vigenciaHasta?.value || null);
   } catch (error) {
     console.error('Error cargando catálogos', error);
@@ -735,12 +1018,12 @@ function populateCatalogSelects() {
   fillSelect(dom.filters.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true);
   
   const wizardInputs = dom.wizard.inputs;
-  fillSelect(wizardInputs.servicio, servicios, { value: 'id', label: (s) => `${s.codigo} - ${s.nombre}` }, true, 'Todos');
   fillSelect(wizardInputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
+  refreshServicioOptionsForSelect(wizardInputs.servicio, wizardInputs.plan?.value || '', 'Todos');
   fillSelect(wizardInputs.moneda, monedas.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, econconfig?.moneda_defecto || '');
   fillSelect(wizardInputs.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, 'Todos');
-  fillSelect(dom.simulator.inputs.servicio, servicios, { value: 'id', label: (s) => `${s.codigo} - ${s.nombre}` }, true, 'Todos');
   fillSelect(dom.simulator.inputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
+  refreshServicioOptionsForSelect(dom.simulator.inputs.servicio, dom.simulator.inputs.plan?.value || '', 'Todos');
   fillSelect(dom.simulator.inputs.moneda, monedas.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, econconfig?.moneda_defecto || '');
   fillSelect(dom.simulator.inputs.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, 'Todos');
   if (wizardInputs.rol && !wizardInputs.rol.value) {
@@ -787,7 +1070,7 @@ function resetFilters() {
   if (dom.filters.metodo) dom.filters.metodo.value = '';
   if (dom.filters.vigencia) dom.filters.vigencia.value = 'vigentes';
   state.pagination.page = 1;
-  syncPlanDependencies();
+  syncServicioDependencies();
 
 }
 
@@ -1043,7 +1326,7 @@ function resetWizardFormState() {
   hideConflict();
   if (dom.wizard.form) dom.wizard.form.reset();
   if (dom.wizard.step3Result) dom.wizard.step3Result.innerHTML = '';
-  if (dom.wizard.inputs.codigo) dom.wizard.inputs.codigo.readOnly = false;
+  updateCodigoReadonlyState();
   updateImpuestoLabel(null);
   updateWizardUi();
 }
@@ -1111,16 +1394,17 @@ function populateWizardForm() {
   const inputs = dom.wizard.inputs;
   if (!inputs) return;
   dom.wizard.title.textContent =
-  state.wizard.mode === 'edit'
-  ? `Editar regla ${data.codigo}`
-  : state.wizard.mode === 'clone'
-    ? 'Clonar regla'
-    : 'Nueva regla';  inputs.codigo.value = data.codigo || '';
+    state.wizard.mode === 'edit'
+      ? `Editar regla ${data.codigo}`
+      : state.wizard.mode === 'clone'
+        ? 'Clonar regla'
+        : 'Nueva regla';
+  inputs.codigo.value = data.codigo || '';
   ensureCodigoValue();
+  const planValue = data.plan_id || '';
+  inputs.plan.value = planValue;
+  refreshServicioOptionsForSelect(inputs.servicio, planValue, 'Todos');
   inputs.servicio.value = data.servicio_id || '';
-  syncPlanDependencies();
-  inputs.plan.value = data.plan_id || '';
-  inputs.rol.value = data.rol_aplica || 'ambos';
   const defaultMoneda = state.catalogs.econconfig?.moneda_defecto || '';
   inputs.moneda.value = data.moneda || defaultMoneda;
   state.wizard.data.moneda = inputs.moneda.value;
@@ -1175,11 +1459,15 @@ function updateWizardUi() {
     const isCurrent = indicatorStep === step;
     indicator.classList.toggle('active', isCurrent);
     indicator.classList.toggle('btn-primary', isCurrent);
-    indicator.classList.toggle('btn-outline-primary', !isCurrent);    indicator.disabled = indicatorStep > step;
+    indicator.classList.toggle('btn-outline-primary', !isCurrent);
+    indicator.disabled = indicatorStep > step;
   });
   dom.wizard.prev.hidden = step === 1;
   dom.wizard.next.hidden = step === 3;
   dom.wizard.save.hidden = step !== 3;
+  if (dom.wizard.saveInactive) {
+    dom.wizard.saveInactive.hidden = step !== 3;
+  }
 }
 
 function validateCurrentStep() {
@@ -1200,21 +1488,18 @@ function captureStep1() {
   if (!codigo) {
     inputs.codigo.setCustomValidity('El código es obligatorio');
     inputs.codigo.reportValidity();
-    if (inputs.descripcion.value.length > 160) {
-      inputs.descripcion.setCustomValidity('La descripción no puede exceder 160 caracteres');
-      inputs.descripcion.reportValidity();
-      return false;
-    }
-    inputs.descripcion.setCustomValidity('');
-    if (!inputs.servicio.value) {
-      inputs.servicio.setCustomValidity('Debe seleccionar un servicio');
-      inputs.servicio.reportValidity();
-      return false;
-    }
-    inputs.servicio.setCustomValidity('');
     return false;
   }
   inputs.codigo.setCustomValidity('');
+  if (inputs.descripcion.value.length > 160) {
+    inputs.descripcion.setCustomValidity('La descripción no puede exceder 160 caracteres');
+    inputs.descripcion.reportValidity();
+    return false;
+  }
+  inputs.descripcion.setCustomValidity('');
+  if (inputs.servicio) {
+    inputs.servicio.setCustomValidity('');
+  }
   const desde = inputs.vigenciaDesde.value ? new Date(inputs.vigenciaDesde.value) : null;
   const hasta = inputs.vigenciaHasta.value ? new Date(inputs.vigenciaHasta.value) : null;
   if (desde && hasta && desde > hasta) {
@@ -1253,6 +1538,16 @@ function captureStep1() {
     incluye_impuesto: inputs.incluyeImpuesto?.checked || false,
     activo: inputs.activo.checked,
   };
+
+  const payload = buildRulePayload(state.wizard.data);
+  hideConflict();
+  if (!validateUniqueCombination(payload)) {
+    return false;
+  }
+  if (payload.activo && !validateOverlap(payload)) {
+    return false;
+  }
+  hideConflict();
   return true;
 }
 
@@ -1264,7 +1559,13 @@ function captureStep2() {
     parametros = inputs.parametros.value ? JSON.parse(inputs.parametros.value) : {};
   } catch (error) {
     window.alert('El JSON de parámetros no es válido');
+    if (dom.wizard.inputs?.parametros) {
+      dom.wizard.inputs.parametros.classList.add('is-invalid');
+    }
     return false;
+  }
+  if (dom.wizard.inputs?.parametros) {
+    dom.wizard.inputs.parametros.classList.remove('is-invalid');
   }
   if (inputs.descripcion.value.length > 160) {
     inputs.descripcion.setCustomValidity('La descripción no puede exceder 160 caracteres');
@@ -1272,18 +1573,25 @@ function captureStep2() {
     return false;
   }
   inputs.descripcion.setCustomValidity('');
-  if (!inputs.servicio.value) {
-    inputs.servicio.setCustomValidity('Debe seleccionar un servicio');
-    inputs.servicio.reportValidity();
-    return false;
-  }
-  inputs.servicio.setCustomValidity('');
   if (tipo === 'estacional' && (!inputs.valor.value || Number(inputs.valor.value) < 0)) {
     inputs.valor.setCustomValidity('Debe establecer un valor base para reglas estacionales');
     inputs.valor.reportValidity();
     return false;
   }
   inputs.valor.setCustomValidity('');
+  const schemaValidation = validateParametrosSchema(tipo, parametros);
+  if (!schemaValidation.valid) {
+    window.alert(schemaValidation.message || 'Verifica los parámetros ingresados.');
+    return false;
+  }
+  if (tipo === 'estacional') {
+    const seasonalValidation = validateEstacionalRanges(parametros.multiplicadores);
+    if (!seasonalValidation.valid) {
+      window.alert(seasonalValidation.messages.join('\n'));
+      return false;
+    }
+  }
+  setParametrosState(parametros);
   state.wizard.data = {
     ...state.wizard.data,
     tipo_calculo: tipo,
@@ -1312,11 +1620,13 @@ function needsPriority(servicioId, planId, rol, moneda, metodo, region) {
 
 function handleTipoCalculoChange() {
   const tipo = dom.wizard.inputs.tipoCalculo.value;
-  const template = cloneTemplate(tipo);
-  const current = dom.wizard.inputs.parametros.value.trim();
-  if (!current) {
-    dom.wizard.inputs.parametros.value = JSON.stringify(template, null, 2);
+  const previousTipo = state.wizard.data.tipo_calculo;
+  let parametros = cloneParametros(state.wizard.data.parametros);
+  if (!parametros || !Object.keys(parametros).length || previousTipo !== tipo) {
+    parametros = cloneTemplate(tipo);
   }
+  state.wizard.data = { ...state.wizard.data, tipo_calculo: tipo };
+  setParametrosState(parametros);
   const showValor = tipo === 'estacional';
   const valorGroup = dom.wizard.inputs.valor.closest('.form-group');
   if (valorGroup) {
@@ -1325,38 +1635,69 @@ function handleTipoCalculoChange() {
 }
 
 function handleWizardServicioChange() {
-  const servicioId = dom.wizard.inputs.servicio.value;
-  syncPlanDependencies();
-  if (!getPlansByServicio(servicioId).some((plan) => `${plan.id}` === dom.wizard.inputs.plan.value)) {
-    dom.wizard.inputs.plan.value = '';
-  }
   dom.wizard.inputs.step3Plan.value = dom.wizard.inputs.plan.value || '';
 }
 
 function handleWizardPlanChange() {
-  dom.wizard.inputs.step3Plan.value = dom.wizard.inputs.plan.value || '';
+  const planValue = dom.wizard.inputs.plan.value || '';
+  refreshServicioOptionsForSelect(dom.wizard.inputs.servicio, planValue, 'Todos');
+  dom.wizard.inputs.step3Plan.value = planValue;
 }
 
 function handleWizardMetodoChange() {
   dom.wizard.inputs.step3Metodo.value = dom.wizard.inputs.metodo.value || '';
 }
 
+function handleCodigoRegenerar() {
+  const generated = generateCodigo();
+  if (dom.wizard.inputs.codigo) {
+    dom.wizard.inputs.codigo.value = generated;
+  }
+  state.wizard.data = { ...state.wizard.data, codigo: generated };
+}
+
+function handleSimulatorPlanChange() {
+  const planValue = dom.simulator.inputs.plan.value || '';
+  refreshServicioOptionsForSelect(dom.simulator.inputs.servicio, planValue, 'Todos');
+}
+
+function handleConflictAlertClick(event) {
+  const button = event.target.closest('[data-tc-action="view-rules"]');
+  if (!button) return;
+  toggleWizard(false);
+  if (dom.table?.body) {
+    dom.table.body.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 function updateCodigoReadonlyState() {
   if (!dom.wizard.inputs.codigo) return;
-  const isDraft = !dom.wizard.inputs.activo?.checked;
-  const shouldLock = state.wizard.mode === 'edit' && !isDraft;
-  dom.wizard.inputs.codigo.readOnly = shouldLock;
+  const isActive = dom.wizard.inputs.activo?.checked;
+  dom.wizard.inputs.codigo.readOnly = !!isActive;
+  if (dom.wizard.inputs.codigoRegenerar) {
+    dom.wizard.inputs.codigoRegenerar.disabled = isActive && state.wizard.mode === 'edit';
+  }
 }
 
 function cloneTemplate(tipo, catalogs) {
   const sourceCatalogs = catalogs !== undefined ? catalogs : state.catalogs;
   return cloneTemplateFromCatalogs(tipo, sourceCatalogs);
 }
-async function saveWizard() {
+async function saveWizard(forceInactive = false) {
+  if (forceInactive && dom.wizard.inputs?.activo) {
+    dom.wizard.inputs.activo.checked = false;
+    updateCodigoReadonlyState();
+  }
   if (!captureStep1() || !captureStep2()) return;
+  if (forceInactive) {
+    state.wizard.data = { ...state.wizard.data, activo: false };
+  }
   hideConflict();
   try {
     const payload = buildRulePayload(state.wizard.data);
+    if (forceInactive) {
+      payload.activo = false;
+    }
     if (!validateRuleBusiness(payload)) {
       return;
     }
@@ -1406,12 +1747,16 @@ function buildRulePayload(data) {
 
 function validateRuleBusiness(payload) {
   if (!payload) return true;
+  hideConflict();
+
   if (!validateUniqueCombination(payload)) {
     return false;
   }
   if (payload.activo && !validateOverlap(payload)) {
     return false;
   }
+  hideConflict();
+
   return true;
 }
 
@@ -1419,9 +1764,9 @@ function sameScopeValue(ruleValue, payloadValue) {
   return normalizeNullableValue(ruleValue) === normalizeNullableValue(payloadValue);
 }
 
-function validateUniqueCombination(payload) {
+function validateUniqueCombination(payload, { silent = false } = {}) {
   const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
-  const duplicate = state.rules.find((rule) => {
+  const duplicates = state.rules.filter((rule) => {
     if (currentId && rule.id === currentId) return false;
     if (!!rule.activo !== !!payload.activo) return false;
     if (!sameScopeValue(rule.servicio_id, payload.servicio_id)) return false;
@@ -1429,20 +1774,23 @@ function validateUniqueCombination(payload) {
     if (!sameScopeValue(rule.rol_aplica, payload.rol_aplica)) return false;
     if (!sameScopeValue(rule.ambito_region, payload.ambito_region)) return false;
     if (!sameScopeValue(rule.metodo_pago, payload.metodo_pago)) return false;
+    if (!sameScopeValue(rule.moneda, payload.moneda)) return false;
     if (normalizeDateValue(rule.vigencia_desde) !== normalizeDateValue(payload.vigencia_desde)) return false;
     if (normalizeDateValue(rule.vigencia_hasta) !== normalizeDateValue(payload.vigencia_hasta)) return false;
     return true;
   });
-  if (duplicate) {
-    window.alert('Ya existe una regla con la misma combinación y vigencia. Ajusta los valores antes de continuar.');
+  if (duplicates.length) {
+    if (!silent) {
+      showConflict(duplicates, 'Ya existe una regla con la misma combinación de ámbito y vigencia.', { reason: 'duplicate' });
+    }
     return false;
   }
   return true;
 }
 
-function validateOverlap(payload) {
+function validateOverlap(payload, { silent = false } = {}) {
   const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
-  const conflicting = state.rules.find((rule) => {
+  const conflicts = state.rules.filter((rule) => {
     if (!rule.activo) return false;
     if (currentId && rule.id === currentId) return false;
     if (!sameScopeValue(rule.servicio_id, payload.servicio_id)) return false;
@@ -1453,30 +1801,43 @@ function validateOverlap(payload) {
     if (!sameScopeValue(rule.moneda, payload.moneda)) return false;
     return rangesOverlap(rule.vigencia_desde, rule.vigencia_hasta, payload.vigencia_desde, payload.vigencia_hasta);
   });
-  if (conflicting) {
-    window.alert(`La nueva vigencia se solapa con la regla activa ${conflicting.codigo}. Ajusta fechas o prioridad.`);
+  if (conflicts.length) {
+    if (!silent) {
+      showConflict(conflicts, 'La vigencia se solapa con otra regla activa del mismo ámbito.', { reason: 'overlap' });
+    }
     return false;
   }
   return true;
 }
 
-function showConflict(conflicts, message) {
+function showConflict(conflicts, message, { reason = 'conflict' } = {}) {
   if (!dom.wizard.alert) return;
   dom.wizard.alert.classList.remove('d-none');
-  const list = conflicts
-    .map((rule) => `<li><strong>${rule.codigo}</strong> — ${formatVigencia(rule.vigencia_desde, rule.vigencia_hasta)}</li>`)
+  dom.wizard.alert.dataset.tcConflictReason = reason;
+  const safeMessage = escapeHtml(message || 'Existen reglas en conflicto con la combinación seleccionada.');
+  const listItems = (conflicts || [])
+    .map((rule) => `<li><strong>${escapeHtml(rule.codigo)}</strong> — ${formatVigencia(rule.vigencia_desde, rule.vigencia_hasta)}</li>`)
     .join('');
-  dom.wizard.alert.innerHTML = `
-    <div>${message || 'Existen reglas en conflicto con la combinación seleccionada.'}</div>
-    <ul>${list}</ul>
-    <p>Revisa la prioridad o ajusta las vigencias para continuar.</p>
+  const details = listItems ? `<ul class="mb-2">${listItems}</ul>` : '';
+  const content = `
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+      <div>
+        <div class="fw-semibold">${safeMessage}</div>
+        ${details}
+      </div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary btn-sm" data-tc-action="view-rules">Ver reglas</button>
+      </div>
+    </div>
   `;
+  dom.wizard.alert.innerHTML = content;
 }
 
 function hideConflict() {
   if (!dom.wizard.alert) return;
   dom.wizard.alert.classList.add('d-none');
   dom.wizard.alert.innerHTML = '';
+  delete dom.wizard.alert.dataset.tcConflictReason;
 }
 
 async function runPanelSimulation() {
@@ -1497,15 +1858,17 @@ async function runPanelSimulation() {
 
 function collectSimulatorInputs() {
   const inputs = dom.simulator.inputs;
+  const servicioId = inputs.servicio.value ? Number(inputs.servicio.value) : null;
+  const planId = inputs.plan.value ? Number(inputs.plan.value) : null;
   return {
-    servicio_id: inputs.servicio.value || null,
-    plan_id: inputs.plan.value || null,
+    servicio_id: Number.isFinite(servicioId) ? servicioId : null,
+    plan_id: Number.isFinite(planId) ? planId : null,
     rol_aplica: inputs.rol.value,
     moneda: inputs.moneda.value || state.catalogs.econconfig?.moneda_defecto || null,
     metodo_pago: inputs.metodo.value || null,
     ambito_region: inputs.region.value || null,
     fecha: inputs.fecha.value || new Date().toISOString().substring(0, 10),
-    consumo: inputs.consumo.value || 0,
+    consumo: Number(inputs.consumo.value || 0),
   };
 }
 
@@ -1514,13 +1877,13 @@ async function simulateFromWizard() {
   const payload = buildRulePayload(state.wizard.data);
   const overrides = {
     servicio_id: payload.servicio_id,
-    plan_id: dom.wizard.inputs.step3Plan.value || payload.plan_id,
+    plan_id: dom.wizard.inputs.step3Plan.value ? Number(dom.wizard.inputs.step3Plan.value) : payload.plan_id,
     rol_aplica: payload.rol_aplica,
     moneda: payload.moneda,
     metodo_pago: dom.wizard.inputs.step3Metodo.value || payload.metodo_pago,
     ambito_region: payload.ambito_region,
     fecha: dom.wizard.inputs.step3Fecha.value || new Date().toISOString().substring(0, 10),
-    consumo: dom.wizard.inputs.step3Consumo.value || 0,
+    consumo: Number(dom.wizard.inputs.step3Consumo.value || 0),
     regla_preview: {
       ...payload,
       parametros: payload.parametros,
@@ -1558,26 +1921,22 @@ function renderSimulationResult(container, response) {
   container.innerHTML = `
     <div class="card border-0 shadow-sm">
       <div class="card-body">
-        <h6 class="fw-semibold mb-1">Regla aplicada: ${regla.codigo}</h6>
-        <p class="text-muted mb-3">${regla.descripcion || 'Sin descripción'}</p>
+        <h6 class="fw-semibold mb-1">Regla aplicada: ${escapeHtml(regla.codigo)} — ${escapeHtml(regla.descripcion || 'Sin descripción')}</h6>
         <dl class="row gy-2 mb-0">
           <dt class="col-6 col-sm-5">Subtotal</dt>
           <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.subtotal || 0)}</dd>
           <dt class="col-6 col-sm-5">Impuestos</dt>
           <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.impuestos || 0)}</dd>
-          <dt class="col-6 col-sm-5">Fee PSP</dt>
-          <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.feePsp || 0)}</dd>
           <dt class="col-6 col-sm-5">Total cliente</dt>
           <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.totalCliente || 0)}</dd>
           <dt class="col-6 col-sm-5">Neto abogado</dt>
           <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.netoAbogado || 0)}</dd>
         </dl>
-        <p class="text-muted small fst-italic mb-0 mt-3">Redondeo según configuración económica (${state.catalogs.econconfig?.regla_redondeo || 'dos_decimales'}).</p>
+        <p class="text-muted small fst-italic mb-0 mt-3">Nota: Redondeo según econconfig.${state.catalogs.econconfig?.regla_redondeo || 'dos_decimales'}.</p>
       </div>
     </div>
   `;
 }
-
 
 function hydrateSimulatorInputs() {
   const econ = state.catalogs.econconfig;

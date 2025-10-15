@@ -361,8 +361,11 @@
               <section class="row g-3" data-tc-step="1">
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-codigo" class="form-label">Código <span class="text-danger">*</span></label>
-                  <input type="text" id="tc-input-codigo" class="form-control" required />
-                  <div class="form-text" id="tc-hint-codigo"></div>
+                  <div class="input-group">
+                    <input type="text" id="tc-input-codigo" class="form-control" required readonly />
+                    <button class="btn btn-outline-secondary" type="button" id="tc-btn-codigo-regenerar">Regenerar</button>
+                  </div>
+                  <div class="form-text" id="tc-hint-codigo">Autogenerado. Solo editable si la regla está inactiva.</div>
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-servicio" class="form-label">Servicio</label>
@@ -394,27 +397,31 @@
                   <select id="tc-input-metodo" class="form-select">
                     <option value="">Todos</option>
                   </select>
+                  <div class="form-text">Vacío = todos los métodos.</div>
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-region" class="form-label">Región</label>
-                  <input type="text" id="tc-input-region" class="form-control" placeholder="Ej: PER-LIM, *" />
+                  <input type="text" id="tc-input-region" class="form-control" placeholder="PER-LIM o * para Global" />
+                  <div class="form-text">* = Global. Ej.: PER-LIM.</div>
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-prioridad" class="form-label">Prioridad</label>
                   <input type="number" id="tc-input-prioridad" class="form-control" min="0" step="1" />
-                  <div class="form-text">Obligatoria si existe más de una regla candidata.</div>
+                  <div class="form-text">Menor número = mayor prioridad. Obligatoria si existe más de una regla candidata.</div>
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-vigencia-desde" class="form-label">Vigencia desde</label>
                   <input type="datetime-local" id="tc-input-vigencia-desde" class="form-control" />
+                  <div class="form-text">TZ mostrada: America/Lima.</div>
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-vigencia-hasta" class="form-label">Vigencia hasta</label>
                   <input type="datetime-local" id="tc-input-vigencia-hasta" class="form-control" />
+                  <div class="form-text">Deja “hasta” vacío para vigencia abierta.</div>
                 </div>
                 <div class="col-12 form-group">
                   <label for="tc-input-descripcion" class="form-label">Descripción</label>
-                  <textarea id="tc-input-descripcion" class="form-control" rows="2"></textarea>
+                  <textarea id="tc-input-descripcion" class="form-control" rows="2" maxlength="160"></textarea>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
                   <div class="form-check form-switch mt-3">
@@ -442,13 +449,16 @@
                 <div class="col-12 col-md-6 col-lg-4">
                   <div class="form-check form-switch mt-4">
                     <input class="form-check-input" type="checkbox" id="tc-input-incluye-impuesto" />
-                    <label class="form-check-label" for="tc-input-incluye-impuesto">Incluye impuesto</label>
+                    <label class="form-check-label" for="tc-input-incluye-impuesto" data-bs-toggle="tooltip" data-bs-placement="top" title="Si está activo, el total al cliente ya incluye el impuesto; si está apagado, el impuesto se suma encima.">Incluye impuesto</label>
                   </div>
+                </div>
+                <div class="col-12">
+                  <div id="tc-parametros-form" class="row g-3"></div>
                 </div>
                 <div class="col-12 form-group">
                   <label for="tc-input-parametros" class="form-label">Parámetros (JSON)</label>
                   <textarea id="tc-input-parametros" class="form-control" rows="8" spellcheck="false"></textarea>
-                  <div class="form-text">Se genera plantilla según el tipo seleccionado.</div>
+                  <div class="form-text">Se sincroniza automáticamente con el formulario según el tipo seleccionado.</div>
                 </div>
               </section>
 
@@ -484,6 +494,7 @@
           <div class="modal-footer justify-content-between">
             <button id="tc-wizard-cancel" class="btn btn-outline-secondary" type="button">Cancelar</button>
             <div class="d-flex gap-2">
+              <button id="tc-wizard-save-inactive" class="btn btn-outline-primary" type="button" hidden>Guardar como inactiva</button>
               <button id="tc-wizard-prev" class="btn btn-outline-primary" type="button">Anterior</button>
               <button id="tc-wizard-next" class="btn btn-primary" type="button">Siguiente</button>
               <button id="tc-wizard-save" class="btn btn-primary" type="button" hidden>Guardar</button>
@@ -492,7 +503,6 @@
         </div>
       </div>
     </div>
-
 
      <div class="modal fade" id="tc-impuestos-history-modal" tabindex="-1" aria-labelledby="tc-impuestos-history-title" aria-hidden="true">
     <div class="modal-dialog">
