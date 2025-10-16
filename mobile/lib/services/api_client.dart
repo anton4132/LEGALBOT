@@ -1113,6 +1113,40 @@ class ApiClient {
     throw Exception(message);
   }
 
+
+static Future<LawFirmSummary> lookupLawFirmByRuc({
+    required String token,
+    required String ruc,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/estudios/consulta-ruc');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token, json: true),
+      body: jsonEncode({'ruc': ruc}),
+    );
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 401) {
+      final message =
+          data != null && data['message'] is String
+              ? data['message'] as String
+              : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(message);
+    }
+
+    if (response.statusCode == 200 && data != null && data['success'] == true) {
+      final estudioJson = data['data'] as Map<String, dynamic>? ?? const {};
+      return LawFirmSummary.fromJson(estudioJson);
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo consultar el RUC del estudio';
+    throw Exception(message);
+  }
+  
   static Future<LawFirmSummary> createLawFirm({
     required String token,
     String? ruc,

@@ -4,15 +4,13 @@
  * }
  */
 
-generator client {  
+generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL") // pooled (PgBouncer)
-  
-
 }
 
 /**
@@ -167,8 +165,6 @@ model consulta {
   @@index([tipo])
 }
 
-
-
 /**
  * ================================
  * DOCUMENTOS / ARCHIVOS
@@ -215,18 +211,17 @@ model documento {
 }
 
 model archivo {
-  id                  Int                   @id @default(autoincrement())
-  usuario_id          Int
-  ruta                String
-  tamano              Int
-  tipo                String?
-  creado_el           DateTime              @default(now()) @db.Timestamptz(6)
-
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  ruta       String
+  tamano     Int
+  tipo       String?
+  creado_el  DateTime @default(now()) @db.Timestamptz(6)
 
   usuario             usuario               @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   verificacionabogado verificacionabogado[]
   colegiaturaabogado  colegiaturaabogado[]
-  pago_voucher pago? @relation("PagoVoucher")
+  pago_voucher        pago?                 @relation("PagoVoucher")
   perfilabogado       perfilabogado[]
 
   @@index([usuario_id])
@@ -239,153 +234,150 @@ model archivo {
  * ================================
  */
 
-  model estadopago {
-    id     Int    @id @default(autoincrement()) @db.SmallInt
-    codigo String @unique
-    nombre String
-    pago   pago[]
-  }
-
-  model pago {
-    id             Int      @id @default(autoincrement())
-    usuario_id     Int
-    monto          Decimal  @db.Decimal
-    moneda         String   @db.Char(3)
-    concepto       String?
-    proveedor_txn  String?
-    referencia       String?  @unique        // p.ej. P-20251015-AB12
-    voucher_archivo_id Int? @unique
-    estado_id      Int      @db.SmallInt
-    metodo_pago    String?
-    tipo_servicio  String?
-    creado_el      DateTime @default(now()) @db.Timestamptz(6)
-    actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-    cita        cita[]
-    documentos  documento[]
-    consultas   consulta[]
-    pagodetalle pagodetalle[]
-    estadopago  estadopago    @relation(fields: [estado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-    usuario     usuario       @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-    voucher     archivo? @relation("PagoVoucher", fields: [voucher_archivo_id], references: [id], onDelete: SetNull)
-
-    @@index([estado_id])
-    @@index([voucher_archivo_id]) // puedes dejar el index además del unique
-    @@index([usuario_id])
-    @@index([creado_el])
-    @@index([metodo_pago])
-    @@index([tipo_servicio])
-  }
-
-  model pagodetalle {
-    id      Int               @id @default(autoincrement())
-    pago_id Int
-    tipo    tipo_detalle_pago
-    monto   Decimal           @db.Decimal
-    pago    pago              @relation(fields: [pago_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([pago_id, tipo]) // asegura 1 línea por tipo en cada pago
-    @@index([pago_id])
-  }
-
-  enum tipo_detalle_pago {
-    subtotal
-    comision_plataforma
-    tarifa_ia
-    impuestos      // ← añade esto
-    total_cliente
-    neto_abogado
-  }
-
-  enum tipo_calculo_tc {
-    fijo
-    paquete
-    consumo_ia
-    minimo_mas_variable
-    estacional
-  }
-
-  /// A qué rol aplica la regla
-  enum rol_aplica_tc {
-    cliente
-    abogado
-    ambos
-  }
-
-enum tipo_regla_tc {
-  precio         // precio de servicio puntual (pago por uso)
-  comision       // neto abogado / split
+model estadopago {
+  id     Int    @id @default(autoincrement()) @db.SmallInt
+  codigo String @unique
+  nombre String
+  pago   pago[]
 }
 
+model pago {
+  id                 Int      @id @default(autoincrement())
+  usuario_id         Int
+  monto              Decimal  @db.Decimal
+  moneda             String   @db.Char(3)
+  concepto           String?
+  proveedor_txn      String?
+  referencia         String?  @unique // p.ej. P-20251015-AB12
+  voucher_archivo_id Int?     @unique
+  estado_id          Int      @db.SmallInt
+  metodo_pago        String?
+  tipo_servicio      String?
+  creado_el          DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el     DateTime @updatedAt @db.Timestamptz(6)
 
-  model tarifacomision {
-    id          Int      @id @default(autoincrement())
-    codigo      String   @unique
-    descripcion String?
-    valor       Decimal? @db.Decimal
-    tipo        tipo_regla_tc
-    activo      Boolean  @default(true)
+  cita        cita[]
+  documentos  documento[]
+  consultas   consulta[]
+  pagodetalle pagodetalle[]
+  estadopago  estadopago    @relation(fields: [estado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario     usuario       @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  voucher     archivo?      @relation("PagoVoucher", fields: [voucher_archivo_id], references: [id], onDelete: SetNull)
 
-    servicio_id      Int?
-    plan_id          Int?
-    rol_aplica       rol_aplica_tc    @default(ambos)
-    moneda           String?          @db.Char(3)
-    tipo_calculo     tipo_calculo_tc?
-    parametros       Json?
-    incluye_impuesto Boolean?         @default(false)
-    vigencia_desde   DateTime?        @db.Timestamptz(6)
-    vigencia_hasta   DateTime?        @db.Timestamptz(6)
-    prioridad        Int?             @db.SmallInt
-    ambito_region    String?
-    metodo_pago      String?
+  @@index([estado_id])
+  @@index([voucher_archivo_id]) // puedes dejar el index además del unique
+  @@index([usuario_id])
+  @@index([creado_el])
+  @@index([metodo_pago])
+  @@index([tipo_servicio])
+}
 
-    plan     plan?     @relation("PlanTarifa", fields: [plan_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-    servicio servicio? @relation("ServicioTarifa", fields: [servicio_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+model pagodetalle {
+  id      Int               @id @default(autoincrement())
+  pago_id Int
+  tipo    tipo_detalle_pago
+  monto   Decimal           @db.Decimal
+  pago    pago              @relation(fields: [pago_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([pago_id, tipo]) // asegura 1 línea por tipo en cada pago
+  @@index([pago_id])
+}
+
+enum tipo_detalle_pago {
+  subtotal
+  comision_plataforma
+  tarifa_ia
+  impuestos // ← añade esto
+  total_cliente
+  neto_abogado
+}
+
+enum tipo_calculo_tc {
+  fijo
+  paquete
+  consumo_ia
+  minimo_mas_variable
+  estacional
+}
+
+/// A qué rol aplica la regla
+enum rol_aplica_tc {
+  cliente
+  abogado
+  ambos
+}
+
+enum tipo_regla_tc {
+  precio // precio de servicio puntual (pago por uso)
+  comision // neto abogado / split
+}
+
+model tarifacomision {
+  id          Int           @id @default(autoincrement())
+  codigo      String        @unique
+  descripcion String?
+  valor       Decimal?      @db.Decimal
+  tipo        tipo_regla_tc
+  activo      Boolean       @default(true)
+
+  servicio_id      Int?
+  plan_id          Int?
+  rol_aplica       rol_aplica_tc    @default(ambos)
+  moneda           String?          @db.Char(3)
+  tipo_calculo     tipo_calculo_tc?
+  parametros       Json?
+  incluye_impuesto Boolean?         @default(false)
+  vigencia_desde   DateTime?        @db.Timestamptz(6)
+  vigencia_hasta   DateTime?        @db.Timestamptz(6)
+  prioridad        Int?             @db.SmallInt
+  ambito_region    String?
+  metodo_pago      String?
+
+  plan     plan?     @relation("PlanTarifa", fields: [plan_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  servicio servicio? @relation("ServicioTarifa", fields: [servicio_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@unique([servicio_id, plan_id, rol_aplica, ambito_region, metodo_pago, moneda, vigencia_desde, vigencia_hasta, activo])
-    @@index([servicio_id])
-    @@index([plan_id])
-    @@index([servicio_id, plan_id, activo])
-    @@index([vigencia_desde, vigencia_hasta])
-    @@index([rol_aplica])
-    @@index([moneda])
-    @@index([metodo_pago])
-  }
+  @@index([servicio_id])
+  @@index([plan_id])
+  @@index([servicio_id, plan_id, activo])
+  @@index([vigencia_desde, vigencia_hasta])
+  @@index([rol_aplica])
+  @@index([moneda])
+  @@index([metodo_pago])
+}
 
-  model impuesto {
-    id                 Int       @id @default(autoincrement())
-    codigo             String    @unique
-    nombre             String
-    porcentaje         Decimal   @db.Decimal
-    incluido_en_precio Boolean   @default(false)
-    activo             Boolean   @default(true)
-    vigencia_desde     DateTime? @db.Timestamptz(6)
-    vigencia_hasta     DateTime? @db.Timestamptz(6)
-    creado_el          DateTime  @default(now()) @db.Timestamptz(6)
+model impuesto {
+  id                 Int       @id @default(autoincrement())
+  codigo             String    @unique
+  nombre             String
+  porcentaje         Decimal   @db.Decimal
+  incluido_en_precio Boolean   @default(false)
+  activo             Boolean   @default(true)
+  vigencia_desde     DateTime? @db.Timestamptz(6)
+  vigencia_hasta     DateTime? @db.Timestamptz(6)
+  creado_el          DateTime  @default(now()) @db.Timestamptz(6)
 
-    @@index([activo])
-    @@index([vigencia_desde, vigencia_hasta])
-  }
+  @@index([activo])
+  @@index([vigencia_desde, vigencia_hasta])
+}
 
+/// Reglas de redondeo para presentación/precio final
+enum regla_redondeo {
+  dos_decimales
+  a_0_05
+  entero_superior
+}
 
-  /// Reglas de redondeo para presentación/precio final
-  enum regla_redondeo {
-    dos_decimales
-    a_0_05
-    entero_superior
-  }
+/// Configuración económica global (1 fila activa)
 
-
-  /// Configuración económica global (1 fila activa)
-
-  model econconfig {
-    id             Int            @id @default(autoincrement())
-    moneda_defecto String         @db.Char(3)
-    regla_redondeo regla_redondeo @default(dos_decimales)
-    decimales      Int            @default(2)
-    activo         Boolean        @default(true)
-    actualizado_el DateTime       @updatedAt @db.Timestamptz(6)
-  }
+model econconfig {
+  id             Int            @id @default(autoincrement())
+  moneda_defecto String         @db.Char(3)
+  regla_redondeo regla_redondeo @default(dos_decimales)
+  decimales      Int            @default(2)
+  activo         Boolean        @default(true)
+  actualizado_el DateTime       @updatedAt @db.Timestamptz(6)
+}
 
 /**
  * ================================
@@ -574,24 +566,23 @@ model especialidad {
 }
 
 model estudio {
-  id                     Int        @id @default(autoincrement())
+  id                    Int        @id @default(autoincrement())
   /////////////////////////
-  ruc                    String     @unique
-  nombre_o_razon_social  String?
-  direccion_id           String?    @db.Char(6)
-  direccion              direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
-  estado                 String?
-  condicion              String?
+  ruc                   String     @unique
+  nombre_o_razon_social String?
+  direccion_id          String?    @db.Char(6)
+  direccion             direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
+  estado                String?
+  condicion             String?
 
-  direccion_exacta       String?
-
+  direccion_exacta String?
 
   ///////////////////////// Flags SUNAT
 
-  es_agente_retencion                  Boolean? @default(false)
-  es_agente_percepcion                 Boolean? @default(false)
-  es_agente_percepcion_combustible     Boolean? @default(false)
-  es_buen_contribuyente                Boolean? @default(false)
+  es_agente_retencion              Boolean? @default(false)
+  es_agente_percepcion             Boolean? @default(false)
+  es_agente_percepcion_combustible Boolean? @default(false)
+  es_buen_contribuyente            Boolean? @default(false)
 
   /////////////////////////
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
@@ -601,7 +592,6 @@ model estudio {
 
   @@index([estado])
   @@index([condicion])
-
 }
 
 model abogadoestudio {

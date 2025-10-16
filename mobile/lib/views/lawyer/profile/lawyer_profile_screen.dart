@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../constants/colors.dart';
 import '../../../models/archivo_reference.dart';
 import '../../../models/lawyer_profile_models.dart';
@@ -13,7 +14,7 @@ import '../../../services/blob_storage_service.dart';
 import '../../../services/session_service.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
-import '../../../models/ubigeo_option.dart';
+
 
 class LawyerProfileScreen extends StatefulWidget {
   const LawyerProfileScreen({
@@ -44,12 +45,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
   // Estudios
   final TextEditingController _lawFirmRucController = TextEditingController();
-  final TextEditingController _lawFirmNameController = TextEditingController();
-  final TextEditingController _lawFirmEmailController = TextEditingController();
-  final TextEditingController _lawFirmPhoneController = TextEditingController();
-  final TextEditingController _lawFirmExactAddressController =
-      TextEditingController();
-  final TextEditingController _lawFirmRoleController = TextEditingController();
+
 
   bool _loading = true;
   bool _savingProfile = false;
@@ -65,18 +61,8 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   List<LawyerStudyAssignment> _studies = const <LawyerStudyAssignment>[];
   late LawyerProfileSubsection _currentSubsection;
 
-  // Catálogos y estado para ESTUDIOS (se quedan)
-  List<UbigeoOption> _departamentos = const <UbigeoOption>[];
-  List<UbigeoOption> _lawFirmProvincias = const <UbigeoOption>[];
-  List<UbigeoOption> _lawFirmDistritos = const <UbigeoOption>[];
+   bool _lookingUpLawFirm = false;
 
-  String? _lawFirmDepartamentoCodigo;
-  String? _lawFirmProvinciaCodigo;
-  String? _lawFirmDistritoCodigo;
-
-  bool _loadingDepartamentos = false;
-  bool _loadingLawFirmProvincias = false;
-  bool _loadingLawFirmDistritos = false;
 
   int _newSlotDay = 1;
   TimeOfDay? _newSlotStart;
@@ -94,7 +80,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   void initState() {
     super.initState();
     _currentSubsection = widget.initialSubsection;
-    _loadDepartamentosCatalog();
     _loadInitialData();
   }
 
@@ -105,11 +90,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
     // Estudios
     _lawFirmRucController.dispose();
-    _lawFirmNameController.dispose();
-    _lawFirmEmailController.dispose();
-    _lawFirmPhoneController.dispose();
-    _lawFirmExactAddressController.dispose();
-    _lawFirmRoleController.dispose();
 
     super.dispose();
   }
@@ -140,130 +120,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     _setSubsection(subsection, notifyParent: false);
   }
 
-  Future<void> _loadDepartamentosCatalog() async {
-    setState(() => _loadingDepartamentos = true);
-    try {
-      final options = await ApiClient.fetchDepartamentos();
-      if (!mounted) return;
-      setState(() {
-        _departamentos = options;
-      });
-      // Solo restauramos selección para ESTUDIOS
-      _restoreLawFirmUbigeoSelections();
-    } catch (error) {
-      if (!mounted) return;
-      _showSnack(
-        'No se pudieron cargar los departamentos. Verifica tu conexión.',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _loadingDepartamentos = false);
-      }
-    }
-  }
-
-  // ======= ESTUDIOS: carga de provincias/distritos =========
-
-  Future<void> _loadLawFirmProvincias(
-    String departamentoCodigo, {
-    String? preselectProvincia,
-    String? preselectDistrito,
-  }) async {
-    setState(() {
-      _loadingLawFirmProvincias = true;
-      _lawFirmProvincias = const <UbigeoOption>[];
-      _lawFirmDistritos = const <UbigeoOption>[];
-      _lawFirmProvinciaCodigo = null;
-      _lawFirmDistritoCodigo = null;
-    });
-    try {
-      final options = await ApiClient.fetchProvincias(departamentoCodigo);
-      if (!mounted) return;
-      setState(() {
-        _lawFirmProvincias = options;
-        if (preselectProvincia != null &&
-            options.any((option) => option.codigo == preselectProvincia)) {
-          _lawFirmProvinciaCodigo = preselectProvincia;
-        }
-      });
-      final selectedProvincia = preselectProvincia ?? _lawFirmProvinciaCodigo;
-      if (selectedProvincia != null) {
-        await _loadLawFirmDistritos(
-          selectedProvincia,
-          preselectDistrito: preselectDistrito,
-        );
-      }
-    } catch (error) {
-      if (!mounted) return;
-      _showSnack('No se pudieron cargar las provincias del estudio.');
-      setState(() {
-        if (_lawFirmDepartamentoCodigo == departamentoCodigo) {
-          _lawFirmDepartamentoCodigo = null;
-        }
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _loadingLawFirmProvincias = false);
-      }
-    }
-  }
-
-  Future<void> _loadLawFirmDistritos(
-    String provinciaCodigo, {
-    String? preselectDistrito,
-  }) async {
-    setState(() {
-      _loadingLawFirmDistritos = true;
-      _lawFirmDistritos = const <UbigeoOption>[];
-      _lawFirmDistritoCodigo = null;
-    });
-    try {
-      final options = await ApiClient.fetchDistritos(provinciaCodigo);
-      if (!mounted) return;
-      setState(() {
-        _lawFirmDistritos = options;
-        if (preselectDistrito != null &&
-            options.any((option) => option.codigo == preselectDistrito)) {
-          _lawFirmDistritoCodigo = preselectDistrito;
-        }
-      });
-    } catch (error) {
-      if (!mounted) return;
-      _showSnack('No se pudieron cargar los distritos del estudio.');
-      setState(() {
-        if (_lawFirmProvinciaCodigo == provinciaCodigo) {
-          _lawFirmProvinciaCodigo = null;
-        }
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _loadingLawFirmDistritos = false);
-      }
-    }
-  }
-
-  void _restoreLawFirmUbigeoSelections() {
-    if (!mounted) return;
-    final departamento = _lawFirmDepartamentoCodigo;
-    if (departamento == null) {
-      setState(() {
-        _lawFirmProvincias = const <UbigeoOption>[];
-        _lawFirmDistritos = const <UbigeoOption>[];
-        _lawFirmProvinciaCodigo = null;
-        _lawFirmDistritoCodigo = null;
-      });
-      return;
-    }
-    if (_departamentos.any((option) => option.codigo == departamento)) {
-      _loadLawFirmProvincias(
-        departamento,
-        preselectProvincia: _lawFirmProvinciaCodigo,
-        preselectDistrito: _lawFirmDistritoCodigo,
-      );
-    }
-  }
-
-  // =========================================================
 
   Future<void> _loadInitialData() async {
     final session = SessionService.instance.session;
@@ -346,57 +202,18 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       (s) => s.principal,
       orElse: () => studies.first,
     );
-    _selectedLawFirm = primary.estudio;
-    _lawFirmPrincipal = primary.principal;
-    _lawFirmRoleController.text = primary.rolEnEstudio ?? '';
-    _lawFirmRucController.text = primary.estudio.ruc ?? '';
-    _lawFirmNameController.text = primary.estudio.nombreComercial ?? '';
-    _lawFirmEmailController.text = primary.estudio.correoContacto ?? '';
-    _lawFirmPhoneController.text = primary.estudio.telefono ?? '';
-    _lawFirmExactAddressController.text =
-        (primary.estudio.lineaExactaDireccion ?? '').trim();
-
-    final distrito = primary.estudio.direccionUbigeoCodigo;
+   _lawFirmRucController.text = primary.estudio.ruc ?? '';
     setState(() {
-      if (distrito == null || distrito.isEmpty) {
-        _lawFirmDepartamentoCodigo = null;
-        _lawFirmProvinciaCodigo = null;
-        _lawFirmDistritoCodigo = null;
-        _lawFirmProvincias = const <UbigeoOption>[];
-        _lawFirmDistritos = const <UbigeoOption>[];
-      } else {
-        _lawFirmDistritoCodigo = distrito;
-        _lawFirmProvinciaCodigo =
-            distrito.length >= 4 ? distrito.substring(0, 4) : null;
-        _lawFirmDepartamentoCodigo =
-            distrito.length >= 2 ? distrito.substring(0, 2) : null;
-      }
+      _selectedLawFirm = primary.estudio;
+      _lawFirmPrincipal = primary.principal;
     });
-
-    if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
-      _loadLawFirmProvincias(
-        _lawFirmDepartamentoCodigo!,
-        preselectProvincia: _lawFirmProvinciaCodigo,
-        preselectDistrito: _lawFirmDistritoCodigo,
-      );
-    }
   }
 
   void _clearLawFirmForm() {
-    _selectedLawFirm = null;
-    _lawFirmPrincipal = false;
-    _lawFirmRoleController.clear();
     _lawFirmRucController.clear();
-    _lawFirmNameController.clear();
-    _lawFirmEmailController.clear();
-    _lawFirmPhoneController.clear();
-    _lawFirmExactAddressController.clear();
     setState(() {
-      _lawFirmDepartamentoCodigo = null;
-      _lawFirmProvinciaCodigo = null;
-      _lawFirmDistritoCodigo = null;
-      _lawFirmProvincias = const <UbigeoOption>[];
-      _lawFirmDistritos = const <UbigeoOption>[];
+      _selectedLawFirm = null;
+      _lawFirmPrincipal = false;
     });
   }
 
@@ -853,45 +670,34 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     final session = SessionService.instance.session;
     if (session == null) return;
 
-    final String name = _lawFirmNameController.text.trim();
-    if (name.isEmpty) {
-      _showSnack('Ingresa el nombre comercial del estudio.');
+    final LawFirmSummary? selected = _selectedLawFirm;
+    if (selected == null) {
+      _showSnack('Busca un estudio por RUC antes de guardar.');
       return;
     }
-    final direccionCodigo = _lawFirmDistritoCodigo;
-    final direccionExacta = _lawFirmExactAddressController.text.trim();
+
+    final direccionCodigo = selected.direccionUbigeoCodigo?.trim();
+    final direccionExacta = selected.lineaExactaDireccion?.trim();
     if (direccionCodigo == null || direccionCodigo.isEmpty) {
-      _showSnack('Selecciona el distrito del estudio.');
+      _showSnack(
+        'El estudio no tiene un ubigeo registrado. Intenta consultarlo nuevamente.',
+      );
       return;
     }
-    if (direccionExacta.isEmpty) {
-      _showSnack('Ingresa la dirección exacta del estudio.');
+    if (direccionExacta == null || direccionExacta.isEmpty) {
+      _showSnack(
+        'El estudio no tiene dirección exacta registrada. Intenta consultarlo nuevamente.',
+      );
       return;
     }
     setState(() => _savingLawFirm = true);
     try {
-      LawFirmSummary? firm = _selectedLawFirm;
-      if (firm == null) {
-        firm = await ApiClient.createLawFirm(
-          token: session.token,
-          ruc: _lawFirmRucController.text.trim(),
-          nombreComercial: name,
-          correoContacto: _lawFirmEmailController.text.trim(),
-          telefono: _lawFirmPhoneController.text.trim(),
-          direccionId: direccionCodigo,
-          lineaExactaDireccion: direccionExacta,
-        );
-      }
-
       final assignment = await ApiClient.upsertLawyerStudy(
         token: session.token,
         userId: session.usuarioId,
-        studyId: firm.id,
+        studyId: selected.id,
         principal: _lawFirmPrincipal,
-        role:
-            _lawFirmRoleController.text.trim().isEmpty
-                ? null
-                : _lawFirmRoleController.text.trim(),
+        role: null,
         direccionUbigeoCodigo: direccionCodigo,
         lineaExactaDireccion: direccionExacta,
       );
@@ -900,24 +706,10 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
         _savingLawFirm = false;
         _selectedLawFirm = assignment.estudio;
         _studies = _mergeStudyAssignment(_studies, assignment);
-        final distrito = assignment.estudio.direccionUbigeoCodigo;
-        if (distrito != null && distrito.isNotEmpty) {
-          _lawFirmDistritoCodigo = distrito;
-          _lawFirmProvinciaCodigo =
-              distrito.length >= 4 ? distrito.substring(0, 4) : null;
-          _lawFirmDepartamentoCodigo =
-              distrito.length >= 2 ? distrito.substring(0, 2) : null;
-          _lawFirmExactAddressController.text =
-              (assignment.estudio.lineaExactaDireccion ?? direccionExacta)
-                  .trim();
-          if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
-            _loadLawFirmProvincias(
-              _lawFirmDepartamentoCodigo!,
-              preselectProvincia: _lawFirmProvinciaCodigo,
-              preselectDistrito: _lawFirmDistritoCodigo,
-            );
-          }
-        }
+        _lawFirmRucController.text = assignment.estudio.ruc ??
+            selected.ruc ??
+            _lawFirmRucController.text;
+        _lawFirmPrincipal = assignment.principal;
       });
 
       _showSnack('Estudio actualizado', color: AppColors.button2Color);
@@ -927,6 +719,45 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     } catch (error) {
       setState(() => _savingLawFirm = false);
       _showSnack(error.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+   Future<void> _lookupLawFirmByRuc() async {
+    if (_lookingUpLawFirm) return;
+    final session = SessionService.instance.session;
+    if (session == null) return;
+
+    final ruc = _lawFirmRucController.text.replaceAll(RegExp(r'\D'), '');
+    if (ruc.length != 11 || int.tryParse(ruc) == null) {
+      _showSnack('Ingresa un RUC válido de 11 dígitos.');
+      return;
+    }
+
+    setState(() => _lookingUpLawFirm = true);
+    try {
+      final summary = await ApiClient.lookupLawFirmByRuc(
+        token: session.token,
+        ruc: ruc,
+      );
+      if (!mounted) return;
+      setState(() {
+        _selectedLawFirm = summary;
+        _lawFirmRucController.text = summary.ruc ?? ruc;
+      });
+      _showSnack(
+        'Estudio consultado correctamente.',
+        color: AppColors.button2Color,
+      );
+    } on UnauthorizedException catch (error) {
+      setState(() => _lookingUpLawFirm = false);
+      _handleUnauthorized(error.message);
+    } catch (error) {
+      setState(() => _lookingUpLawFirm = false);
+      _showSnack(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _lookingUpLawFirm = false);
+      }
     }
   }
 
@@ -1105,7 +936,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                         itemBuilder: (context, index) {
                           final item = results[index];
                           return ListTile(
-                            title: Text(item.nombreComercial ?? 'Sin nombre'),
+                            title: Text(item.displayName),
                             subtitle: Text(
                               [item.ruc, item.formattedLocation]
                                   .where(
@@ -1142,40 +973,13 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     );
 
     if (selected != null) {
+      _lawFirmRucController.text = selected.ruc ?? '';
       setState(() {
         _selectedLawFirm = selected;
-        _lawFirmRucController.text = selected.ruc ?? '';
-        _lawFirmNameController.text = selected.nombreComercial ?? '';
-        _lawFirmEmailController.text = selected.correoContacto ?? '';
-        _lawFirmPhoneController.text = selected.telefono ?? '';
-        _lawFirmExactAddressController.text =
-            (selected.lineaExactaDireccion ?? '').trim();
-
-        final distrito = selected.direccionUbigeoCodigo;
-        if (distrito == null || distrito.isEmpty) {
-          _lawFirmDepartamentoCodigo = null;
-          _lawFirmProvinciaCodigo = null;
-          _lawFirmDistritoCodigo = null;
-          _lawFirmProvincias = const <UbigeoOption>[];
-          _lawFirmDistritos = const <UbigeoOption>[];
-        } else {
-          _lawFirmDistritoCodigo = distrito;
-          _lawFirmProvinciaCodigo =
-              distrito.length >= 4 ? distrito.substring(0, 4) : null;
-          _lawFirmDepartamentoCodigo =
-              distrito.length >= 2 ? distrito.substring(0, 2) : null;
-        }
       });
-
-      if (_departamentos.isNotEmpty && _lawFirmDepartamentoCodigo != null) {
-        _loadLawFirmProvincias(
-          _lawFirmDepartamentoCodigo!,
-          preselectProvincia: _lawFirmProvinciaCodigo,
-          preselectDistrito: _lawFirmDistritoCodigo,
-        );
-      }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1274,108 +1078,112 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       ],
     );
   }
-
-  Widget _buildUbigeoDropdown({
-    required String label,
-    required String? value,
-    required List<UbigeoOption> options,
-    required bool isLoading,
-    required bool enabled,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return DropdownButtonFormField<String>(
-      value: options.any((option) => option.codigo == value) ? value : null,
-      items:
-          options
-              .map(
-                (option) => DropdownMenuItem<String>(
-                  value: option.codigo,
-                  child: Text(option.nombre),
-                ),
-              )
-              .toList(),
-      onChanged: enabled && !isLoading ? onChanged : null,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        suffixIcon:
-            isLoading
-                ? const Padding(
-                  padding: EdgeInsets.all(12.0),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-                : null,
+ Widget _buildSummaryRow(String label, String? value) {
+    final resolved = (value ?? '').trim();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 150,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.text1Color,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              resolved.isEmpty ? '--' : resolved,
+              style: const TextStyle(color: AppColors.text2Color),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildLawFirmUbigeoFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildUbigeoDropdown(
-          label: 'Departamento del estudio *',
-          value: _lawFirmDepartamentoCodigo,
-          options: _departamentos,
-          isLoading: _loadingDepartamentos,
-          enabled: !_loadingDepartamentos,
-          onChanged: (value) {
-            if (value == null) {
-              setState(() {
-                _lawFirmDepartamentoCodigo = null;
-                _lawFirmProvinciaCodigo = null;
-                _lawFirmDistritoCodigo = null;
-                _lawFirmProvincias = const <UbigeoOption>[];
-                _lawFirmDistritos = const <UbigeoOption>[];
-              });
-            } else {
-              setState(() {
-                _lawFirmDepartamentoCodigo = value;
-              });
-              _loadLawFirmProvincias(value);
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        _buildUbigeoDropdown(
-          label: 'Provincia del estudio *',
-          value: _lawFirmProvinciaCodigo,
-          options: _lawFirmProvincias,
-          isLoading: _loadingLawFirmProvincias,
-          enabled: _lawFirmDepartamentoCodigo != null,
-          onChanged: (value) {
-            if (value == null) {
-              setState(() {
-                _lawFirmProvinciaCodigo = null;
-                _lawFirmDistritoCodigo = null;
-                _lawFirmDistritos = const <UbigeoOption>[];
-              });
-            } else {
-              setState(() {
-                _lawFirmProvinciaCodigo = value;
-              });
-              _loadLawFirmDistritos(value);
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        _buildUbigeoDropdown(
-          label: 'Distrito del estudio *',
-          value: _lawFirmDistritoCodigo,
-          options: _lawFirmDistritos,
-          isLoading: _loadingLawFirmDistritos,
-          enabled: _lawFirmProvinciaCodigo != null,
-          onChanged: (value) {
-            setState(() {
-              _lawFirmDistritoCodigo = value;
-            });
-          },
-        ),
-      ],
+  Widget _buildLawFirmSummaryCard(LawFirmSummary firm) {
+    final estadoCondicion = [firm.estado, firm.condicion]
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .join(' • ');
+    final direccion = firm.lineaExactaDireccion?.trim();
+
+    final flagChips = <Widget>[];
+    void addFlag(String label, bool? value) {
+      if (value == true) {
+        flagChips.add(
+          Chip(
+            label: Text(label),
+            backgroundColor: AppColors.buttonColor.withOpacity(0.12),
+            labelStyle: const TextStyle(color: AppColors.buttonColor),
+          ),
+        );
+      }
+    }
+
+    addFlag('Agente de retención', firm.esAgenteRetencion);
+    addFlag('Agente de percepción', firm.esAgentePercepcion);
+    addFlag('Agente percepción combustible', firm.esAgentePercepcionCombustible);
+    addFlag('Buen contribuyente', firm.esBuenContribuyente);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.strokeColor),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            firm.displayName,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text1Color,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildSummaryRow('RUC', firm.ruc),
+          _buildSummaryRow(
+            'Estado / Condición',
+            estadoCondicion.isEmpty ? null : estadoCondicion,
+          ),
+          _buildSummaryRow('Dirección exacta', direccion),
+          _buildSummaryRow('Ubicación', firm.formattedLocation),
+          _buildSummaryRow('Ubigeo SUNAT', firm.direccionUbigeoCodigo),
+          _buildSummaryRow('Correo', firm.correoContacto),
+          _buildSummaryRow('Teléfono', firm.telefono),
+          if (flagChips.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: flagChips,
+            ),
+          ],
+          if (direccion == null || direccion.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text(
+                'Este estudio no cuenta con dirección exacta registrada. Consulta nuevamente el RUC para completar la información.',
+                style: TextStyle(
+                  color: AppColors.text3Color,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1588,8 +1396,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       ),
     );
   }
-
-  Widget _buildLawFirmSection() {
+Widget _buildLawFirmSection() {
     return ShadowCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1606,7 +1413,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        assignment.estudio.nombreComercial ?? 'Sin nombre',
+                        assignment.estudio.displayName,
                       ),
                       subtitle: Text(
                         [
@@ -1622,51 +1429,12 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                         onPressed: () => _deleteStudy(assignment),
                       ),
                       onTap: () {
+                        _lawFirmRucController.text =
+                            assignment.estudio.ruc ?? '';
                         setState(() {
                           _selectedLawFirm = assignment.estudio;
                           _lawFirmPrincipal = assignment.principal;
-                          _lawFirmRoleController.text =
-                              assignment.rolEnEstudio ?? '';
-                          _lawFirmRucController.text =
-                              assignment.estudio.ruc ?? '';
-                          _lawFirmNameController.text =
-                              assignment.estudio.nombreComercial ?? '';
-                          _lawFirmEmailController.text =
-                              assignment.estudio.correoContacto ?? '';
-                          _lawFirmPhoneController.text =
-                              assignment.estudio.telefono ?? '';
-                          _lawFirmExactAddressController.text =
-                              (assignment.estudio.lineaExactaDireccion ?? '')
-                                  .trim();
-
-                          final distrito =
-                              assignment.estudio.direccionUbigeoCodigo;
-                          if (distrito == null || distrito.isEmpty) {
-                            _lawFirmDepartamentoCodigo = null;
-                            _lawFirmProvinciaCodigo = null;
-                            _lawFirmDistritoCodigo = null;
-                            _lawFirmProvincias = const <UbigeoOption>[];
-                            _lawFirmDistritos = const <UbigeoOption>[];
-                          } else {
-                            _lawFirmDistritoCodigo = distrito;
-                            _lawFirmProvinciaCodigo =
-                                distrito.length >= 4
-                                    ? distrito.substring(0, 4)
-                                    : null;
-                            _lawFirmDepartamentoCodigo =
-                                distrito.length >= 2
-                                    ? distrito.substring(0, 2)
-                                    : null;
-                          }
                         });
-                        if (_departamentos.isNotEmpty &&
-                            _lawFirmDepartamentoCodigo != null) {
-                          _loadLawFirmProvincias(
-                            _lawFirmDepartamentoCodigo!,
-                            preselectProvincia: _lawFirmProvinciaCodigo,
-                            preselectDistrito: _lawFirmDistritoCodigo,
-                          );
-                        }
                       },
                     );
                   }).toList(),
@@ -1677,17 +1445,43 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
+          TextField(
+            controller: _lawFirmRucController,
+            keyboardType: TextInputType.number,
+            maxLength: 11,
+            inputFormatters: const [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              labelText: 'RUC del estudio',
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 12,
+            runSpacing: 8,
             children: [
               ElevatedButton.icon(
-                onPressed: _openStudySearch,
-                icon: const Icon(Icons.search),
-                label: const Text('Buscar registrado'),
+                onPressed:
+                    (_lookingUpLawFirm || _savingLawFirm) ? null : _lookupLawFirmByRuc,
+                icon: _lookingUpLawFirm
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.manage_search_rounded),
+                label: Text(
+                  _lookingUpLawFirm ? 'Buscando...' : 'Buscar registro',
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.buttonColor,
                   foregroundColor: Colors.white,
                 ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _openStudySearch,
+                icon: const Icon(Icons.list_alt),
+                label: const Text('Ver registrados'),
               ),
               TextButton(
                 onPressed: _clearLawFirmForm,
@@ -1695,64 +1489,28 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmNameController,
-            decoration: const InputDecoration(labelText: 'Nombre comercial'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmRucController,
-            decoration: const InputDecoration(labelText: 'RUC'),
-          ),
-          const SizedBox(height: 12),
-          _buildLawFirmUbigeoFields(),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmExactAddressController,
-            enabled:
-                _lawFirmDistritoCodigo != null && !_loadingLawFirmDistritos,
-            decoration: const InputDecoration(
-              labelText: 'Dirección exacta del estudio *',
+          const SizedBox(height: 16),
+          if (_selectedLawFirm != null)
+            _buildLawFirmSummaryCard(_selectedLawFirm!)
+          else
+            const Text(
+              'Consulta el RUC del estudio o selecciona un registro existente para ver su información.',
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmEmailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Correo de contacto (opcional)',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmPhoneController,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Teléfono (opcional)'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _lawFirmRoleController,
-            decoration: const InputDecoration(
-              labelText: 'Rol dentro del estudio',
-            ),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('Marcar como estudio principal'),
             value: _lawFirmPrincipal,
-            onChanged: (value) => setState(() => _lawFirmPrincipal = value),
+            onChanged: _selectedLawFirm == null
+                ? null
+                : (value) => setState(() => _lawFirmPrincipal = value),
           ),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
               onPressed:
-                  (_savingLawFirm ||
-                          _loadingDepartamentos ||
-                          _loadingLawFirmProvincias ||
-                          _loadingLawFirmDistritos)
+                  (_savingLawFirm || _selectedLawFirm == null)
                       ? null
                       : _saveLawFirm,
               icon:

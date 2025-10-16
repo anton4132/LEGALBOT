@@ -153,7 +153,7 @@ const estudioController = require('../controllers/estudioController');
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *             examples:
- *               serverError:
+ *               serverError:   
  *                 $ref: '#/components/schemas/ErrorResponse/examples/serverError'
  */
 router.get('/', estudioController.searchEstudios);
@@ -199,5 +199,43 @@ router.get('/', estudioController.searchEstudios);
  *                 $ref: '#/components/schemas/ErrorResponse/examples/serverError'
  */
 router.post('/', estudioController.createEstudio);
+
+/**
+ * @swagger
+ * /estudios/consulta-ruc:
+ *   post:
+ *     summary: Consulta y registra un estudio por RUC (APIPERU)
+ *     description: >
+ *       Consulta el servicio de APIPERU para obtener los datos de un RUC, crea/actualiza el estudio
+ *       y asegura que exista la dirección correspondiente. Devuelve el resumen del estudio registrado.
+ *     tags: [Estudios]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ruc:
+ *                 type: string
+ *                 example: "20100443688"
+ *     responses:
+ *       200:
+ *         description: Estudio registrado/actualizado correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Estudio'
+ *       400:
+ *         description: Error de validación en el RUC o en la respuesta del servicio
+ *       500:
+ *         description: Error consultando el servicio o registrando el estudio
+ */
+router.post('/consulta-ruc', estudioController.lookupEstudioPorRuc);
 
 module.exports = router;

@@ -6,6 +6,17 @@ const sanitizeString = (value) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const normalizeFlag = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toUpperCase();
+    if (!normalized) return null;
+    return ['SI', 'S', 'TRUE', '1', 'ACTIVO'].includes(normalized);
+  }
+  return null;
+};
+
 const mapEstudioResponse = (estudio) => {
   if (!estudio) return estudio;
   const { direccion, ...rest } = estudio;
@@ -14,12 +25,24 @@ const mapEstudioResponse = (estudio) => {
     sanitizeString(rest.direccion_id) ||
     sanitizeString(direccionData.ubigeo_codigo);
 
+  const nombreComercial =
+    sanitizeString(rest.nombre_comercial) ||
+    sanitizeString(rest.nombre_o_razon_social) ||
+    null;
+
+  const direccionExacta =
+    sanitizeString(rest.linea_exacta_direccion) ||
+    sanitizeString(rest.direccion_exacta) ||
+    null;
+
   return {
     ...rest,
+    nombre_comercial: nombreComercial,
+    nombre_o_razon_social:
+      sanitizeString(rest.nombre_o_razon_social) || nombreComercial,
     direccion,
     direccion_ubigeo_codigo: direccionUbigeoCodigo,
-    linea_exacta_direccion:
-      sanitizeString(rest.linea_exacta_direccion) || null,
+    linea_exacta_direccion: direccionExacta,
     departamento:
       sanitizeString(rest.departamento) ||
       sanitizeString(direccionData.departamento) ||
@@ -32,9 +55,67 @@ const mapEstudioResponse = (estudio) => {
       sanitizeString(rest.distrito) ||
       sanitizeString(direccionData.distrito) ||
       null,
+    es_agente_retencion:
+      rest.es_agente_retencion !== undefined
+        ? !!rest.es_agente_retencion
+        : null,
+    es_agente_percepcion:
+      rest.es_agente_percepcion !== undefined
+        ? !!rest.es_agente_percepcion
+        : null,
+    es_agente_percepcion_combustible:
+      rest.es_agente_percepcion_combustible !== undefined
+        ? !!rest.es_agente_percepcion_combustible
+        : null,
+    es_buen_contribuyente:
+      rest.es_buen_contribuyente !== undefined
+        ? !!rest.es_buen_contribuyente
+        : null,
   };
 };
 
+const fetchRucInfo = async (ruc) => {
+  const token = sanitizeString(process.env.APIPERU_TOKEN);
+  if (!token) {
+    throw new Error('Servicio de consulta RUC no configurado.');
+  }
+
+  const response = await fetch('https://apiperu.dev/api/ruc', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ ruc }),
+  });
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      payload?.message || payload?.error || 'Error consultando servicio de RUC';
+    throw new Error(message);
+  }
+
+  if (!payload?.success) {
+    const message =
+      payload?.message || 'No se encontró información para el RUC ingresado';
+    throw new Error(message);
+  }
+
+  const data = payload.data || {};
+  if (!data.ruc) {
+    throw new Error('La respuesta del servicio de RUC es inválida.');
+  }
+
+  return data;
+};
 
 const searchEstudios = async (req, res) => {
   try {
@@ -44,14 +125,14 @@ const searchEstudios = async (req, res) => {
       where: {
         OR: [
           { ruc: { contains: term } },
-          { nombre_comercial: { contains: term, mode: 'insensitive' } }
-        ]
+          { nombre_comercial: { contains: term, mode: 'insensitive' } },
+        ],
       },
       orderBy: { nombre_comercial: 'asc' },
       take: 10,
       include: {
-        direccion: true
-      }
+        direccion: true,
+      },
     });
     res.json(rows.map(mapEstudioResponse));
   } catch (error) {
@@ -88,12 +169,11 @@ const createEstudio = async (req, res) => {
         telefono: sanitizeString(data.telefono),
         direccion_id: direccionId,
         linea_exacta_direccion: lineaExacta,
-        activo: false
-
+        activo: false,
       },
       include: {
-        direccion: true
-      }
+        direccion: true,
+      },
     });
     res.status(201).json(mapEstudioResponse(created));
   } catch (error) {
@@ -102,4 +182,107 @@ const createEstudio = async (req, res) => {
   }
 };
 
-module.exports = { searchEstudios, createEstudio };
+const lookupEstudioPorRuc = async (req, res) => {
+  try {
+    const ruc = sanitizeString(req.body?.ruc);
+    if (!ruc) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'El RUC es obligatorio.' });
+    }
+
+    if (!/^\d{11}$/.test(ruc)) {
+      return res.status(400).json({
+        success: false,
+        message: 'El RUC debe tener 11 dígitos numéricos.',
+      });
+    }
+
+    const apiData = await fetchRucInfo(ruc);
+
+    const ubigeoSunat = sanitizeString(apiData.ubigeo_sunat);
+    if (!ubigeoSunat || ubigeoSunat.length !== 6) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'El servicio de RUC no devolvió un código de ubigeo válido (6 dígitos).',
+      });
+    }
+
+    const direccionDepartamento = sanitizeString(apiData.departamento);
+    const direccionProvincia = sanitizeString(apiData.provincia);
+    const direccionDistrito = sanitizeString(apiData.distrito);
+
+    if (!direccionDepartamento || !direccionProvincia || !direccionDistrito) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'El servicio de RUC no devolvió una dirección completa para registrar.',
+      });
+    }
+
+    const nombreRazonSocial = sanitizeString(apiData.nombre_o_razon_social);
+    const direccionExacta =
+      sanitizeString(apiData.direccion_completa) ||
+      sanitizeString(apiData.direccion);
+
+    const estado = sanitizeString(apiData.estado);
+    const condicion = sanitizeString(apiData.condicion);
+
+    const estudio = await prisma.$transaction(async (tx) => {
+      let direccion = await tx.direccion.findUnique({
+        where: { ubigeo_codigo: ubigeoSunat },
+      });
+
+      if (!direccion) {
+        direccion = await tx.direccion.create({
+          data: {
+            ubigeo_codigo: ubigeoSunat,
+            departamento: direccionDepartamento,
+            provincia: direccionProvincia,
+            distrito: direccionDistrito,
+          },
+        });
+      }
+
+      const estudioData = {
+        nombre_o_razon_social: nombreRazonSocial,
+        direccion_id: direccion.ubigeo_codigo,
+        direccion_exacta: direccionExacta,
+        estado,
+        condicion,
+        es_agente_retencion: normalizeFlag(apiData.es_agente_de_retencion),
+        es_agente_percepcion: normalizeFlag(apiData.es_agente_de_percepcion),
+        es_agente_percepcion_combustible: normalizeFlag(
+          apiData.es_agente_de_percepcion_combustible,
+        ),
+        es_buen_contribuyente: normalizeFlag(apiData.es_buen_contribuyente),
+      };
+
+      const upserted = await tx.estudio.upsert({
+        where: { ruc },
+        update: {
+          ...estudioData,
+          actualizado_el: new Date(),
+        },
+        create: {
+          ruc,
+          ...estudioData,
+        },
+        include: { direccion: true },
+      });
+
+      return upserted;
+    });
+
+    return res.json({ success: true, data: mapEstudioResponse(estudio) });
+  } catch (error) {
+    console.error('Error consultando RUC de estudio:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Error consultando RUC de estudio',
+    });
+  }
+};
+
+module.exports = { searchEstudios, createEstudio, lookupEstudioPorRuc };

@@ -165,11 +165,11 @@ class LawyerAvailabilitySlot {
     );
   }
 }
-
 class LawFirmSummary {
   final int id;
   final String? ruc;
   final String? nombreComercial;
+  final String? nombreORazonSocial;
   final String? departamento;
   final String? provincia;
   final String? distrito;
@@ -177,12 +177,19 @@ class LawFirmSummary {
   final String? telefono;
   final String? direccionUbigeoCodigo;
   final String? lineaExactaDireccion;
+  final String? estado;
+  final String? condicion;
+  final bool? esAgenteRetencion;
+  final bool? esAgentePercepcion;
+  final bool? esAgentePercepcionCombustible;
+  final bool? esBuenContribuyente;
   final bool? activo;
 
   const LawFirmSummary({
     required this.id,
     this.ruc,
     this.nombreComercial,
+    this.nombreORazonSocial,
     this.departamento,
     this.provincia,
     this.distrito,
@@ -190,6 +197,12 @@ class LawFirmSummary {
     this.telefono,
     this.direccionUbigeoCodigo,
     this.lineaExactaDireccion,
+    this.estado,
+    this.condicion,
+    this.esAgenteRetencion,
+    this.esAgentePercepcion,
+    this.esAgentePercepcionCombustible,
+    this.esBuenContribuyente,
     this.activo,
   });
 
@@ -197,6 +210,22 @@ class LawFirmSummary {
     String? parseString(dynamic value) {
       if (value is String) return value;
       if (value is num) return value.toString();
+      return null;
+    }
+
+    bool? parseBool(dynamic value) {
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final normalized = value.trim().toUpperCase();
+        if (normalized.isEmpty) return null;
+        if (['SI', 'S', 'TRUE', '1', 'ACTIVO'].contains(normalized)) {
+          return true;
+        }
+        if (['NO', 'N', 'FALSE', '0', 'INACTIVO'].contains(normalized)) {
+          return false;
+        }
+      }
       return null;
     }
 
@@ -208,6 +237,7 @@ class LawFirmSummary {
       id: (json['id'] as num).toInt(),
       ruc: json['ruc'] as String?,
       nombreComercial: json['nombre_comercial'] as String?,
+      nombreORazonSocial: json['nombre_o_razon_social'] as String?,
       departamento: parseString(
         json['departamento'] ?? direccionMap?['departamento'],
       ),
@@ -216,24 +246,40 @@ class LawFirmSummary {
       ),
       distrito:
           parseString(json['distrito'] ?? direccionMap?['distrito']),
-
-
       correoContacto: json['correo_contacto'] as String?,
       telefono: json['telefono'] as String?,
       direccionUbigeoCodigo: parseString(
         json['direccion_ubigeo_codigo'] ??
             json['direccion_id'] ??
             json['direccionUbigeoCodigo'] ??
-            direccionMap?['ubigeo_codigo'],      
-          ),
+            direccionMap?['ubigeo_codigo'],
+      ),
       lineaExactaDireccion: parseString(
         json['linea_exacta_direccion'] ??
             json['lineaExactaDireccion'] ??
             direccionMap?['linea_exacta_direccion'],
       ),
+      estado: parseString(json['estado']),
+      condicion: parseString(json['condicion']),
+      esAgenteRetencion: parseBool(json['es_agente_retencion']),
+      esAgentePercepcion: parseBool(json['es_agente_percepcion']),
+      esAgentePercepcionCombustible:
+          parseBool(json['es_agente_percepcion_combustible']),
+      esBuenContribuyente: parseBool(json['es_buen_contribuyente']),
       activo: json['activo'] as bool?,
     );
   }
+
+  String get displayName {
+    final options = <String?>[nombreComercial, nombreORazonSocial]
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    if (options.isEmpty) return 'Sin nombre';
+    return options.first;
+  }
+
   String? get formattedLocation {
     final parts = <String?>[departamento, provincia, distrito]
         .whereType<String>()
