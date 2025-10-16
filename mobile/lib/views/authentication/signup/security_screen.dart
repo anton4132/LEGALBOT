@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../constants/colors.dart';
 import '../../../widgets/custombtn.dart';
-import '../login_screen.dart';
+import '../../../services/api_client.dart';
 import 'confirmation_screen.dart';
 
 class SecurityScreen extends StatefulWidget {
@@ -29,6 +28,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isSubmitting = false;
 
    bool get _hasValidVerification {
     final verification = widget.verification;
@@ -63,12 +63,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
       child: TextFormField(
         controller: controller,
         obscureText: obscureText,
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(6),
-        ],
-        maxLength: 6,
+        keyboardType: TextInputType.visiblePassword,
+        enableSuggestions: false,
+        autocorrect: false,
         decoration: InputDecoration(
           labelText: label,
           border: OutlineInputBorder(
@@ -98,7 +95,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     );
   }
 
-  void _nextStep() {
+  Future<void> _submitRegistration() async {
     if (!_hasValidVerification) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -109,20 +106,81 @@ class _SecurityScreenState extends State<SecurityScreen> {
       return;
     }
 
-    if (_validateFields()) {
-      Navigator.push(
+    if (!_validateFields()) {
+      return;
+    }
+
+    final password = _passwordController.text;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await ApiClient.signup(
+        userType: widget.userType,
+        personalInfo: widget.personalInfo,
+        contactInfo: widget.contactInfo,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      await Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (context) => ConfirmationScreen(
             userType: widget.userType,
             personalInfo: widget.personalInfo,
             contactInfo: widget.contactInfo,
-            password: _passwordController.text,
             verification: widget.verification,
-
+            success: true,
+            message:
+                '¡Registro exitoso! Tu cuenta ha sido creada correctamente.',
           ),
         ),
       );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      final message = error.message.isNotEmpty
+          ? error.message
+          : 'No se pudo completar el registro.';
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ConfirmationScreen(
+            userType: widget.userType,
+            personalInfo: widget.personalInfo,
+            contactInfo: widget.contactInfo,
+            verification: widget.verification,
+            success: false,
+            message: message,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      final fallback = message.isNotEmpty
+          ? message
+          : 'No se pudo completar el registro. Inténtalo nuevamente.';
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ConfirmationScreen(
+            userType: widget.userType,
+            personalInfo: widget.personalInfo,
+            contactInfo: widget.contactInfo,
+            verification: widget.verification,
+            success: false,
+            message: fallback,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -137,10 +195,10 @@ class _SecurityScreenState extends State<SecurityScreen> {
       return false;
     }
 
-    if (_passwordController.text.length != 6) {
+    if (_passwordController.text.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('La clave debe tener exactamente 6 dígitos'),
+          content: Text('La clave debe tener al menos 6 caracteres'),
           backgroundColor: Colors.red,
         ),
       );
@@ -343,7 +401,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       // Contraseña
                       _buildCustomTextField(
                         controller: _passwordController,
-                        label: 'Clave (6 dígitos) *',
+                        label: 'Clave (mínimo 6 caracteres) *',
                         obscureText: _obscurePassword,
                         onToggleVisibility: () {
                           setState(() {
@@ -380,7 +438,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'Tu clave debe tener exactamente 6 dígitos numéricos',
+                                'Tu clave debe tener al menos 6 caracteres.',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.blue.shade700,
@@ -401,10 +459,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   width: double.infinity,
                   height: 55,
                   child: CustomButton(
-                    text: 'Crear Cuenta',
-                    onTap: _hasValidVerification ? _nextStep : null,
-                    color:
-                        _hasValidVerification ? AppColors.buttonColor : Colors.grey.shade400,
+                    text: _isSubmitting ? 'Creando cuenta...' : 'Crear Cuenta',
+                    onTap: _hasValidVerification && !_isSubmitting
+                        ? _submitRegistration
+                        : null,
+                    color: _hasValidVerification && !_isSubmitting
+                        ? AppColors.buttonColor
+                        : Colors.grey.shade400,
                   ),
                 ),
                 

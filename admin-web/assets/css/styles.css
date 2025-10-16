@@ -26,6 +26,10 @@
     background: var(--gris-fondo);
   }
   
+  .content-wrapper {
+    width: 100%;
+  }
+  
   #sidebar {
     background: var(--azul-noche) !important;
     color: #fff;
@@ -106,7 +110,9 @@
   #sidebar .list-group-item {
     min-width: 0;
   }
-  
+
+
+
   #sidebar .nav-link.active,
   #sidebar .nav-link:hover {
     background: var(--azul-hover);

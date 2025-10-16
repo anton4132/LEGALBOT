@@ -1,40 +1,46 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../constants/colors.dart';
 import '../../../widgets/custombtn.dart';
-import 'contact_info_screen.dart';
+import 'security_screen.dart';
 
-class PersonalInfoScreen extends StatefulWidget {
+class PersonalInfoScreen extends StatelessWidget {
   final String userType;
-  
-  const PersonalInfoScreen({super.key, required this.userType});
+  final Map<String, String> personalInfo;
+  final Map<String, String> contactInfo;
+  final Map<String, dynamic>? verification;
 
-  @override
-  State<PersonalInfoScreen> createState() => _PersonalInfoScreenState();
-}
+  const PersonalInfoScreen({
+    super.key,
+    required this.userType,
+    required this.personalInfo,
+    required this.contactInfo,
+    this.verification,
+  });
 
-class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
-  final TextEditingController _primerNombreController = TextEditingController();
-  final TextEditingController _segundoNombreController = TextEditingController();
-  final TextEditingController _apellidoPaternoController = TextEditingController();
-  final TextEditingController _apellidoMaternoController = TextEditingController();
+  String _fallback(Map<String, String> source, String key) {
+    return source[key]?.trim() ?? '';
+  }
 
-  Widget _buildCustomTextField({
-    required TextEditingController controller,
-    required String label,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    int? maxLength,
-  }) {
+  Map<String, String> _normalizedPersonalInfo() {
+    return {
+      'primerNombre': _fallback(personalInfo, 'primerNombre'),
+      'segundoNombre': _fallback(personalInfo, 'segundoNombre'),
+      'apellidoPaterno': _fallback(personalInfo, 'apellidoPaterno'),
+      'apellidoMaterno': _fallback(personalInfo, 'apellidoMaterno'),
+    };
+  }
+
+  Widget _buildReadOnlyField(String label, String value) {
+    final displayValue = value.isNotEmpty ? value : 'No disponible';
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        maxLength: maxLength,
+        initialValue: displayValue,
+        readOnly: true,
+        enableInteractiveSelection: false,
         decoration: InputDecoration(
           labelText: label,
+          suffixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -49,70 +55,112 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
           ),
           filled: true,
           fillColor: Colors.grey.shade50,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );
   }
 
+  List<Widget> _buildNameFields(String primerNombre, String segundoNombre) {
+    final hasPrimer = primerNombre.isNotEmpty;
+    final hasSegundo = segundoNombre.isNotEmpty;
 
-  String _normalizeName(String value) => value.trim().replaceAll(RegExp(r'\s+'), ' ');
-
-  void _nextStep() {
-    if (_validateFields()) {
-      final normalizedPrimerNombre = _normalizeName(_primerNombreController.text);
-      final normalizedSegundoNombre = _normalizeName(_segundoNombreController.text);
-      final normalizedApellidoPaterno = _normalizeName(_apellidoPaternoController.text);
-      final normalizedApellidoMaterno = _normalizeName(_apellidoMaternoController.text);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ContactInfoScreen(
-            userType: widget.userType,
-            personalInfo: {
-              'primerNombre': normalizedPrimerNombre,
-              'segundoNombre': normalizedSegundoNombre,
-              'apellidoPaterno': normalizedApellidoPaterno,
-              'apellidoMaterno': normalizedApellidoMaterno,
-            },
-          ),
+    if (hasPrimer && hasSegundo) {
+      return [
+        Row(
+          children: [
+            Expanded(
+              child: _buildReadOnlyField('Primer Nombre', primerNombre),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: _buildReadOnlyField('Segundo Nombre', segundoNombre),
+            ),
+          ],
         ),
-      );
+      ];
     }
+
+    if (hasPrimer) {
+      return [_buildReadOnlyField('Nombre', primerNombre)];
+    }
+
+    if (hasSegundo) {
+      return [_buildReadOnlyField('Nombre', segundoNombre)];
+    }
+
+    return [_buildReadOnlyField('Nombre', '')];
   }
 
-  bool _validateFields() {
-    if (_primerNombreController.text.isEmpty ||
-        _apellidoPaternoController.text.isEmpty ||
-        _apellidoMaternoController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor completa los campos obligatorios'),
-          backgroundColor: Colors.red,
+  List<Widget> _buildLastNameFields(String apellidoPaterno, String apellidoMaterno) {
+    final hasPaterno = apellidoPaterno.isNotEmpty;
+    final hasMaterno = apellidoMaterno.isNotEmpty;
+
+    if (hasPaterno && hasMaterno) {
+      return [
+        Row(
+          children: [
+            Expanded(
+              child: _buildReadOnlyField('Apellido Paterno', apellidoPaterno),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: _buildReadOnlyField('Apellido Materno', apellidoMaterno),
+            ),
+          ],
         ),
-      );
-      return false;
+      ];
     }
-    return true;
+
+    final fields = <Widget>[];
+    if (hasPaterno) {
+      fields.add(_buildReadOnlyField('Apellido Paterno', apellidoPaterno));
+    }
+    if (hasMaterno) {
+      fields.add(_buildReadOnlyField('Apellido Materno', apellidoMaterno));
+    }
+
+    if (fields.isEmpty) {
+      fields.add(_buildReadOnlyField('Apellidos', ''));
+    }
+
+    return fields;
   }
 
-  @override
-  void dispose() {
-    _primerNombreController.dispose();
-    _segundoNombreController.dispose();
-    _apellidoPaternoController.dispose();
-    _apellidoMaternoController.dispose();
-    super.dispose();
+  void _goToSecurity(BuildContext context, Map<String, String> sanitizedPersonalInfo) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SecurityScreen(
+          userType: userType,
+          personalInfo: sanitizedPersonalInfo,
+          contactInfo: contactInfo,
+          verification: verification,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final sanitizedPersonalInfo = _normalizedPersonalInfo();
+    final primerNombre = sanitizedPersonalInfo['primerNombre'] ?? '';
+    final segundoNombre = sanitizedPersonalInfo['segundoNombre'] ?? '';
+    final apellidoPaterno = sanitizedPersonalInfo['apellidoPaterno'] ?? '';
+    final apellidoMaterno = sanitizedPersonalInfo['apellidoMaterno'] ?? '';
+    final dni = contactInfo['dni'] ?? '';
+
+    final helperText = dni.isNotEmpty
+        ? 'Datos obtenidos automáticamente para el DNI $dni.'
+        : 'Datos obtenidos automáticamente del padrón oficial.';
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.buttonColor,
         foregroundColor: Colors.white,
         title: Text(
-          widget.userType == 'abogado' ? 'Registro de Abogado' : 'Registro de Cliente',
+          userType == 'abogado' ? 'Registro de Abogado' : 'Registro de Cliente',
         ),
         elevation: 0,
       ),
@@ -131,8 +179,6 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                
-                // Progress indicator
                 Row(
                   children: [
                     Container(
@@ -142,7 +188,25 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                         color: AppColors.buttonColor,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.check, color: Colors.white, size: 20),
+                      child:
+                          const Icon(Icons.check, color: Colors.white, size: 20),
+                    ),
+                    Expanded(
+                      child: Container(
+                        height: 3,
+                        color: AppColors.buttonColor,
+                        margin: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                    ),
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: AppColors.buttonColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child:
+                          const Icon(Icons.person, color: Colors.white, size: 20),
                     ),
                     Expanded(
                       child: Container(
@@ -158,31 +222,14 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                         color: Colors.grey.shade300,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.person, color: Colors.white, size: 20),
-                    ),
-                    Expanded(
-                      child: Container(
-                        height: 3,
-                        color: Colors.grey.shade300,
-                        margin: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                    ),
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.security, color: Colors.white, size: 20),
+                      child: const Icon(Icons.security,
+                          color: Colors.white, size: 20),
                     ),
                   ],
                 ),
-                
                 const SizedBox(height: 30),
-                
                 const Text(
-                  'Información Personal',
+                  'Verifica tu identidad',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -191,16 +238,13 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Completa tus datos personales',
+                  'Confirma que los datos mostrados coinciden contigo.',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.white.withOpacity(0.8),
                   ),
                 ),
-                
                 const SizedBox(height: 40),
-                
-                // Información Personal Container
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
@@ -221,10 +265,11 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.person, color: AppColors.buttonColor, size: 24),
+                          Icon(Icons.badge,
+                              color: AppColors.buttonColor, size: 24),
                           const SizedBox(width: 10),
                           Text(
-                            'Datos Personales',
+                            'Datos personales',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -234,94 +279,46 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      
-                      // Nombres
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildCustomTextField(
-                              controller: _primerNombreController,
-                              label: 'Primer Nombre *',
-                            ),
-                          ),
-                          const SizedBox(width: 15),
-                          Expanded(
-                            child: _buildCustomTextField(
-                              controller: _segundoNombreController,
-                              label: 'Segundo Nombre',
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      // Apellidos
-                       Row(
+                      ..._buildNameFields(primerNombre, segundoNombre),
+                      ..._buildLastNameFields(apellidoPaterno, apellidoMaterno),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Icon(Icons.info_outline,
+                                color: Colors.blue.shade600, size: 20),
+                            const SizedBox(width: 10),
                             Expanded(
-                              child: _buildCustomTextField(
-                                controller: _apellidoPaternoController,
-                                label: 'Apellido Paterno *',
-                              ),
-                          ),
-                         const SizedBox(width: 15),
-                            Expanded(
-                              child: _buildCustomTextField(
-                                controller: _apellidoMaternoController,
-                                label: 'Apellido Materno *',
+                              child: Text(
+                                helperText,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.blue.shade700,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      const SizedBox(height: 16),
-
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.orange.shade200),  
-                          ),
-                 child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                color: Colors.orange.shade700,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Recuerda ingresar tus nombres tal como aparecen en el padrón oficial. '
-                                  'Los datos se validarán con RENIEC al verificar tu DNI.',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.orange.shade800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                
+                ),
                 const SizedBox(height: 30),
-                
-                // Botón siguiente
                 SizedBox(
                   width: double.infinity,
                   height: 55,
                   child: CustomButton(
-                    text: 'Siguiente',
-                    onTap: _nextStep,
+                    text: 'Sí, soy yo',
+                    onTap: () => _goToSecurity(context, sanitizedPersonalInfo),
                   ),
                 ),
-                
                 const SizedBox(height: 20),
-                
-                // Botón volver
                 SizedBox(
                   width: double.infinity,
                   height: 55,
@@ -334,7 +331,7 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                       ),
                     ),
                     child: const Text(
-                      'Volver',
+                      'No soy yo',
                       style: TextStyle(
                         color: AppColors.buttonColor,
                         fontSize: 16,
@@ -343,6 +340,15 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 10),
+                Text(
+                  'Si los datos no coinciden, regresa y verifica tu DNI.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.8),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ),
           ),
@@ -350,4 +356,4 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
       ),
     );
   }
-} 
+}

@@ -312,13 +312,18 @@ model archivo {
     ambos
   }
 
+enum tipo_regla_tc {
+  precio         // precio de servicio puntual (pago por uso)
+  comision       // neto abogado / split
+}
+
 
   model tarifacomision {
     id          Int      @id @default(autoincrement())
     codigo      String   @unique
     descripcion String?
     valor       Decimal? @db.Decimal
-    tipo        String
+    tipo        tipo_regla_tc
     activo      Boolean  @default(true)
 
     servicio_id      Int?
@@ -572,13 +577,23 @@ model estudio {
   id                     Int        @id @default(autoincrement())
   /////////////////////////
   ruc                    String     @unique
-  nombre_comercial       String?
+  nombre_o_razon_social  String?
   direccion_id           String?    @db.Char(6)
   direccion              direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
-  activo                 Boolean    @default(false)
+  estado                 String?
+  condicion              String?
+
   correo_contacto        String?
   telefono               String?
-  linea_exacta_direccion String?
+  direccion_exacta       String?
+
+
+  ///////////////////////// Flags SUNAT
+
+  es_agente_retencion                  Boolean? @default(false)
+  es_agente_percepcion                 Boolean? @default(false)
+  es_agente_percepcion_combustible     Boolean? @default(false)
+  es_buen_contribuyente                Boolean? @default(false)
 
   /////////////////////////
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
@@ -586,7 +601,9 @@ model estudio {
 
   abogadoestudios abogadoestudio[] @relation("EstudioAbogadoEstudio")
 
-  @@index([activo])
+  @@index([estado])
+  @@index([condicion])
+
 }
 
 model abogadoestudio {

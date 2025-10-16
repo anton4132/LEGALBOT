@@ -1,26 +1,24 @@
 import 'package:flutter/material.dart';
 import '../../../constants/colors.dart';
 import '../../../widgets/custombtn.dart';
-import '../../../services/api_client.dart';
 import '../login_screen.dart';
 
 class ConfirmationScreen extends StatefulWidget {
   final String userType;
   final Map<String, String> personalInfo;
   final Map<String, String> contactInfo;
-  final String password;
   final Map<String, dynamic>? verification;
+  final bool success;
+  final String message;
 
-
-  
   const ConfirmationScreen({
-     super.key,
-    required this.userType, 
+    super.key,
+    required this.userType,
     required this.personalInfo,
     required this.contactInfo,
-    required this.password,
+    required this.success,
+    required this.message,
     this.verification,
-
   });
 
   @override
@@ -60,95 +58,45 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     super.dispose();
   }
 
-  bool _isSubmitting = false;
+  Color get _statusColor =>
+      widget.success ? Colors.green.shade600 : Colors.red.shade600;
 
-  Future<void> _completeRegistration() async {
-    setState(() => _isSubmitting = true);
-    try {
-      await ApiClient.signup(
-        userType: widget.userType,
-        personalInfo: widget.personalInfo,
-        contactInfo: widget.contactInfo,
-        password: widget.password,
-      );
-      if (!mounted) return;
-      _showSnackBar(
-        '¡Registro exitoso! Redirigiendo al login...',
-        backgroundColor: Colors.green,
-      );
-      Future.delayed(const Duration(seconds: 2), () {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const LoginScreen(),
-          ),
-          (route) => false,
-        );
-      });
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      final friendlyMessage = _mapSignupError(error);
-      _showSnackBar(friendlyMessage);
-    } catch (error) {
-      if (!mounted) return;
-      final message = error.toString().replaceFirst('Exception: ', '');
-      _showSnackBar(
-        message.isNotEmpty
-            ? message
-            : 'No se pudo completar el registro. Inténtalo nuevamente.',
+  Color get _statusBackground =>
+      widget.success ? Colors.green.shade100 : Colors.red.shade100;
 
+  IconData get _statusIcon =>
+      widget.success ? Icons.check_circle : Icons.error_outline;
+
+  String get _title => widget.success
+      ? '¡Registro completado!'
+      : 'No pudimos completar el registro';
+
+  String get _subtitle => widget.success
+      ? 'Tu cuenta fue creada exitosamente. Revisa el resumen de tus datos.'
+      : 'El registro no se completó. Revisa la información y vuelve a intentarlo.';
+
+  String get _primaryButtonLabel =>
+      widget.success ? 'Ir al login' : 'Volver a intentar';
+
+  String get _secondaryButtonLabel => widget.success
+      ? 'Registrar otro usuario'
+      : 'Cancelar registro';
+
+  void _handlePrimaryAction() {
+    if (widget.success) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
       );
-    }finally {
-      if (mounted) setState(() => _isSubmitting = false);
+    } else {
+      Navigator.pop(context);
     }
   }
 
-  
-
-  void _showSnackBar(String message, {Color backgroundColor = Colors.red}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: backgroundColor,
-      ),
-    );
+  void _handleSecondaryAction() {
+    Navigator.popUntil(context, (route) => route.isFirst);
   }
-
-  String _mapSignupError(ApiException error) {
-    final rawMessage = error.message.trim();
-    final statusCode = error.statusCode;
-    final message = rawMessage.isNotEmpty ? rawMessage : 'No se pudo completar el registro.';
-
-    if (statusCode == 409) {
-      if (message.contains('ya posee un usuario con ese rol') ||
-          message.contains('ya tiene una cuenta con ese rol')) {
-        return 'La persona ya se encuentra registrada.';
-      }
-      if (message.contains('DNI y correo pertenecen a personas diferentes')) {
-        return 'El DNI y el correo corresponden a distintas personas registradas.';
-      }
-    }
-
-    if (statusCode == 400) {
-      if (message.contains('DNI')) return message;
-      if (message.contains('correo') || message.contains('rol_id') || message.contains('Faltan')) {
-        return message;
-      }
-    }
-
-    if (statusCode == 404 &&
-        message.contains('Persona no encontrada')) {
-      return 'No se encontró la persona para completar el registro.';
-    }
-
-    if (statusCode == 500) {
-      return 'Ocurrió un error en el servidor al crear la cuenta. Inténtalo más tarde.';
-    }
-
-    return message;
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +104,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       appBar: AppBar(
         backgroundColor: AppColors.buttonColor,
         foregroundColor: Colors.white,
-        title: const Text('Confirmar Registro'),
+        title: const Text('Resultado del registro'),
         elevation: 0,
         automaticallyImplyLeading: false,
       ),
@@ -175,8 +123,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                
-                // Progress indicator - Todos completados
                 Row(
                   children: [
                     Container(
@@ -215,17 +161,14 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                       width: 30,
                       height: 30,
                       decoration: BoxDecoration(
-                        color: AppColors.buttonColor,
+                        color: _statusColor,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.check, color: Colors.white, size: 20),
+                      child: Icon(_statusIcon, color: Colors.white, size: 20),
                     ),
                   ],
                 ),
-                
                 const SizedBox(height: 40),
-                
-                // Icono de éxito
                 Center(
                   child: SlideTransition(
                     position: _slideAnimation,
@@ -235,28 +178,25 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: Colors.green.shade100,
+                          color: _statusBackground,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          Icons.check_circle,
+                          _statusIcon,
                           size: 80,
-                          color: Colors.green.shade600,
+                          color: _statusColor,
                         ),
                       ),
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 30),
-                
-                // Título de confirmación
                 Center(
                   child: FadeTransition(
                     opacity: _fadeAnimation,
-                    child: const Text(
-                      '¡Registro Completado!',
-                      style: TextStyle(
+                    child: Text(
+                      _title,
+                      style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -264,14 +204,13 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 10),
-                
                 Center(
                   child: FadeTransition(
                     opacity: _fadeAnimation,
                     child: Text(
-                      'Revisa tus datos antes de confirmar',
+                      _subtitle,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.white.withOpacity(0.8),
@@ -279,10 +218,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 40),
-                
-                // Resumen de datos
                 SlideTransition(
                   position: _slideAnimation,
                   child: Container(
@@ -305,10 +241,11 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.person, color: AppColors.buttonColor, size: 24),
+                            Icon(Icons.person_outline,
+                                color: AppColors.buttonColor, size: 24),
                             const SizedBox(width: 10),
                             Text(
-                              'Resumen de Datos',
+                              'Resumen de datos',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -318,28 +255,66 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                           ],
                         ),
                         const SizedBox(height: 20),
-                        
-                        // Tipo de usuario
-                        _buildInfoRow('Tipo de Usuario', widget.userType == 'abogado' ? 'Abogado' : 'Cliente'),
-                        
-                        // Información personal
-                        _buildInfoRow('Primer Nombre', widget.personalInfo['primerNombre'] ?? ''),
-                        _buildInfoRow('Segundo Nombre', widget.personalInfo['segundoNombre'] ?? ''),
-                        _buildInfoRow('Apellido Paterno', widget.personalInfo['apellidoPaterno'] ?? ''),
-                        _buildInfoRow('Apellido Materno', widget.personalInfo['apellidoMaterno'] ?? ''),
-                        
-                                             
-                        // Información de contacto
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: widget.success
+                                ? Colors.green.shade50
+                                : Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: widget.success
+                                  ? Colors.green.shade200
+                                  : Colors.red.shade200,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                widget.success
+                                    ? Icons.verified
+                                    : Icons.error_outline,
+                                color: widget.success
+                                    ? Colors.green.shade700
+                                    : Colors.red.shade700,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  widget.message,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: widget.success
+                                        ? Colors.green.shade800
+                                        : Colors.red.shade800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _buildInfoRow('Tipo de usuario',
+                            widget.userType == 'abogado' ? 'Abogado' : 'Cliente'),
+                        _buildInfoRow(
+                            'Primer nombre', widget.personalInfo['primerNombre'] ?? ''),
+                        _buildInfoRow(
+                            'Segundo nombre', widget.personalInfo['segundoNombre'] ?? ''),
+                        _buildInfoRow('Apellido paterno',
+                            widget.personalInfo['apellidoPaterno'] ?? ''),
+                        _buildInfoRow('Apellido materno',
+                            widget.personalInfo['apellidoMaterno'] ?? ''),
                         _buildInfoRow('DNI', widget.contactInfo['dni'] ?? ''),
                         _buildInfoRow('Teléfono', widget.contactInfo['phone'] ?? ''),
-                        _buildInfoRow('Email', widget.contactInfo['email'] ?? ''),
+                        _buildInfoRow('Correo', widget.contactInfo['email'] ?? ''),
                         _buildInfoRow('Dirección exacta',
                             widget.contactInfo['lineaExactaDireccion'] ?? ''),
                         _buildInfoRow(
                           'Código Ubigeo',
                           widget.contactInfo['ubigeoCodigo'] ?? '',
                         ),
-
                         if (widget.verification != null) ...[
                           const Divider(height: 32),
                           _buildVerificationSummary(),
@@ -348,46 +323,38 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 30),
-                
-                // Botón confirmar
                 SlideTransition(
                   position: _slideAnimation,
                   child: SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: CustomButton(
-                      text: _isSubmitting
-                          ? 'Enviando...'
-                          : 'Confirmar Registro',
-                      onTap: _isSubmitting ? null : _completeRegistration,
-                       color: _isSubmitting
-                          ? Colors.grey.shade400
-                          : AppColors.buttonColor,
+                      text: _primaryButtonLabel,
+                      onTap: _handlePrimaryAction,
+                      color: widget.success
+                          ? AppColors.buttonColor
+                          : Colors.red.shade400,
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 20),
-                
-                // Botón volver
                 SlideTransition(
                   position: _slideAnimation,
                   child: SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _handleSecondaryAction,
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: AppColors.buttonColor),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Editar Datos',
-                        style: TextStyle(
+                      child: Text(
+                        _secondaryButtonLabel,
+                        style: const TextStyle(
                           color: AppColors.buttonColor,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -411,7 +378,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 140,
             child: Text(
               '$label:',
               style: const TextStyle(
@@ -434,7 +401,10 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       ),
     );
   }
- Widget _buildVerificationSummary() {
+
+
+  
+  Widget _buildVerificationSummary() {
     final lookup = (widget.verification?['dniLookup'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
     final numero = (lookup['numero'] ?? widget.contactInfo['dni'] ?? '').toString();

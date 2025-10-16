@@ -4,17 +4,13 @@ import '../../../constants/colors.dart';
 import '../../../widgets/custombtn.dart';
 import '../../../services/api_client.dart';
 import '../../../models/ubigeo_option.dart';
-import 'security_screen.dart';
+import '../../../models/dni_lookup_result.dart';
+import 'personal_info_screen.dart';
 
 class ContactInfoScreen extends StatefulWidget {
   final String userType;
-  final Map<String, String> personalInfo;
-  
-  const ContactInfoScreen({
-    super.key, 
-    required this.userType, 
-    required this.personalInfo,
-  });
+
+  const ContactInfoScreen({super.key, required this.userType});
 
   @override
   State<ContactInfoScreen> createState() => _ContactInfoScreenState();
@@ -40,7 +36,10 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   bool _loadingDistritos = false;
 
   bool _verificandoIdentidad = false;
-
+  bool _buscandoDni = false;
+  String? _dniError;
+  String? _lastConsultedDni;
+  DniLookupResult? _dniLookup;
 
   @override
   void initState() {
@@ -75,7 +74,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     }
   }
 
-   Future<void> _loadProvincias(String departamentoCodigo) async {
+  Future<void> _loadProvincias(String departamentoCodigo) async {
     setState(() {
       _loadingProvincias = true;
       _provincias = const <UbigeoOption>[];
@@ -123,8 +122,10 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     } finally {
       if (mounted) {
         setState(() => _loadingDistritos = false);
-      }    }
+      }
+    }
   }
+
   Widget _buildCustomTextField({
     required TextEditingController controller,
     required String label,
@@ -132,7 +133,10 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     List<TextInputFormatter>? inputFormatters,
     int? maxLength,
     bool enabled = true,
-
+    ValueChanged<String>? onChanged,
+    Widget? suffixIcon,
+    String? helperText,
+    String? errorText,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -142,8 +146,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         inputFormatters: inputFormatters,
         maxLength: maxLength,
         enabled: enabled,
+        onChanged: onChanged,
         decoration: InputDecoration(
           labelText: label,
+          errorText: errorText,
+          helperText: helperText,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -158,13 +165,17 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
           ),
           filled: true,
           fillColor: Colors.grey.shade50,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+          suffixIcon: suffixIcon,
         ),
       ),
     );
   }
 
-   Widget _buildUbigeoDropdown({
+  Widget _buildUbigeoDropdown({
     required String label,
     required String? value,
     required List<UbigeoOption> options,
@@ -176,14 +187,15 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       margin: const EdgeInsets.only(bottom: 20),
       child: DropdownButtonFormField<String>(
         value: options.any((option) => option.codigo == value) ? value : null,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.codigo,
-                child: Text(option.nombre),
-              ),
-            )
-            .toList(),
+        items:
+            options
+                .map(
+                  (option) => DropdownMenuItem<String>(
+                    value: option.codigo,
+                    child: Text(option.nombre),
+                  ),
+                )
+                .toList(),
         onChanged: !enabled || isLoading ? null : onChanged,
         isExpanded: true,
         decoration: InputDecoration(
@@ -202,23 +214,115 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
           ),
           filled: true,
           fillColor: Colors.grey.shade50,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          suffixIcon: isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(12.0),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : null,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 4,
+          ),
+          suffixIcon:
+              isLoading
+                  ? const Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                  : null,
         ),
       ),
     );
   }
-    String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
+
+  String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
+
+  void _handleDniChanged(String value) {
+    final digits = _digitsOnly(value);
+    if (digits.length == 8) {
+      _ensureDniLookup(showErrors: false);
+    } else {
+      if (_dniLookup != null || _dniError != null) {
+        setState(() {
+          _dniLookup = null;
+          _dniError = null;
+          _lastConsultedDni = null;
+        });
+      }
+    }
+  }
+
+  Future<DniLookupResult?> _ensureDniLookup({bool showErrors = true}) async {
+    final dni = _digitsOnly(_dniController.text);
+    if (dni.length != 8) {
+      if (showErrors) {
+        setState(() {
+          _dniError = 'Ingresa un DNI válido';
+        });
+      }
+      return null;
+    }
+
+    if (_dniLookup != null && _lastConsultedDni == dni) {
+      return _dniLookup;
+    }
+
+    return _lookupDni(dni, showErrors: showErrors);
+  }
+
+  Future<DniLookupResult?> _lookupDni(
+    String dni, {
+    bool showErrors = true,
+  }) async {
+    setState(() {
+      _buscandoDni = true;
+      _dniError = null;
+    });
+
+    try {
+      final result = await ApiClient.lookupDni(dni);
+      if (!mounted) return null;
+      setState(() {
+        _dniLookup = result;
+        _lastConsultedDni = dni;
+      });
+      return result;
+    } on ApiException catch (error) {
+      if (!mounted) return null;
+      final message =
+          error.message.isNotEmpty
+              ? error.message
+              : 'No se pudo verificar el DNI proporcionado.';
+      setState(() {
+        _dniLookup = null;
+        _lastConsultedDni = null;
+        _dniError = message;
+      });
+      if (showErrors) {
+        _showSnack(message);
+      }
+    } catch (error) {
+      if (!mounted) return null;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      final fallback =
+          message.isNotEmpty
+              ? message
+              : 'Ocurrió un error al consultar el DNI.';
+      setState(() {
+        _dniLookup = null;
+        _lastConsultedDni = null;
+        _dniError = fallback;
+      });
+      if (showErrors) {
+        _showSnack(fallback);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _buscandoDni = false);
+      }
+    }
+
+    return null;
+  }
 
   Future<void> _nextStep() async {
     if (!_validateFields()) return;
@@ -227,9 +331,17 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     final normalizedTelefono = _digitsOnly(_phoneController.text);
     final normalizedCorreo = _emailController.text.trim().toLowerCase();
 
-    setState(() => _verificandoIdentidad = true);
+    setState(() {
+      _verificandoIdentidad = true;
+      _dniError = null;
+    });
 
     try {
+      final dniLookup = await _ensureDniLookup();
+      if (dniLookup == null) {
+        return;
+      }
+
       final conflicts = await ApiClient.checkPersonaConflicts(
         dni: normalizedDni,
         telefono: normalizedTelefono,
@@ -249,31 +361,6 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         return;
       }
 
-      final dniLookup = await ApiClient.lookupDni(normalizedDni);
-
-      final enteredPrimerNombre =
-          (widget.personalInfo['primerNombre'] ?? '').trim().toLowerCase();
-      final enteredApellidoPaterno =
-          (widget.personalInfo['apellidoPaterno'] ?? '').trim().toLowerCase();
-
-      final padronsPrimerNombre = dniLookup.primerNombre.trim().toLowerCase();
-      final padronsApellidoPaterno =
-          dniLookup.apellidoPaterno.trim().toLowerCase();
-
-      if (enteredPrimerNombre.isEmpty || enteredApellidoPaterno.isEmpty) {
-        _showSnack(
-            'Los nombres ingresados no son válidos para validar el DNI.');
-        return;
-      }
-
-      if (enteredPrimerNombre != padronsPrimerNombre ||
-          enteredApellidoPaterno != padronsApellidoPaterno) {
-        _showSnack(
-          'Los nombres ingresados no coinciden con el padrón RENIEC. Verifica tu primer nombre y apellido paterno.',
-        );
-        return;
-      }
-
       if (!mounted) return;
 
       final contactInfo = {
@@ -282,6 +369,13 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         'email': normalizedCorreo,
         'ubigeoCodigo': _selectedDistritoCodigo ?? '',
         'lineaExactaDireccion': _direccionExactaController.text.trim(),
+      };
+
+      final personalInfo = {
+        'primerNombre': dniLookup.primerNombre.trim(),
+        'segundoNombre': dniLookup.segundoNombre.trim(),
+        'apellidoPaterno': dniLookup.apellidoPaterno.trim(),
+        'apellidoMaterno': dniLookup.apellidoMaterno.trim(),
       };
 
       final verification = {
@@ -299,19 +393,21 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => SecurityScreen(
-            userType: widget.userType,
-            personalInfo: widget.personalInfo,
-            contactInfo: contactInfo,
-            verification: verification,
-          ),
+          builder:
+              (context) => PersonalInfoScreen(
+                userType: widget.userType,
+                personalInfo: personalInfo,
+                contactInfo: contactInfo,
+                verification: verification,
+              ),
         ),
       );
-    }on ApiException catch (error) {
+    } on ApiException catch (error) {
       if (!mounted) return;
-      final message = error.message.isNotEmpty
-          ? error.message
-          : 'No se pudo verificar los datos ingresados';
+      final message =
+          error.message.isNotEmpty
+              ? error.message
+              : 'No se pudo verificar los datos ingresados';
       _showSnack(message);
     } catch (error) {
       if (!mounted) return;
@@ -356,24 +452,64 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     _direccionExactaController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
-     final bool isProcessing = _isLoadingUbigeo || _verificandoIdentidad;
-    final String primaryButtonText = _isLoadingUbigeo
-        ? 'Cargando ubicaciones...'
-        : (_verificandoIdentidad ? 'Verificando datos...' : 'Siguiente');
-    final Color primaryButtonColor = isProcessing
-        ? Colors.grey.shade400
-        : AppColors.buttonColor;
+    final bool isProcessing =
+        _isLoadingUbigeo || _verificandoIdentidad || _buscandoDni;
+    final String primaryButtonText;
+    if (_isLoadingUbigeo) {
+      primaryButtonText = 'Cargando ubicaciones...';
+    } else if (_verificandoIdentidad) {
+      primaryButtonText = 'Verificando datos...';
+    } else if (_buscandoDni) {
+      primaryButtonText = 'Consultando DNI...';
+    } else {
+      primaryButtonText = 'Siguiente';
+    }
+    final Color primaryButtonColor =
+        isProcessing ? Colors.grey.shade400 : AppColors.buttonColor;
 
+    final dniLookup = _dniLookup;
+    final String? dniHelperText;
+    if (dniLookup != null && _dniError == null) {
+      final parts =
+          [
+                dniLookup.primerNombre,
+                dniLookup.segundoNombre,
+                dniLookup.apellidoPaterno,
+                dniLookup.apellidoMaterno,
+              ]
+              .map((value) => value.trim())
+              .where((value) => value.isNotEmpty)
+              .toList();
+      dniHelperText = parts.isEmpty ? null : 'Se encontró: ${parts.join(' ')}';
+    } else {
+      dniHelperText = null;
+    }
+
+    Widget? dniSuffixIcon;
+    if (_buscandoDni) {
+      dniSuffixIcon = const Padding(
+        padding: EdgeInsets.all(12.0),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    } else if (dniLookup != null && _dniError == null) {
+      dniSuffixIcon = const Icon(Icons.verified, color: Colors.green);
+    }
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.buttonColor,
         foregroundColor: Colors.white,
         title: Text(
-          widget.userType == 'abogado' ? 'Registro de Abogado' : 'Registro de Cliente',
+          widget.userType == 'abogado'
+              ? 'Registro de Abogado'
+              : 'Registro de Cliente',
         ),
         elevation: 0,
       ),
@@ -392,7 +528,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                
+
                 // Progress indicator
                 Row(
                   children: [
@@ -403,7 +539,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         color: AppColors.buttonColor,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.check, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.check,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     Expanded(
                       child: Container(
@@ -419,7 +559,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         color: AppColors.buttonColor,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.person, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.person,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     Expanded(
                       child: Container(
@@ -435,13 +579,17 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         color: Colors.grey.shade300,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.security, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.security,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 30),
-                
+
                 const Text(
                   'Información de Contacto',
                   style: TextStyle(
@@ -458,9 +606,9 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                     color: Colors.white.withOpacity(0.8),
                   ),
                 ),
-                
+
                 const SizedBox(height: 40),
-                
+
                 // Información de Contacto
                 Container(
                   width: double.infinity,
@@ -482,7 +630,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.contact_phone, color: AppColors.buttonColor, size: 24),
+                          Icon(
+                            Icons.contact_phone,
+                            color: AppColors.buttonColor,
+                            size: 24,
+                          ),
                           const SizedBox(width: 10),
                           Text(
                             'Datos de Contacto',
@@ -495,7 +647,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      
+
                       // DNI
                       _buildCustomTextField(
                         controller: _dniController,
@@ -506,8 +658,12 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                           LengthLimitingTextInputFormatter(8),
                         ],
                         maxLength: 8,
+                        onChanged: _handleDniChanged,
+                        suffixIcon: dniSuffixIcon,
+                        helperText: dniHelperText,
+                        errorText: _dniError,
                       ),
-                      
+
                       // Teléfono
                       _buildCustomTextField(
                         controller: _phoneController,
@@ -519,14 +675,14 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         ],
                         maxLength: 10,
                       ),
-                      
+
                       // Email
                       _buildCustomTextField(
                         controller: _emailController,
                         label: 'Correo Electrónico *',
                         keyboardType: TextInputType.emailAddress,
                       ),
-                      
+
                       // Departamento
                       _buildUbigeoDropdown(
                         label: 'Departamento *',
@@ -597,9 +753,9 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 30),
-                
+
                 // Botón siguiente
                 SizedBox(
                   width: double.infinity,
@@ -610,9 +766,9 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                     color: primaryButtonColor,
                   ),
                 ),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Botón volver
                 SizedBox(
                   width: double.infinity,
@@ -642,4 +798,4 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       ),
     );
   }
-} 
+}
