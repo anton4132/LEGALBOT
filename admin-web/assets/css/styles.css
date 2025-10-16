@@ -31,8 +31,33 @@
     color: #fff;
     min-height: 100vh;
     border-right: 1px solid var(--gris-claro);
+    box-sizing: border-box;
+    width: min(240px, 100%);
+    max-width: 100%;
+    flex: 0 0 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
-  
+  #sidebar *,
+  #sidebar *::before,
+  #sidebar *::after {
+    box-sizing: border-box;
+  }
+
+  #sidebar h4,
+  #sidebar > * {
+    max-width: 100%;
+  }
+
+  #sidebar .nav {
+    flex: 1 1 auto;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
   #sidebar h4 {
     color: #fff;
     font-weight: 600;
@@ -45,6 +70,41 @@
     transition: background 0.15s, color 0.15s;
     font-size: 1rem;
     padding: 8px 16px;
+    max-width: 100%;
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  #sidebar .nav-link > * {
+    min-width: 0;
+  }
+
+  #sidebar .nav-link > span,
+  #sidebar .nav-link > small,
+  #sidebar .nav-link > strong {
+    display: block;
+  }
+
+  #sidebar .nav .nav,
+  #sidebar .list-group,
+  #sidebar .accordion,
+  #sidebar .accordion-item,
+  #sidebar .accordion-button,
+  #sidebar .accordion-body {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  #sidebar .nav-item,
+  #sidebar .accordion-item,
+  #sidebar .list-group-item {
+    min-width: 0;
   }
   
   #sidebar .nav-link.active,
