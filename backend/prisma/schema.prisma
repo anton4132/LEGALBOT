@@ -583,8 +583,6 @@ model estudio {
   estado                 String?
   condicion              String?
 
-  correo_contacto        String?
-  telefono               String?
   direccion_exacta       String?
 
 
