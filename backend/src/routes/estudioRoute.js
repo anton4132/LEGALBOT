@@ -19,46 +19,47 @@ const estudioController = require('../controllers/estudioController');
  *       properties:
  *         id:
  *           type: integer
- *           example: 12
  *         ruc:
  *           type: string
  *           nullable: true
- *           example: "20601234567"
  *         nombre_comercial:
  *           type: string
  *           nullable: true
- *           example: "Estudio Legal Rivera"
  *         pais:
  *           type: string
  *           nullable: true
- *           example: "Perú"
  *         ciudad:
  *           type: string
  *           nullable: true
- *           example: "Lima"
  *         correo_contacto:
  *           type: string
  *           nullable: true
- *           example: "contacto@riveralegal.pe"
  *         telefono:
  *           type: string
  *           nullable: true
- *           example: "+51 1 555-1234"
  *         direccion:
  *           type: string
  *           nullable: true
- *           example: "Av. Principal 123, Miraflores"
  *         activo:
  *           type: boolean
- *           example: false
  *         creado_el:
  *           type: string
  *           format: date-time
- *           example: "2025-09-15T12:34:56.000Z"
  *         actualizado_el:
  *           type: string
  *           format: date-time
- *           example: "2025-09-15T12:34:56.000Z"
+ *       example:
+ *         id: 12
+ *         ruc: "20601234567"
+ *         nombre_comercial: "Estudio Legal Rivera"
+ *         pais: "Perú"
+ *         ciudad: "Lima"
+ *         correo_contacto: "contacto@riveralegal.pe"
+ *         telefono: "+51 1 555-1234"
+ *         direccion: "Av. Principal 123, Miraflores"
+ *         activo: true
+ *         creado_el: "2025-09-15T12:34:56.000Z"
+ *         actualizado_el: "2025-09-16T09:12:34.000Z"
  *
  *     EstudioCreateRequest:
  *       type: object
@@ -66,25 +67,18 @@ const estudioController = require('../controllers/estudioController');
  *         ruc:
  *           type: string
  *           description: RUC único (opcional, pero si se envía debe ser único)
- *           example: "20601234567"
  *         nombre_comercial:
  *           type: string
- *           example: "Estudio Legal Rivera"
  *         pais:
  *           type: string
- *           example: "Perú"
  *         ciudad:
  *           type: string
- *           example: "Lima"
  *         correo_contacto:
  *           type: string
- *           example: "contacto@riveralegal.pe"
  *         telefono:
  *           type: string
- *           example: "+51 1 555-1234"
  *         direccion:
  *           type: string
- *           example: "Av. Principal 123, Miraflores"
  *       example:
  *         ruc: "20601234567"
  *         nombre_comercial: "Estudio Legal Rivera"
@@ -99,14 +93,10 @@ const estudioController = require('../controllers/estudioController');
  *       properties:
  *         message:
  *           type: string
- *       examples:
- *         serverError:
- *           value:
- *             message: "Error interno del servidor"
- *         duplicateRuc:
- *           value:
- *             message: "El RUC ya está registrado"
- *  *     ApiPeruRucResponse:
+ *       example:
+ *         message: "Error interno del servidor"
+ *
+ *     ApiPeruRucResponse:
  *       type: object
  *       description: Respuesta cruda enviada por el servicio externo https://apiperu.dev/api/ruc.
  *       properties:
@@ -212,9 +202,6 @@ const estudioController = require('../controllers/estudioController');
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *             examples:
- *               serverError:   
- *                 $ref: '#/components/schemas/ErrorResponse/examples/serverError'
  */
 router.get('/', estudioController.searchEstudios);
 /**
@@ -245,18 +232,14 @@ router.get('/', estudioController.searchEstudios);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *             examples:
- *               duplicateRuc:
- *                 $ref: '#/components/schemas/ErrorResponse/examples/duplicateRuc'
+ *              example:
+ *               message: "El RUC ya está registrado"
  *       500:
  *         description: Error creando estudio
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *             examples:
- *               serverError:
- *                 $ref: '#/components/schemas/ErrorResponse/examples/serverError'
  */
 router.post('/', estudioController.createEstudio);
 

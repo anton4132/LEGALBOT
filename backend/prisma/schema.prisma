@@ -566,16 +566,23 @@ model especialidad {
 }
 
 model estudio {
-  id                    Int        @id @default(autoincrement())
+   id                    Int        @id @default(autoincrement())
   /////////////////////////
   ruc                   String     @unique
+  nombre_comercial      String?
   nombre_o_razon_social String?
-  direccion_id          String?    @db.Char(6)
-  direccion             direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
-  estado                String?
-  condicion             String?
+  /////////////////////////
+  correo_contacto String?
+  telefono        String?
+  
+ 
 
-  direccion_exacta String?
+  direccion_id   String?    @db.Char(6)
+  direccion      direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
+  direccion_exacta        String?
+  linea_exacta_direccion  String?
+  estado                  String?
+  condicion               String?
 
   ///////////////////////// Flags SUNAT
 
@@ -585,7 +592,8 @@ model estudio {
   es_buen_contribuyente            Boolean? @default(false)
 
   /////////////////////////
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  activo        Boolean   @default(false)
+  creado_el     DateTime  @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
   abogadoestudios abogadoestudio[] @relation("EstudioAbogadoEstudio")

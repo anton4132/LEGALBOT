@@ -259,8 +259,10 @@ const lookupEstudioPorRuc = async (req, res) => {
       });
     }
 
-    const nombreRazonSocial = sanitizeString(apiData.nombre_o_razon_social);
-    
+   const nombreComercialSunat = sanitizeString(apiData.nombre_comercial);
+    const nombreRazonSocial =
+      sanitizeString(apiData.nombre_o_razon_social) || nombreComercialSunat;
+          
     const direccionExacta =
       sanitizeString(apiData.direccion_completa) ||
       sanitizeString(apiData.direccion);
@@ -285,6 +287,7 @@ const lookupEstudioPorRuc = async (req, res) => {
       }
 
       const estudioData = {
+        nombre_comercial: nombreComercialSunat || nombreRazonSocial,
         nombre_o_razon_social: nombreRazonSocial,
         direccion_id: direccion.ubigeo_codigo,
         direccion_exacta: direccionExacta,
