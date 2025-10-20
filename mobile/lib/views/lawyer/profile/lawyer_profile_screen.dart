@@ -1317,9 +1317,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        '${_dayName(slot.diaSemana)} · '
-                        '${_formatTimeForDisplay(slot.horaInicio)} - '
-                        '${_formatTimeForDisplay(slot.horaFin)}',
+                         '${_dayName(slot.diaSemana)} · ${_formatTimeForDisplay(slot.horaInicio)} - ${_formatTimeForDisplay(slot.horaFin)}',
                       ),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
