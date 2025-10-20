@@ -106,6 +106,66 @@ const estudioController = require('../controllers/estudioController');
  *         duplicateRuc:
  *           value:
  *             message: "El RUC ya está registrado"
+ *  *     ApiPeruRucResponse:
+ *       type: object
+ *       description: Respuesta cruda enviada por el servicio externo https://apiperu.dev/api/ruc.
+ *       properties:
+ *         success:
+ *           type: boolean
+ *         data:
+ *           type: object
+ *           properties:
+ *             ruc:
+ *               type: string
+ *               example: "20100443688"
+ *             nombre_o_razon_social:
+ *               type: string
+ *               example: "EMPRESA DE PRUEBA S.A.C."
+ *             ubigeo_sunat:
+ *               type: string
+ *               example: "1501"
+ *             departamento:
+ *               type: string
+ *               example: "LIMA"
+ *             provincia:
+ *               type: string
+ *               example: "LIMA"
+ *             distrito:
+ *               type: string
+ *               nullable: true
+ *               example: null
+ *             direccion_completa:
+ *               type: string
+ *               example: "AV. PRINCIPAL 123"
+ *       example:
+ *         success: true
+ *         data:
+ *           ruc: "20100443688"
+ *           nombre_o_razon_social: "EMPRESA DE PRUEBA S.A.C."
+ *           ubigeo_sunat: "1501"
+ *           departamento: "LIMA"
+ *           provincia: "LIMA"
+ *           distrito: null
+ *           direccion_completa: "AV. PRINCIPAL 123"
+ *     EstudioConsultaRucResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: true
+ *         data:
+ *           $ref: '#/components/schemas/Estudio'
+ *       example:
+ *         success: true
+ *         data:
+ *           id: 42
+ *           ruc: "20100443688"
+ *           nombre_comercial: "EMPRESA DE PRUEBA S.A.C."
+ *           direccion_ubigeo_codigo: "150100"
+ *           linea_exacta_direccion: "AV. PRINCIPAL 123"
+ *           departamento: "LIMA"
+ *           provincia: "LIMA"
+ *           distrito: "Sin distrito"
  */
 
 /**
@@ -206,8 +266,10 @@ router.post('/', estudioController.createEstudio);
  *   post:
  *     summary: Consulta y registra un estudio por RUC (APIPERU)
  *     description: >
- *       Consulta el servicio de APIPERU para obtener los datos de un RUC, crea/actualiza el estudio
- *       y asegura que exista la dirección correspondiente. Devuelve el resumen del estudio registrado.
+ *       Consulta el servicio externo de https://apiperu.dev/api/ruc para obtener los datos de un RUC,
+ *       crea/actualiza el estudio y asegura que exista la dirección correspondiente. Cuando el ubigeo
+ *       devuelto tiene solo 4 dígitos (sin distrito), se completa automáticamente con "00" para mantener
+ *       el formato estándar de 6 dígitos.
  *     tags: [Estudios]
  *     requestBody:
  *       required: true
@@ -225,14 +287,23 @@ router.post('/', estudioController.createEstudio);
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   $ref: '#/components/schemas/Estudio'
+ *               $ref: '#/components/schemas/EstudioConsultaRucResponse'
  *       400:
  *         description: Error de validación en el RUC o en la respuesta del servicio
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               invalidUbigeo:
+ *                 value:
+ *                   message: "El servicio de RUC no devolvió un código de ubigeo válido (6 dígitos)."
+ *               missingDireccion:
+ *                 value:
+ *                   message: "El servicio de RUC no devolvió una dirección completa para registrar."
+ *               noDireccionValida:
+ *                 value:
+ *                   message: "Este RUC no tiene una dirección válida."
  *       500:
  *         description: Error consultando el servicio o registrando el estudio
  */

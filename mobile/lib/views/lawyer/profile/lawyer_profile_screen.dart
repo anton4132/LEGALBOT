@@ -1447,8 +1447,8 @@ Widget _buildLawFirmSection() {
             controller: _lawFirmRucController,
             keyboardType: TextInputType.number,
             maxLength: 11,
-            inputFormatters: const [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
               labelText: 'RUC del estudio',
               counterText: '',
             ),

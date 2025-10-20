@@ -74,6 +74,30 @@ const mapEstudioResponse = (estudio) => {
   };
 };
 
+
+const normalizeUbigeoCodigo = (value) => {
+  const sanitized = sanitizeString(value);
+  if (!sanitized) {
+    return { code: null, originalLength: 0 };
+  }
+
+  const digitsOnly = sanitized.replace(/\D/g, '');
+  if (!digitsOnly) {
+    return { code: null, originalLength: 0 };
+  }
+
+  if (digitsOnly.length === 6) {
+    return { code: digitsOnly, originalLength: 6 };
+  }
+
+  if (digitsOnly.length === 4) {
+    return { code: `${digitsOnly}00`, originalLength: 4 };
+  }
+
+  return { code: null, originalLength: digitsOnly.length };
+};
+
+
 const fetchRucInfo = async (ruc) => {
   const token = sanitizeString(process.env.APIPERU_TOKEN);
   if (!token) {
@@ -200,12 +224,15 @@ const lookupEstudioPorRuc = async (req, res) => {
 
     const apiData = await fetchRucInfo(ruc);
 
-    const ubigeoSunat = sanitizeString(apiData.ubigeo_sunat);
-    if (!ubigeoSunat || ubigeoSunat.length !== 6) {
+    const { code: ubigeoSunat, originalLength: ubigeoLength } =
+      normalizeUbigeoCodigo(apiData.ubigeo_sunat);
+    if (!ubigeoSunat) {
       return res.status(400).json({
         success: false,
         message:
-          'El servicio de RUC no devolvió un código de ubigeo válido (6 dígitos).',
+          ubigeoLength < 4
+            ? 'Este RUC no tiene una dirección válida.'
+            : 'El servicio de RUC no devolvió un código de ubigeo válido (6 dígitos).',
       });
     }
 
@@ -213,7 +240,18 @@ const lookupEstudioPorRuc = async (req, res) => {
     const direccionProvincia = sanitizeString(apiData.provincia);
     const direccionDistrito = sanitizeString(apiData.distrito);
 
-    if (!direccionDepartamento || !direccionProvincia || !direccionDistrito) {
+    if (!direccionDepartamento || !direccionProvincia) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'El servicio de RUC no devolvió una dirección completa para registrar.',
+      });
+    }
+
+    const distritoNormalizado =
+      direccionDistrito || (ubigeoLength === 4 ? 'Sin distrito' : null);
+
+    if (!distritoNormalizado) {
       return res.status(400).json({
         success: false,
         message:
@@ -222,6 +260,7 @@ const lookupEstudioPorRuc = async (req, res) => {
     }
 
     const nombreRazonSocial = sanitizeString(apiData.nombre_o_razon_social);
+    
     const direccionExacta =
       sanitizeString(apiData.direccion_completa) ||
       sanitizeString(apiData.direccion);
@@ -240,7 +279,7 @@ const lookupEstudioPorRuc = async (req, res) => {
             ubigeo_codigo: ubigeoSunat,
             departamento: direccionDepartamento,
             provincia: direccionProvincia,
-            distrito: direccionDistrito,
+            distrito: distritoNormalizado,
           },
         });
       }
