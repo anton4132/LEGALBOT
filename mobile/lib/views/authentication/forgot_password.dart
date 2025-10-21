@@ -1,9 +1,11 @@
-import 'package:legalserviceapp/views/Authentication/reset_password.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../Constants/colors.dart';
-import '../../Widgets/custombtn.dart';
+import 'package:legalserviceapp/views/authentication/reset_password.dart';
+
+import '../../constants/colors.dart';
+import '../../widgets/custombtn.dart';
+import '../../services/api_client.dart';
 import '../../widgets/detailstext1.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -19,8 +21,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _dniController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -49,10 +52,108 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   @override
   void dispose() {
     _controller.dispose();
-    _phoneController.dispose();
     _dniController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
+
+  Future<void> _handleSendCode() async {
+    if (_isSubmitting) return;
+
+    FocusScope.of(context).unfocus();
+
+    final dni = _dniController.text.trim();
+    final correo = _emailController.text.trim();
+
+    if (dni.isEmpty || correo.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor completa todos los campos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final sanitizedDni = dni.replaceAll(RegExp('[^0-9]'), '');
+    if (sanitizedDni.length != 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El DNI debe tener 8 dígitos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!emailPattern.hasMatch(correo)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ingresa un correo electrónico válido'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final normalizedEmail = correo.trim().toLowerCase();
+      await ApiClient.validatePasswordRecoveryIdentity(
+        dni: sanitizedDni,
+        correo: normalizedEmail,
+      );
+      await ApiClient.requestPasswordRecoveryCode(
+        dni: sanitizedDni,
+        correo: normalizedEmail,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Te hemos enviado un código de verificación al correo registrado.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ResetPasswordScreen(
+            dni: sanitizedDni,
+            correo: normalizedEmail,
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo iniciar la recuperación. Inténtalo nuevamente.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +210,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                           ),
                           const SizedBox(height: 20),
                           const Text(
-                            'Ingresa tu número de teléfono y DNI para recuperar tu clave',
+                            'Ingresa tu DNI y correo electrónico registrado para recuperar tu clave',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 16,
@@ -117,26 +218,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                             ),
                           ),
                           const SizedBox(height: 30),
-                          SlideTransition(
-                            position: _slideAnimation,
-                            child: TextFormField(
-                              controller: _phoneController,
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(10),
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'Número de Teléfono',
-                                prefixIcon: Icon(Icons.phone, color: AppColors.buttonColor),
-                                border: OutlineInputBorder(),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
                           SlideTransition(
                             position: _slideAnimation,
                             child: TextFormField(
@@ -156,59 +237,31 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                               ),
                             ),
                           ),
+                          const SizedBox(height: 20),
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'Correo electrónico',
+                                prefixIcon: Icon(Icons.email, color: AppColors.buttonColor),
+                                border: OutlineInputBorder(),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
+                                ),
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 30),
                           FadeTransition(
                             opacity: _fadeAnimation,
                             child: CustomButton(
-                              text: 'Enviar Código',
-                              onTap: () {
-                                // Validar campos
-                                if (_phoneController.text.isEmpty || _dniController.text.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Por favor completa todos los campos'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                if (_phoneController.text.length < 9) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('El número de teléfono debe tener al menos 9 dígitos'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                if (_dniController.text.length != 8) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('El DNI debe tener 8 dígitos'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                // Mostrar mensaje de éxito
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Código enviado al número de teléfono'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-
-                                // Navegar a reset password
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const ResetPasswordScreen(),
-                                  ),
-                                );
-                              },
+                              text: _isSubmitting ? 'Enviando...' : 'Enviar Código',
+                              onTap: _isSubmitting ? null : _handleSendCode,
                             ),
                           ),
                           const SizedBox(height: 20),
@@ -233,7 +286,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                               ],
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 20),    
                         ],
                       ),
                     ),

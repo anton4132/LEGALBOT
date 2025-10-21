@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const mobileAuthController = require('../controllers/mobileAuthController');
+
+const passwordRecoveryController = require('../controllers/passwordRecoveryController');
 const { authenticate } = require('../middleware/auth');
 
 /**
@@ -153,7 +155,122 @@ router.post('/login', authController.login);
  *               $ref: '#/components/schemas/MobileErrorResponse'
  */
 router.post('/mobile-login', mobileAuthController.loginFlutter);
+/**
+ * @swagger
+ * /auth/password/validate-identity:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Valida que el DNI y el correo pertenezcan al mismo usuario activo
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [dni, correo]
+ *             properties:
+ *               dni:
+ *                 type: string
+ *                 example: "75820859"
+ *               correo:
+ *                 type: string
+ *                 example: "usuario@legalbot.pe"
+ *     responses:
+ *       200:
+ *         description: Identidad validada
+ *       400:
+ *         description: Formato de datos inválido
+ *       403:
+ *         description: El usuario no está habilitado
+ *       404:
+ *         description: DNI y correo no coinciden
+ */
+router.post('/password/validate-identity', passwordRecoveryController.validateIdentity);
 
+/**
+ * @swagger
+ * /auth/password/request-code:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Genera y envía un código temporal de recuperación
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [dni, correo]
+ *             properties:
+ *               dni: { type: string }
+ *               correo: { type: string }
+ *     responses:
+ *       200:
+ *         description: Código enviado al correo registrado
+ *       400:
+ *         description: Datos inválidos
+ *       403:
+ *         description: Usuario no habilitado
+ *       500:
+ *         description: Error al generar o enviar el código
+ */
+router.post('/password/request-code', passwordRecoveryController.requestCode);
+
+/**
+ * @swagger
+ * /auth/password/verify-code:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Verifica el código de recuperación ingresado por el usuario
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [dni, correo, codigo]
+ *             properties:
+ *               dni: { type: string }
+ *               correo: { type: string }
+ *               codigo: { type: string }
+ *     responses:
+ *       200:
+ *         description: Código verificado correctamente
+ *       400:
+ *         description: Código incorrecto o expirado
+ *       403:
+ *         description: Usuario no habilitado
+ */
+router.post('/password/verify-code', passwordRecoveryController.verifyCode);
+
+/**
+ * @swagger
+ * /auth/password/reset:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Actualiza la contraseña luego de verificar el código
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [dni, correo, codigo, nuevaClave]
+ *             properties:
+ *               dni: { type: string }
+ *               correo: { type: string }
+ *               codigo: { type: string }
+ *               nuevaClave:
+ *                 type: string
+ *                 description: Nueva contraseña (mínimo 8 caracteres, debe incluir letras y números)
+ *     responses:
+ *       200:
+ *         description: Contraseña actualizada correctamente
+ *       400:
+ *         description: Código inválido o contraseña débil
+ *       403:
+ *         description: Usuario no habilitado
+ */
+router.post('/password/reset', passwordRecoveryController.resetPassword);
 
 /**
  * @swagger

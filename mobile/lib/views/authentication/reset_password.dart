@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../Constants/colors.dart';
-import '../../Widgets/custombtn.dart';
+import '../../constants/colors.dart';
+import '../../widgets/custombtn.dart';
+import '../../services/api_client.dart';
 import '../../widgets/detailstext1.dart';
 import 'login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
-  const ResetPasswordScreen({super.key});
+  final String dni;
+  final String correo;
+
+  const ResetPasswordScreen({super.key, required this.dni, required this.correo});
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -18,6 +22,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
+  bool _isSubmitting = false;
+  bool _codeVerified = false;
+
   @override
   void dispose() {
     _codeController.dispose();
@@ -26,12 +33,175 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
+  bool _isPasswordStrong(String value) {
+    if (value.trim().length < 8) {
+      return false;
+    }
+    final hasLetter = RegExp(r'[A-Za-z]').hasMatch(value);
+    final hasNumber = RegExp('[0-9]').hasMatch(value);
+    return hasLetter && hasNumber;
+  }
+
+  Future<void> _handleSubmit() async {
+    if (_isSubmitting) return;
+
+    FocusScope.of(context).unfocus();
+
+    final code = _codeController.text.trim();
+    final sanitizedCode = code.replaceAll(RegExp('[^0-9]'), '');
+
+    if (sanitizedCode.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El código debe tener 6 dígitos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!_codeVerified) {
+      await _verifyCode(sanitizedCode);
+      return;
+    }
+
+    final newPassword = _newPasswordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    if (newPassword.isEmpty || confirmPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor completa todos los campos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (newPassword != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Las contraseñas no coinciden'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!_isPasswordStrong(newPassword)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('La contraseña debe tener al menos 8 caracteres e incluir letras y números.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await ApiClient.resetPasswordWithCode(
+        dni: widget.dni,
+        correo: widget.correo,
+        codigo: sanitizedCode,
+        nuevaClave: newPassword.trim(),
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tu contraseña ha sido actualizada correctamente.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    } on ApiException catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo actualizar la contraseña. Inténtalo nuevamente.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _verifyCode(String code) async {
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await ApiClient.verifyPasswordRecoveryCode(
+        dni: widget.dni,
+        correo: widget.correo,
+        codigo: code,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _codeVerified = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Código verificado correctamente.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on ApiException catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo verificar el código. Inténtalo nuevamente.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final buttonText = _codeVerified ? 'Actualizar Contraseña' : 'Verificar Código';
+
     return Scaffold(
       body: Stack(
         children: [
-          // Background color with News Wave text
           Container(
             width: double.infinity,
             color: AppColors.buttonColor,
@@ -47,7 +217,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               ],
             ),
           ),
-          // Main content
           Positioned.fill(
             child: Align(
               alignment: Alignment.bottomCenter,
@@ -72,46 +241,55 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           color: AppColors.buttonColor,
                         ),
                         const SizedBox(height: 20),
-                        const Text(
-                          'Ingresa el código de 6 dígitos enviado a tu teléfono',
+                        Text(
+                          _codeVerified
+                              ? 'Ingresa una nueva contraseña segura para tu cuenta.'
+                              : 'Ingresa el código de 6 dígitos enviado a tu correo registrado.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 16,
                             color: Colors.grey,
                           ),
                         ),
                         const SizedBox(height: 30),
-                        
-                        // Código de verificación
                         TextFormField(
                           controller: _codeController,
+                          readOnly: _codeVerified,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [
+                          inputFormatters: const [
                             FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(6),
                           ],
-                          decoration: const InputDecoration(
-                            labelText: 'Código de Verificación',
-                            prefixIcon: Icon(Icons.security, color: AppColors.buttonColor),
-                            border: OutlineInputBorder(),
-                            focusedBorder: OutlineInputBorder(
+                          decoration: InputDecoration(
+                            labelText: 'Código de verificación',
+                            prefixIcon:
+                                const Icon(Icons.security, color: AppColors.buttonColor),
+                            border: const OutlineInputBorder(),
+                            focusedBorder: const OutlineInputBorder(
                               borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
                             ),
+                            suffixIcon: _codeVerified
+                                ? const Icon(Icons.check_circle, color: Colors.green)
+                                : null,
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        
-                        // Nueva clave
+                        if (_codeVerified)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12.0),
+                            child: Text(
+                              'Código validado. Ahora puedes actualizar tu contraseña.',
+                              style: TextStyle(color: Colors.green),
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         TextFormField(
                           controller: _newPasswordController,
+                          enabled: _codeVerified,
                           obscureText: true,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
-                          ],
                           decoration: const InputDecoration(
-                            labelText: 'Nueva Clave (6 dígitos)',
+                            labelText: 'Nueva contraseña',
                             prefixIcon: Icon(Icons.lock, color: AppColors.buttonColor),
                             border: OutlineInputBorder(),
                             focusedBorder: OutlineInputBorder(
@@ -120,18 +298,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        
-                        // Confirmar nueva clave
                         TextFormField(
                           controller: _confirmPasswordController,
+                          enabled: _codeVerified,
                           obscureText: true,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
-                          ],
                           decoration: const InputDecoration(
-                            labelText: 'Confirmar Nueva Clave',
+                            labelText: 'Confirmar nueva contraseña',
                             prefixIcon: Icon(Icons.lock, color: AppColors.buttonColor),
                             border: OutlineInputBorder(),
                             focusedBorder: OutlineInputBorder(
@@ -140,67 +312,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 30),
-                        
                         CustomButton(
-                          text: 'Restablecer Clave',
-                          onTap: () {
-                            // Validar campos
-                            if (_codeController.text.isEmpty ||
-                                _newPasswordController.text.isEmpty ||
-                                _confirmPasswordController.text.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Por favor completa todos los campos'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                              return;
-                            }
-
-                            if (_codeController.text.length != 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('El código debe tener 6 dígitos'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                              return;
-                            }
-
-                            if (_newPasswordController.text.length != 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('La nueva clave debe tener 6 dígitos'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                              return;
-                            }
-
-                            if (_newPasswordController.text != _confirmPasswordController.text) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Las claves no coinciden'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                              return;
-                            }
-
-                            // Mostrar mensaje de éxito
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Clave restablecida exitosamente'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-
-                            // Navegar al login
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (context) => const LoginScreen()),
-                            );
-                          },
+                          text: _isSubmitting ? 'Procesando...' : buttonText,
+                          onTap: _isSubmitting ? null : _handleSubmit,
                         ),
                         const SizedBox(height: 20),
                         Row(
@@ -209,9 +323,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                             const Text('¿Recordaste tu clave? '),
                             GestureDetector(
                               onTap: () {
-                                Navigator.push(
+                                Navigator.pushAndRemoveUntil(
                                   context,
-                                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                                  MaterialPageRoute(
+                                    builder: (context) => const LoginScreen(),
+                                  ),
+                                  (route) => false,
                                 );
                               },
                               child: const Text(

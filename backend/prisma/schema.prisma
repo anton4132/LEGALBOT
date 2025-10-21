@@ -454,6 +454,41 @@ model colegiaturaabogado {
   @@index([colegio_id])
 }
 
+
+// Mantén el enum con el nombre del tipo de Postgres si ya existe
+enum EstadoRecuperacionClave {
+  PENDIENTE
+  VERIFICADO
+  COMPLETADO
+  EXPIRADO
+  @@map("EstadoRecuperacionClave")
+}
+
+model recuperacionclave {
+  id             Int                     @id @default(autoincrement())
+  persona_id     Int
+  usuario_id     Int
+
+  /////////////////////////////////////////////////////////
+  codigo    String
+  expiracion     DateTime                @db.Timestamptz(6)
+  estado         EstadoRecuperacionClave @default(PENDIENTE)
+  intentos       Int                     @default(0)
+  creado_el      DateTime                @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime                @updatedAt @db.Timestamptz(6)
+
+  persona persona @relation(fields: [persona_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  usuario usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  //////////////////////////////////////////////////////////
+  @@index([persona_id], map: "recuperacionclave_persona_id_idx")
+  @@index([usuario_id], map: "recuperacionclave_usuario_id_idx")
+  @@index([usuario_id, estado, expiracion], map: "recuperacionclave_by_user_status_exp_idx")
+
+  @@map("recuperacionclave")
+}
+
+
 model persona {
   id               Int     @id @default(autoincrement())
   dni              String  @unique @db.Char(8)
@@ -470,6 +505,8 @@ model persona {
   linea_exacta_direccion String?
   verificacionabogado    verificacionabogado?
   colegiatura            colegiaturaabogado?
+  recuperaciones_clave   recuperacionclave[]
+
 
   @@index([apellido_paterno])
   @@index([correo])
@@ -522,6 +559,8 @@ model usuario {
   persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   role                                              role                 @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
+  recuperaciones_clave                              recuperacionclave[]
+
 
   @@unique([persona_id, rol_id])
   @@index([persona_id])

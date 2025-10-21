@@ -31,7 +31,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const String _baseUrl = 'http://localhost:3000/api';
+  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api';
   static Object? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {
@@ -230,6 +230,128 @@ class ApiClient {
             : 'No se pudo actualizar la información del usuario';
     throw ApiException(message, statusCode: response.statusCode);
   }
+   static Future<void> validatePasswordRecoveryIdentity({
+    required String dni,
+    required String correo,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/password/validate-identity');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'dni': _digitsOnly(dni),
+        'correo': correo.trim().toLowerCase(),
+      }),
+    );
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      return;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo validar los datos ingresados.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<DateTime?> requestPasswordRecoveryCode({
+    required String dni,
+    required String correo,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/password/request-code');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'dni': _digitsOnly(dni),
+        'correo': correo.trim().toLowerCase(),
+      }),
+    );
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      final expirationRaw = data?['expiracion'];
+      if (expirationRaw is String) {
+        return DateTime.tryParse(expirationRaw);
+      }
+      return null;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo enviar el código de recuperación.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<void> verifyPasswordRecoveryCode({
+    required String dni,
+    required String correo,
+    required String codigo,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/password/verify-code');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'dni': _digitsOnly(dni),
+        'correo': correo.trim().toLowerCase(),
+        'codigo': _digitsOnly(codigo),
+      }),
+    );
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      return;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'Código incorrecto o expirado.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<void> resetPasswordWithCode({
+    required String dni,
+    required String correo,
+    required String codigo,
+    required String nuevaClave,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/password/reset');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'dni': _digitsOnly(dni),
+        'correo': correo.trim().toLowerCase(),
+        'codigo': _digitsOnly(codigo),
+        'nuevaClave': nuevaClave,
+      }),
+    );
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    if (response.statusCode == 200 && data?['success'] == true) {
+      return;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo actualizar la contraseña.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
 
   static Future<ClientContactSettings> updateUserPassword({
     required String token,
@@ -1113,8 +1235,7 @@ class ApiClient {
     throw Exception(message);
   }
 
-
-static Future<LawFirmSummary> lookupLawFirmByRuc({
+  static Future<LawFirmSummary> lookupLawFirmByRuc({
     required String token,
     required String ruc,
   }) async {
@@ -1146,7 +1267,7 @@ static Future<LawFirmSummary> lookupLawFirmByRuc({
             : 'No se pudo consultar el RUC del estudio';
     throw Exception(message);
   }
-  
+
   static Future<LawFirmSummary> createLawFirm({
     required String token,
     String? ruc,
