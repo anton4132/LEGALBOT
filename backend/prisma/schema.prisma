@@ -454,23 +454,23 @@ model colegiaturaabogado {
   @@index([colegio_id])
 }
 
-
 // Mantén el enum con el nombre del tipo de Postgres si ya existe
 enum EstadoRecuperacionClave {
   PENDIENTE
   VERIFICADO
   COMPLETADO
   EXPIRADO
+
   @@map("EstadoRecuperacionClave")
 }
 
 model recuperacionclave {
-  id             Int                     @id @default(autoincrement())
-  persona_id     Int
-  usuario_id     Int
+  id         Int @id @default(autoincrement())
+  persona_id Int
+  usuario_id Int
 
   /////////////////////////////////////////////////////////
-  codigo    String
+  codigo         String
   expiracion     DateTime                @db.Timestamptz(6)
   estado         EstadoRecuperacionClave @default(PENDIENTE)
   intentos       Int                     @default(0)
@@ -484,10 +484,8 @@ model recuperacionclave {
   @@index([persona_id], map: "recuperacionclave_persona_id_idx")
   @@index([usuario_id], map: "recuperacionclave_usuario_id_idx")
   @@index([usuario_id, estado, expiracion], map: "recuperacionclave_by_user_status_exp_idx")
-
   @@map("recuperacionclave")
 }
-
 
 model persona {
   id               Int     @id @default(autoincrement())
@@ -506,7 +504,6 @@ model persona {
   verificacionabogado    verificacionabogado?
   colegiatura            colegiaturaabogado?
   recuperaciones_clave   recuperacionclave[]
-
 
   @@index([apellido_paterno])
   @@index([correo])
@@ -561,7 +558,6 @@ model usuario {
   abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
   recuperaciones_clave                              recuperacionclave[]
 
-
   @@unique([persona_id, rol_id])
   @@index([persona_id])
   @@index([rol_id])
@@ -605,23 +601,21 @@ model especialidad {
 }
 
 model estudio {
-   id                    Int        @id @default(autoincrement())
+  id                    Int     @id @default(autoincrement())
   /////////////////////////
-  ruc                   String     @unique
+  ruc                   String  @unique
   nombre_comercial      String?
   nombre_o_razon_social String?
   /////////////////////////
-  correo_contacto String?
-  telefono        String?
-  
- 
+  correo_contacto       String?
+  telefono              String?
 
-  direccion_id   String?    @db.Char(6)
-  direccion      direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
-  direccion_exacta        String?
-  linea_exacta_direccion  String?
-  estado                  String?
-  condicion               String?
+  direccion_id           String?    @db.Char(6)
+  direccion              direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
+  direccion_exacta       String?
+  linea_exacta_direccion String?
+  estado                 String?
+  condicion              String?
 
   ///////////////////////// Flags SUNAT
 
@@ -631,8 +625,8 @@ model estudio {
   es_buen_contribuyente            Boolean? @default(false)
 
   /////////////////////////
-  activo        Boolean   @default(false)
-  creado_el     DateTime  @default(now()) @db.Timestamptz(6)
+  activo         Boolean  @default(false)
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
   abogadoestudios abogadoestudio[] @relation("EstudioAbogadoEstudio")

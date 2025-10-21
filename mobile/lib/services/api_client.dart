@@ -31,7 +31,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api';
+  static const String _baseUrl = 'https://localhost:3000/api';
   static Object? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {
@@ -230,7 +230,8 @@ class ApiClient {
             : 'No se pudo actualizar la información del usuario';
     throw ApiException(message, statusCode: response.statusCode);
   }
-   static Future<void> validatePasswordRecoveryIdentity({
+
+  static Future<void> validatePasswordRecoveryIdentity({
     required String dni,
     required String correo,
   }) async {
@@ -351,7 +352,6 @@ class ApiClient {
             : 'No se pudo actualizar la contraseña.';
     throw ApiException(message, statusCode: response.statusCode);
   }
-
 
   static Future<ClientContactSettings> updateUserPassword({
     required String token,

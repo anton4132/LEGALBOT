@@ -1416,8 +1416,19 @@ function applyFilters() {
     metodo_pago: dom.filters.metodo?.value || '',
     vigencia: dom.filters.vigencia?.value || '',
   };
+  state.ui.filtersApplied = hasActiveFilters(state.filters);
   state.pagination.page = 1;
   loadRules();
+}
+
+
+function hasActiveFilters(filters) {
+  if (!filters) return false;
+  if (filters.rol_aplica) return true;
+  if (filters.activo) return true;
+  if (filters.metodo_pago) return true;
+  if (filters.vigencia && filters.vigencia !== 'vigentes') return true;
+  return false;
 }
 
 
@@ -1511,7 +1522,7 @@ function resetWizardFormState() {
   state.wizard.id = null;
   state.wizard.sourceId = null;
   state.wizard.data = createEmptyRule();
-  hideConflict();
+  clearWizardAlert();
   if (dom.wizard.form) dom.wizard.form.reset();
   if (dom.wizard.step3Result) dom.wizard.step3Result.innerHTML = '';
   updateCodigoReadonlyState();
@@ -1521,13 +1532,14 @@ function resetWizardFormState() {
 
 
 async function openWizard(mode, id) {
-  hideConflict();
+  clearWizardAlert();
   state.wizard.mode = mode;
   state.wizard.id = mode === 'edit' ? id : null;
   state.wizard.sourceId = mode === 'clone' ? id : null;
   state.wizard.step = 1;
   try {
     if (mode === 'create') {
+      await loadCatalogs({ silent: true });
       state.wizard.data = createEmptyRule();
     } else {
       const rule = await fetchRule(id);
@@ -1562,7 +1574,7 @@ function mapRuleToWizard(rule, isClone) {
     descripcion: rule.descripcion || '',
     servicio_id: rule.servicio_id ?? '',
     plan_id: rule.plan_id ?? '',
-    rol_aplica: rule.rol_aplica || 'ambos',
+    rol_aplica: rule.rol_aplica || 'cliente',
     moneda: rule.moneda || state.catalogs.econconfig?.moneda_defecto || '',
     metodo_pago: rule.metodo_pago || '',
     ambito_region: rule.ambito_region || '',
@@ -1593,10 +1605,28 @@ function populateWizardForm() {
   inputs.plan.value = planValue;
   refreshServicioOptionsForSelect(inputs.servicio, planValue, 'Todos');
   inputs.servicio.value = data.servicio_id || '';
+
+
+  ensureSelectOption(
+    inputs.rol,
+    data.rol_aplica,
+    data.rol_aplica === 'ambos' ? 'Ambos (heredado)' : prettifyIdentifier(data.rol_aplica || 'cliente')
+  );
+  inputs.rol.value = data.rol_aplica || 'cliente';
   const defaultMoneda = state.catalogs.econconfig?.moneda_defecto || '';
   inputs.moneda.value = data.moneda || defaultMoneda;
   state.wizard.data.moneda = inputs.moneda.value;
+  ensureSelectOption(
+    inputs.metodo,
+    data.metodo_pago,
+    PAYMENT_METHOD_LABELS.get(data.metodo_pago) || prettifyIdentifier(data.metodo_pago)
+  );
   inputs.metodo.value = data.metodo_pago || '';
+  ensureSelectOption(
+    inputs.region,
+    data.ambito_region,
+    REGION_LABELS.get(data.ambito_region) || prettifyRegionCode(data.ambito_region)
+  );
   inputs.region.value = data.ambito_region || '';
   inputs.prioridad.value = data.prioridad !== '' && data.prioridad !== null ? data.prioridad : '';
   inputs.vigenciaDesde.value = data.vigencia_desde || '';
@@ -1608,6 +1638,11 @@ function populateWizardForm() {
   inputs.incluyeImpuesto.checked = !!data.incluye_impuesto;
   inputs.parametros.value = JSON.stringify(data.parametros ?? cloneTemplate(inputs.tipoCalculo.value), null, 2);
   inputs.step3Plan.value = data.plan_id || '';
+  ensureSelectOption(
+    dom.wizard.inputs.step3Metodo,
+    data.metodo_pago,
+    PAYMENT_METHOD_LABELS.get(data.metodo_pago) || prettifyIdentifier(data.metodo_pago)
+  );
   inputs.step3Metodo.value = data.metodo_pago || '';
   inputs.step3Consumo.value = 0;
   inputs.step3Fecha.value = new Date().toISOString().substring(0, 10);
@@ -1616,6 +1651,7 @@ function populateWizardForm() {
   updateImpuestoLabel(inputs.vigenciaDesde.value || inputs.vigenciaHasta.value || null);
   goToWizardStep(1, true);
 }
+
 
 function toInputDateTime(value) {
   if (!value) return '';
@@ -1710,16 +1746,46 @@ function captureStep1() {
     return false;
   }
   inputs.prioridad.setCustomValidity('');
+  const rawServicio = inputs.servicio.value || '';
+  const rawPlan = inputs.plan.value || '';
+  const servicioId = rawServicio ? Number(rawServicio) : null;
+  const planId = rawPlan ? Number(rawPlan) : null;
+  if (rawServicio && (Number.isNaN(servicioId) || !Number.isFinite(servicioId))) {
+    inputs.servicio.setCustomValidity('El servicio seleccionado no es válido.');
+    inputs.servicio.reportValidity();
+    return false;
+  }
+  if (rawPlan && (Number.isNaN(planId) || !Number.isFinite(planId))) {
+    inputs.plan.setCustomValidity('El plan seleccionado no es válido.');
+    inputs.plan.reportValidity();
+    return false;
+  }
+  const hasServicio = Number.isFinite(servicioId);
+  const hasPlan = Number.isFinite(planId);
+  if (!hasServicio && !hasPlan) {
+    const message = 'Debes seleccionar un plan, un servicio o ambos.';
+    if (inputs.plan) {
+      inputs.plan.setCustomValidity(message);
+      inputs.plan.reportValidity();
+    }
+    if (inputs.servicio) {
+      inputs.servicio.setCustomValidity(message);
+    }
+    return false;
+  }
+  if (inputs.servicio) inputs.servicio.setCustomValidity('');
+  if (inputs.plan) inputs.plan.setCustomValidity('');
+
   state.wizard.data = {
     ...state.wizard.data,
     codigo,
     descripcion: inputs.descripcion.value.trim(),
-    servicio_id: inputs.servicio.value || '',
-    plan_id: inputs.plan.value || '',
+     servicio_id: hasServicio ? rawServicio : '',
+    plan_id: hasPlan ? rawPlan : '',
     rol_aplica: inputs.rol.value,
     moneda: inputs.moneda.value || state.catalogs.econconfig?.moneda_defecto || '',
     metodo_pago: inputs.metodo.value || '',
-    ambito_region: inputs.region.value.trim(),
+    ambito_region: inputs.region.value || '',
     prioridad: inputs.prioridad.value === '' ? '' : Number(inputs.prioridad.value),
     vigencia_desde: inputs.vigenciaDesde.value || '',
     vigencia_hasta: inputs.vigenciaHasta.value || '',
@@ -1728,16 +1794,12 @@ function captureStep1() {
   };
 
   const payload = buildRulePayload(state.wizard.data);
-  hideConflict();
-  if (!validateUniqueCombination(payload)) {
+   if (!evaluateScopeConflicts(payload)) {
     return false;
   }
-  if (payload.activo && !validateOverlap(payload)) {
-    return false;
-  }
-  hideConflict();
   return true;
 }
+
 
 function captureStep2() {
   const inputs = dom.wizard.inputs;
@@ -1880,7 +1942,7 @@ async function saveWizard(forceInactive = false) {
   if (forceInactive) {
     state.wizard.data = { ...state.wizard.data, activo: false };
   }
-  hideConflict();
+  clearWizardAlert();
   try {
     const payload = buildRulePayload(state.wizard.data);
     if (forceInactive) {
@@ -1913,20 +1975,22 @@ async function saveWizard(forceInactive = false) {
 }
 
 function buildRulePayload(data) {
+  const vigenciaDesde = toLimaIso(data.vigencia_desde);
+  const vigenciaHasta = toLimaIso(data.vigencia_hasta);
   return {
     codigo: data.codigo,
     descripcion: data.descripcion || null,
-    servicio_id: data.servicio_id ? Number(data.servicio_id) : null,
-    plan_id: data.plan_id ? Number(data.plan_id) : null,
+    servicio_id: toNullableNumber(data.servicio_id),
+    plan_id: toNullableNumber(data.plan_id),
     rol_aplica: data.rol_aplica,
     moneda: data.moneda || null,
     metodo_pago: data.metodo_pago || null,
     ambito_region: data.ambito_region || null,
-    prioridad: data.prioridad === '' ? null : Number(data.prioridad),
-    vigencia_desde: data.vigencia_desde || null,
-    vigencia_hasta: data.vigencia_hasta || null,
+    prioridad: toNullableNumber(data.prioridad),
+    vigencia_desde: vigenciaDesde,
+    vigencia_hasta: vigenciaHasta,
     tipo_calculo: data.tipo_calculo,
-    valor: data.valor === '' ? null : Number(data.valor),
+    valor: toNullableNumber(data.valor),
     parametros: data.parametros || {},
     incluye_impuesto: !!data.incluye_impuesto,
     activo: data.activo !== false,
@@ -1935,7 +1999,80 @@ function buildRulePayload(data) {
 
 function validateRuleBusiness(payload) {
   if (!payload) return true;
-  hideConflict();
+  if (!validateValueConstraints(payload)) {
+    return false;
+  }
+  return evaluateScopeConflicts(payload);
+}
+
+function validateValueConstraints(payload) {
+  const generalErrors = [];
+  const parametroErrors = [];
+  if (payload.servicio_id === null && payload.plan_id === null) {
+    generalErrors.push('Debes seleccionar al menos un plan o un servicio.');
+  }
+  if (payload.valor !== null && payload.valor < 0) {
+    generalErrors.push('El valor base no puede ser negativo.');
+  }
+  const params = payload.parametros || {};
+  const toNumber = (value) => {
+    if (value === undefined || value === null || value === '') return 0;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : Number.NaN;
+  };
+  const ensureNonNegative = (value, message) => {
+    const numeric = toNumber(value);
+    if (Number.isNaN(numeric) || numeric < 0) {
+      parametroErrors.push(message);
+    }
+  };
+  switch (payload.tipo_calculo) {
+    case 'fijo':
+      ensureNonNegative(params.monto, 'El monto fijo no puede ser negativo.');
+      break;
+    case 'minimo_mas_variable':
+      ensureNonNegative(params.minimo, 'El mínimo no puede ser negativo.');
+      ensureNonNegative(params.porcentaje_variable, 'El porcentaje variable no puede ser negativo.');
+      break;
+    case 'paquete': {
+      ensureNonNegative(params.precio_bloque, 'El precio por bloque no puede ser negativo.');
+      const blockSize = toNumber(params.tamano_bloque);
+      if (Number.isNaN(blockSize) || blockSize <= 0) {
+        parametroErrors.push('El tamaño de bloque debe ser mayor a 0.');
+      }
+      break;
+    }
+    case 'consumo_ia':
+      ensureNonNegative(params.rate, 'La tarifa por consumo debe ser mayor o igual a 0.');
+      ensureNonNegative(params.minimo, 'El mínimo de consumo debe ser mayor o igual a 0.');
+      break;
+    case 'estacional': {
+      const multiplicadores = Array.isArray(params.multiplicadores) ? params.multiplicadores : [];
+      multiplicadores.forEach((item, index) => {
+        const factor = toNumber(item?.factor);
+        if (Number.isNaN(factor) || factor < 0) {
+          parametroErrors.push(`El factor en la fila ${index + 1} debe ser mayor o igual a 0.`);
+        }
+      });
+      break;
+    }
+    default:
+      break;
+  }
+  const messages = [...generalErrors, ...parametroErrors];
+  if (dom.wizard.inputs?.parametros) {
+    dom.wizard.inputs.parametros.classList.toggle('is-invalid', parametroErrors.length > 0);
+  }
+  if (messages.length) {
+    window.alert(messages.join('\n'));
+    return false;
+  }
+  return true;
+}
+
+function evaluateScopeConflicts(payload, { includeOverride = true } = {}) {
+  clearWizardAlert();
+
 
   if (!validateUniqueCombination(payload)) {
     return false;
@@ -1943,8 +2080,84 @@ function validateRuleBusiness(payload) {
   if (payload.activo && !validateOverlap(payload)) {
     return false;
   }
-  hideConflict();
+   if (includeOverride) {
+    showOverrideImpact(payload);
+  }
+  return true;
+}
 
+function showOverrideImpact(payload) {
+  const planId = payload.plan_id;
+  const servicioId = payload.servicio_id;
+  if (!Number.isFinite(planId) || !Number.isFinite(servicioId)) {
+    return;
+  }
+  const candidate = findOverrideCandidate(payload, planId, servicioId);
+  if (!candidate) {
+    return;
+  }
+  const desde = candidate.vigencia_desde ? formatDate(candidate.vigencia_desde) : 'Inicio';
+  const hasta = candidate.vigencia_hasta ? formatDate(candidate.vigencia_hasta) : 'Sin fin';
+  const message = `Esta regla overrideará a ${escapeHtml(candidate.codigo)} del ${desde} al ${hasta}.`;
+  renderWizardAlert({ message, reason: 'override' });
+}
+
+function findOverrideCandidate(payload, planId, servicioId) {
+  const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
+  const candidates = state.rules.filter((rule) => {
+    if (!rule.activo) return false;
+    if (currentId && rule.id === currentId) return false;
+    const rulePlanId = toNullableNumber(rule.plan_id);
+    const ruleServicioId = toNullableNumber(rule.servicio_id);
+    const isPlanGeneral = Number.isFinite(rulePlanId) && rulePlanId === planId && !Number.isFinite(ruleServicioId);
+    const isServicioGeneral = Number.isFinite(ruleServicioId) && ruleServicioId === servicioId && !Number.isFinite(rulePlanId);
+    if (!isPlanGeneral && !isServicioGeneral) return false;
+    if (!matchesOverrideFilters(rule, payload)) return false;
+    if (!rangesOverlap(rule.vigencia_desde, rule.vigencia_hasta, payload.vigencia_desde, payload.vigencia_hasta)) return false;
+    return true;
+  });
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => {
+    const aSpecificity = Number.isFinite(toNullableNumber(a.servicio_id)) ? 1 : 0;
+    const bSpecificity = Number.isFinite(toNullableNumber(b.servicio_id)) ? 1 : 0;
+    if (aSpecificity !== bSpecificity) return bSpecificity - aSpecificity;
+    const aTime = new Date(a.vigencia_desde || 0).getTime();
+    const bTime = new Date(b.vigencia_desde || 0).getTime();
+    return aTime - bTime;
+  });
+  return candidates[0];
+}
+
+function matchesOverrideFilters(rule, payload) {
+  const ruleRol = rule.rol_aplica || null;
+  const payloadRol = payload.rol_aplica || null;
+  if (payloadRol && ruleRol && ruleRol !== 'ambos' && payloadRol !== 'ambos' && ruleRol !== payloadRol) {
+    return false;
+  }
+  const ruleMoneda = normalizeNullableValue(rule.moneda);
+  const payloadMoneda = normalizeNullableValue(payload.moneda);
+  if (ruleMoneda && payloadMoneda && ruleMoneda !== payloadMoneda) {
+    return false;
+  }
+  if (!payloadMoneda && ruleMoneda) {
+    return false;
+  }
+  const ruleMetodo = normalizeNullableValue(rule.metodo_pago);
+  const payloadMetodo = normalizeNullableValue(payload.metodo_pago);
+  if (ruleMetodo && ruleMetodo !== '*' && payloadMetodo && ruleMetodo !== payloadMetodo) {
+    return false;
+  }
+  if (ruleMetodo && ruleMetodo !== '*' && !payloadMetodo) {
+    return false;
+  }
+  const ruleRegion = normalizeNullableValue(rule.ambito_region);
+  const payloadRegion = normalizeNullableValue(payload.ambito_region);
+  if (ruleRegion && ruleRegion !== '*' && payloadRegion && ruleRegion !== payloadRegion) {
+    return false;
+  }
+  if (ruleRegion && ruleRegion !== '*' && !payloadRegion) {
+    return false;
+  }
   return true;
 }
 

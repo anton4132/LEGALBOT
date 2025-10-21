@@ -11,7 +11,11 @@ class ResetPasswordScreen extends StatefulWidget {
   final String dni;
   final String correo;
 
-  const ResetPasswordScreen({super.key, required this.dni, required this.correo});
+  const ResetPasswordScreen({
+    super.key,
+    required this.dni,
+    required this.correo,
+  });
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -20,7 +24,8 @@ class ResetPasswordScreen extends StatefulWidget {
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   bool _isSubmitting = false;
   bool _codeVerified = false;
@@ -91,8 +96,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     if (!_isPasswordStrong(newPassword)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('La contraseña debe tener al menos 8 caracteres e incluir letras y números.'),
+          content: Text(
+            'La contraseña debe tener al menos 8 caracteres e incluir letras y números.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -127,15 +133,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       );
     } on ApiException catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(error.message), backgroundColor: Colors.red),
       );
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No se pudo actualizar la contraseña. Inténtalo nuevamente.'),
+          content: Text(
+            'No se pudo actualizar la contraseña. Inténtalo nuevamente.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -174,15 +179,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       );
     } on ApiException catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(error.message), backgroundColor: Colors.red),
       );
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No se pudo verificar el código. Inténtalo nuevamente.'),
+          content: Text(
+            'No se pudo verificar el código. Inténtalo nuevamente.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -197,7 +201,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final buttonText = _codeVerified ? 'Actualizar Contraseña' : 'Verificar Código';
+    final buttonText =
+        _codeVerified ? 'Actualizar Contraseña' : 'Verificar Código';
 
     return Scaffold(
       body: Stack(
@@ -209,11 +214,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 SizedBox(height: 100),
-                Text1(
-                  text1: 'LegalBot',
-                  color: Colors.white,
-                  size: 32,
-                ),
+                Text1(text1: 'LegalBot', color: Colors.white, size: 32),
               ],
             ),
           ),
@@ -256,21 +257,30 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           controller: _codeController,
                           readOnly: _codeVerified,
                           keyboardType: TextInputType.number,
-                          inputFormatters: const [
+                          inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(6),
                           ],
                           decoration: InputDecoration(
                             labelText: 'Código de verificación',
-                            prefixIcon:
-                                const Icon(Icons.security, color: AppColors.buttonColor),
+                            prefixIcon: Icon(
+                              Icons.security,
+                              color: AppColors.buttonColor,
+                            ),
                             border: const OutlineInputBorder(),
                             focusedBorder: const OutlineInputBorder(
-                              borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
+                              borderSide: BorderSide(
+                                color: AppColors.buttonColor,
+                                width: 2,
+                              ),
                             ),
-                            suffixIcon: _codeVerified
-                                ? const Icon(Icons.check_circle, color: Colors.green)
-                                : null,
+                            suffixIcon:
+                                _codeVerified
+                                    ? const Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                    )
+                                    : null,
                           ),
                         ),
                         if (_codeVerified)
@@ -290,10 +300,16 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           obscureText: true,
                           decoration: const InputDecoration(
                             labelText: 'Nueva contraseña',
-                            prefixIcon: Icon(Icons.lock, color: AppColors.buttonColor),
+                            prefixIcon: Icon(
+                              Icons.lock,
+                              color: AppColors.buttonColor,
+                            ),
                             border: OutlineInputBorder(),
                             focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
+                              borderSide: BorderSide(
+                                color: AppColors.buttonColor,
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
@@ -304,10 +320,16 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           obscureText: true,
                           decoration: const InputDecoration(
                             labelText: 'Confirmar nueva contraseña',
-                            prefixIcon: Icon(Icons.lock, color: AppColors.buttonColor),
+                            prefixIcon: Icon(
+                              Icons.lock,
+                              color: AppColors.buttonColor,
+                            ),
                             border: OutlineInputBorder(),
                             focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(color: AppColors.buttonColor, width: 2),
+                              borderSide: BorderSide(
+                                color: AppColors.buttonColor,
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
