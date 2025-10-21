@@ -22,6 +22,9 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _direccionExactaController =
       TextEditingController();
+  final TextEditingController _emailCodeController = TextEditingController();
+
+  final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   List<UbigeoOption> _departamentos = const <UbigeoOption>[];
   List<UbigeoOption> _provincias = const <UbigeoOption>[];
@@ -40,6 +43,17 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   String? _dniError;
   String? _lastConsultedDni;
   DniLookupResult? _dniLookup;
+  bool _isCheckingEmailExistence = false;
+  bool _isSendingEmailCode = false;
+  bool _isVerifyingEmailCode = false;
+  bool _emailCodeSent = false;
+  bool _emailVerified = false;
+  String? _emailError;
+  String? _emailCodeError;
+  String? _emailUsedForCode;
+  String? _verifiedEmail;
+  DateTime? _emailCodeSentAt;
+  DateTime? _emailCodeExpiration;
 
   @override
   void initState() {
@@ -236,6 +250,42 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
 
   String _digitsOnly(String value) => value.replaceAll(RegExp(r'\D'), '');
 
+  String _normalizeEmail(String value) => value.trim().toLowerCase();
+
+  bool _isValidEmailFormat(String value) =>
+      value.isNotEmpty && _emailPattern.hasMatch(value);
+
+  void _handleEmailChanged(String value) {
+    final normalized = _normalizeEmail(value);
+    final shouldResetCode =
+        _emailUsedForCode != null && normalized != _emailUsedForCode;
+    final shouldResetVerification =
+        _verifiedEmail != null && normalized != _verifiedEmail;
+    final shouldClearErrors = _emailError != null || _emailCodeError != null;
+
+    if (!shouldResetCode && !shouldResetVerification && !shouldClearErrors) {
+      return;
+    }
+
+    setState(() {
+      if (shouldResetVerification) {
+        _emailVerified = false;
+        _verifiedEmail = null;
+      }
+      if (shouldResetCode) {
+        _emailCodeSent = false;
+        _emailUsedForCode = null;
+        _emailCodeController.clear();
+        _emailCodeSentAt = null;
+        _emailCodeExpiration = null;
+      }
+      if (shouldClearErrors) {
+        _emailError = null;
+        _emailCodeError = null;
+      }
+    });
+  }
+
   void _handleDniChanged(String value) {
     final digits = _digitsOnly(value);
     if (digits.length == 8) {
@@ -324,12 +374,223 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     return null;
   }
 
+  Future<void> _sendEmailVerificationCode() async {
+    FocusScope.of(context).unfocus();
+    final normalizedEmail = _normalizeEmail(_emailController.text);
+
+    if (normalizedEmail.isEmpty) {
+      setState(() {
+        _emailError = 'Ingresa tu correo electrónico';
+      });
+      _showSnack('Ingresa tu correo electrónico');
+      return;
+    }
+
+    if (!_isValidEmailFormat(normalizedEmail)) {
+      setState(() {
+        _emailError = 'Ingresa un correo electrónico válido';
+      });
+      _showSnack('Ingresa un correo electrónico válido');
+      return;
+    }
+
+    setState(() {
+      _isCheckingEmailExistence = true;
+      _emailError = null;
+      _emailCodeError = null;
+    });
+
+    try {
+      await ApiClient.validateEmailDeliverability(correo: normalizedEmail);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      final message =
+          error.message.isNotEmpty
+              ? error.message
+              : 'No se pudo verificar el correo proporcionado.';
+      setState(() {
+        _emailError = message;
+      });
+      _showSnack(message);
+      return;
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      final fallback =
+          message.isNotEmpty
+              ? message
+              : 'No se pudo verificar el correo proporcionado.';
+      setState(() {
+        _emailError = fallback;
+      });
+      _showSnack(fallback);
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => _isCheckingEmailExistence = false);
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() => _isSendingEmailCode = true);
+
+    try {
+      final expiration = await ApiClient.requestEmailVerificationCode(
+        correo: normalizedEmail,
+      );
+      if (!mounted) return;
+      setState(() {
+        _emailCodeSent = true;
+        _emailVerified = false;
+        _verifiedEmail = null;
+        _emailUsedForCode = normalizedEmail;
+        _emailCodeController.clear();
+        _emailCodeSentAt = DateTime.now();
+        _emailCodeExpiration = expiration;
+        _emailCodeError = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Hemos enviado un código de verificación a $normalizedEmail',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      final message =
+          error.message.isNotEmpty
+              ? error.message
+              : 'No se pudo enviar el código de verificación.';
+      setState(() {
+        _emailError = message;
+      });
+      _showSnack(message);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      final fallback =
+          message.isNotEmpty
+              ? message
+              : 'No se pudo enviar el código de verificación.';
+      setState(() {
+        _emailError = fallback;
+      });
+      _showSnack(fallback);
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingEmailCode = false);
+      }
+    }
+  }
+
+  Future<void> _verifyEmailCode() async {
+    FocusScope.of(context).unfocus();
+    final normalizedEmail = _normalizeEmail(_emailController.text);
+    if (!_emailCodeSent || _emailUsedForCode == null) {
+      _showSnack('Primero solicita un código de verificación.');
+      setState(() {
+        _emailCodeError = 'Solicita un código antes de verificar.';
+      });
+      return;
+    }
+
+    if (normalizedEmail != _emailUsedForCode) {
+      _showSnack('Solicita un nuevo código para el correo actualizado.');
+      setState(() {
+        _emailCodeError =
+            'Solicita un nuevo código para el correo actualizado.';
+      });
+      return;
+    }
+
+    if (!_isValidEmailFormat(normalizedEmail)) {
+      setState(() {
+        _emailError = 'Ingresa un correo electrónico válido';
+      });
+      _showSnack('Ingresa un correo electrónico válido');
+      return;
+    }
+
+    final code = _emailCodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _emailCodeError = 'Ingresa el código de verificación';
+      });
+      _showSnack('Ingresa el código de verificación');
+      return;
+    }
+
+    if (code.length < 6) {
+      setState(() {
+        _emailCodeError = 'El código debe tener al menos 6 dígitos';
+      });
+      _showSnack('El código debe tener al menos 6 dígitos');
+      return;
+    }
+
+    setState(() {
+      _isVerifyingEmailCode = true;
+      _emailCodeError = null;
+    });
+
+    try {
+      await ApiClient.verifyEmailVerificationCode(
+        correo: normalizedEmail,
+        codigo: code,
+      );
+      if (!mounted) return;
+      setState(() {
+        _emailVerified = true;
+        _verifiedEmail = normalizedEmail;
+        _emailCodeError = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Correo verificado correctamente.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      final message =
+          error.message.isNotEmpty
+              ? error.message
+              : 'Código incorrecto o expirado.';
+      setState(() {
+        _emailVerified = false;
+        _verifiedEmail = null;
+        _emailCodeError = message;
+      });
+      _showSnack(message);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      final fallback =
+          message.isNotEmpty
+              ? message
+              : 'No se pudo verificar el código proporcionado.';
+      setState(() {
+        _emailVerified = false;
+        _verifiedEmail = null;
+        _emailCodeError = fallback;
+      });
+      _showSnack(fallback);
+    } finally {
+      if (mounted) {
+        setState(() => _isVerifyingEmailCode = false);
+      }
+    }
+  }
+
   Future<void> _nextStep() async {
     if (!_validateFields()) return;
 
     final normalizedDni = _digitsOnly(_dniController.text);
     final normalizedTelefono = _digitsOnly(_phoneController.text);
-    final normalizedCorreo = _emailController.text.trim().toLowerCase();
+    final normalizedCorreo = _normalizeEmail(_emailController.text);
 
     setState(() {
       _verificandoIdentidad = true;
@@ -378,6 +639,20 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         'apellidoMaterno': dniLookup.apellidoMaterno.trim(),
       };
 
+      final verificationTimestamp = DateTime.now().toIso8601String();
+      final emailVerification = <String, dynamic>{
+        'email': normalizedCorreo,
+        'verified': true,
+        'verifiedAt': verificationTimestamp,
+      };
+      if (_emailCodeSentAt != null) {
+        emailVerification['codeSentAt'] = _emailCodeSentAt!.toIso8601String();
+      }
+      if (_emailCodeExpiration != null) {
+        emailVerification['codeExpiresAt'] =
+            _emailCodeExpiration!.toIso8601String();
+      }
+
       final verification = {
         'dniMatch': true,
         'conflictsCleared': true,
@@ -388,7 +663,8 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
           'apellidoPaterno': dniLookup.apellidoPaterno,
           'apellidoMaterno': dniLookup.apellidoMaterno,
         },
-        'verifiedAt': DateTime.now().toIso8601String(),
+        'verifiedAt': verificationTimestamp,
+        'emailVerification': emailVerification,
       };
       Navigator.push(
         context,
@@ -441,6 +717,23 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       return false;
     }
 
+    final normalizedEmail = _normalizeEmail(_emailController.text);
+    if (!_isValidEmailFormat(normalizedEmail)) {
+      setState(() {
+        _emailError = 'Ingresa un correo electrónico válido';
+      });
+      _showSnack('Ingresa un correo electrónico válido');
+      return false;
+    }
+
+    if (!_emailVerified || _verifiedEmail != normalizedEmail) {
+      setState(() {
+        _emailCodeError = 'Debes verificar tu correo antes de continuar.';
+      });
+      _showSnack('Debes verificar tu correo antes de continuar.');
+      return false;
+    }
+
     return true;
   }
 
@@ -449,6 +742,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     _dniController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _emailCodeController.dispose();
     _direccionExactaController.dispose();
     super.dispose();
   }
@@ -456,7 +750,12 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isProcessing =
-        _isLoadingUbigeo || _verificandoIdentidad || _buscandoDni;
+        _isLoadingUbigeo ||
+        _verificandoIdentidad ||
+        _buscandoDni ||
+        _isCheckingEmailExistence ||
+        _isSendingEmailCode ||
+        _isVerifyingEmailCode;
     final String primaryButtonText;
     if (_isLoadingUbigeo) {
       primaryButtonText = 'Cargando ubicaciones...';
@@ -464,6 +763,10 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       primaryButtonText = 'Verificando datos...';
     } else if (_buscandoDni) {
       primaryButtonText = 'Consultando DNI...';
+    } else if (_isVerifyingEmailCode) {
+      primaryButtonText = 'Verificando correo...';
+    } else if (_isCheckingEmailExistence || _isSendingEmailCode) {
+      primaryButtonText = 'Procesando correo...';
     } else {
       primaryButtonText = 'Siguiente';
     }
@@ -500,6 +803,69 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       );
     } else if (dniLookup != null && _dniError == null) {
       dniSuffixIcon = const Icon(Icons.verified, color: Colors.green);
+    }
+
+    final trimmedEmail = _emailController.text.trim();
+    final emailDisplay =
+        trimmedEmail.isNotEmpty ? trimmedEmail : (_emailUsedForCode ?? '');
+    final bool showEmailCodeField = _emailCodeSent || _emailVerified;
+    String? emailHelperText;
+    if (_emailVerified && _verifiedEmail != null) {
+      emailHelperText = 'Correo verificado correctamente.';
+    } else if (_emailCodeSent) {
+      final expiration = _emailCodeExpiration;
+      if (expiration != null) {
+        final remaining = expiration.difference(DateTime.now());
+        if (remaining.isNegative) {
+          emailHelperText =
+              'Hemos enviado un código de verificación a $emailDisplay. Solicita uno nuevo si expiró.';
+        } else {
+          emailHelperText =
+              'Hemos enviado un código de verificación a $emailDisplay. Ingresa el código recibido.';
+        }
+      } else {
+        emailHelperText =
+            'Hemos enviado un código de verificación a $emailDisplay. Ingresa el código recibido.';
+      }
+    }
+
+    Widget? emailSuffixIcon;
+    if (_isCheckingEmailExistence || _isSendingEmailCode) {
+      emailSuffixIcon = const Padding(
+        padding: EdgeInsets.all(12.0),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.buttonColor),
+          ),
+        ),
+      );
+    } else if (_emailVerified) {
+      emailSuffixIcon = const Icon(Icons.verified, color: Colors.green);
+    } else if (_emailCodeSent) {
+      emailSuffixIcon = const Icon(
+        Icons.mark_email_unread,
+        color: AppColors.buttonColor,
+      );
+    }
+
+    Widget? emailCodeSuffixIcon;
+    if (_isVerifyingEmailCode) {
+      emailCodeSuffixIcon = const Padding(
+        padding: EdgeInsets.all(12.0),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.buttonColor),
+          ),
+        ),
+      );
+    } else if (_emailVerified) {
+      emailCodeSuffixIcon = const Icon(Icons.verified, color: Colors.green);
     }
 
     return Scaffold(
@@ -681,7 +1047,174 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         controller: _emailController,
                         label: 'Correo Electrónico *',
                         keyboardType: TextInputType.emailAddress,
+                        onChanged: _handleEmailChanged,
+                        helperText: emailHelperText,
+                        errorText: _emailError,
+                        suffixIcon: emailSuffixIcon,
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed:
+                                    _isCheckingEmailExistence ||
+                                            _isSendingEmailCode
+                                        ? null
+                                        : _sendEmailVerificationCode,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.buttonColor,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child:
+                                    _isCheckingEmailExistence ||
+                                            _isSendingEmailCode
+                                        ? Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    const AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(Colors.white),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            const Text(
+                                              'Procesando...',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                        : Text(
+                                          _emailCodeSent
+                                              ? 'Reenviar código'
+                                              : 'Enviar código',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                              ),
+                            ),
+                          ),
+                          if (showEmailCodeField) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: SizedBox(
+                                height: 48,
+                                child: OutlinedButton(
+                                  onPressed:
+                                      _emailVerified || _isVerifyingEmailCode
+                                          ? null
+                                          : _verifyEmailCode,
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(
+                                      color:
+                                          _emailVerified
+                                              ? Colors.green
+                                              : AppColors.buttonColor,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child:
+                                      _isVerifyingEmailCode
+                                          ? Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor:
+                                                      const AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(AppColors.buttonColor),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              const Text('Verificando...'),
+                                            ],
+                                          )
+                                          : Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                _emailVerified
+                                                    ? Icons.verified
+                                                    : Icons.verified_outlined,
+                                                color:
+                                                    _emailVerified
+                                                        ? Colors.green.shade700
+                                                        : AppColors.buttonColor,
+                                                size: 18,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _emailVerified
+                                                    ? 'Correo verificado'
+                                                    : 'Validar código',
+                                                style: TextStyle(
+                                                  color:
+                                                      _emailVerified
+                                                          ? Colors
+                                                              .green
+                                                              .shade700
+                                                          : AppColors
+                                                              .buttonColor,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (showEmailCodeField) ...[
+                        const SizedBox(height: 16),
+                        _buildCustomTextField(
+                          controller: _emailCodeController,
+                          label: 'Código de verificación',
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          enabled: !_emailVerified,
+                          onChanged: (value) {
+                            if (_emailCodeError != null) {
+                              setState(() {
+                                _emailCodeError = null;
+                              });
+                            }
+                          },
+                          helperText:
+                              _emailVerified
+                                  ? 'Correo verificado correctamente.'
+                                  : 'Ingresa el código recibido en tu correo.',
+                          errorText: _emailCodeError,
+                          suffixIcon: emailCodeSuffixIcon,
+                        ),
+                      ],
 
                       // Departamento
                       _buildUbigeoDropdown(

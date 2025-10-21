@@ -9,7 +9,6 @@ import '../client/home/client_home.dart';
 import '../lawyer/home/lawyer_home.dart';
 import 'forgot_password.dart';
 import 'signup_screen.dart';
-import '../../services/session_service.dart';
 
 
 
@@ -60,13 +59,13 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
-  String? _validatePassword(String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
+   String? _validatePassword(String? value) {
+    final sanitized = value?.trim() ?? '';
+    if (sanitized.isEmpty) {
       return 'Ingresa tu clave';
     }
-    if (trimmed.length != 6) {
-      return 'La clave debe tener exactamente 6 dígitos';
+    if (sanitized.length < 6) {
+      return 'La clave debe tener al menos 6 caracteres';
     }
     return null;
   }
@@ -206,15 +205,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 20),
                         TextFormField(
                           controller: _passwordController,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
-                          ],
+                           keyboardType: TextInputType.visiblePassword,
+                          enableSuggestions: false,
+                          autocorrect: false,
                           obscureText: _obscurePassword,
                           validator: _validatePassword,
                           decoration: _inputDecoration(
-                            label: 'Clave (6 dígitos)',
+                            label: 'Clave',
                             icon: Icons.lock,
                             suffixIcon: IconButton(
                               icon: Icon(
