@@ -68,7 +68,6 @@
                         <option value="">Todos</option>
                         <option value="cliente">Cliente</option>
                         <option value="abogado">Abogado</option>
-                        <option value="ambos">Ambos</option>
                       </select>
                     </div>
                     <div class="col-12 col-md-6 col-xl-3 form-group">
@@ -385,7 +384,6 @@
                   <select id="tc-input-rol" class="form-select" required>
                     <option value="cliente">Cliente</option>
                     <option value="abogado">Abogado</option>
-                    <option value="ambos">Ambos</option>
                   </select>
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
@@ -401,8 +399,11 @@
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-region" class="form-label">Región</label>
-                  <input type="text" id="tc-input-region" class="form-control" placeholder="PER-LIM o * para Global" />
-                  <div class="form-text">* = Global. Ej.: PER-LIM.</div>
+                  <select id="tc-input-region" class="form-select">
+                    <option value="">Global</option>
+                  </select>
+                  <div class="form-text">Selecciona una región específica o deja "Global".</div>
+                  
                 </div>
                 <div class="col-12 col-md-6 col-lg-4 form-group">
                   <label for="tc-input-prioridad" class="form-label">Prioridad</label>

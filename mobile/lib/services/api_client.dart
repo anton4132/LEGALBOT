@@ -31,7 +31,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const String _baseUrl = 'https://localhost:3000/api';
+  static const String _baseUrl = 'http://localhost:3000/api';
   static Object? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {

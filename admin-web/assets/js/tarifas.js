@@ -2188,9 +2188,9 @@ function validateUniqueCombination(payload, { silent = false } = {}) {
   }
   return true;
 }
-
 function validateOverlap(payload, { silent = false } = {}) {
   const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
+  const allowPriorityOverride = Number.isFinite(payload.prioridad);
   const conflicts = state.rules.filter((rule) => {
     if (!rule.activo) return false;
     if (currentId && rule.id === currentId) return false;
@@ -2203,6 +2203,9 @@ function validateOverlap(payload, { silent = false } = {}) {
     return rangesOverlap(rule.vigencia_desde, rule.vigencia_hasta, payload.vigencia_desde, payload.vigencia_hasta);
   });
   if (conflicts.length) {
+    if (allowPriorityOverride) {
+      return true;
+    }
     if (!silent) {
       showConflict(conflicts, 'La vigencia se solapa con otra regla activa del mismo ámbito.', { reason: 'overlap' });
     }
@@ -2212,29 +2215,33 @@ function validateOverlap(payload, { silent = false } = {}) {
 }
 
 function showConflict(conflicts, message, { reason = 'conflict' } = {}) {
-  if (!dom.wizard.alert) return;
-  dom.wizard.alert.classList.remove('d-none');
-  dom.wizard.alert.dataset.tcConflictReason = reason;
   const safeMessage = escapeHtml(message || 'Existen reglas en conflicto con la combinación seleccionada.');
   const listItems = (conflicts || [])
     .map((rule) => `<li><strong>${escapeHtml(rule.codigo)}</strong> — ${formatVigencia(rule.vigencia_desde, rule.vigencia_hasta)}</li>`)
     .join('');
   const details = listItems ? `<ul class="mb-2">${listItems}</ul>` : '';
-  const content = `
+  const actions = '<button type="button" class="btn btn-outline-primary btn-sm" data-tc-action="view-rules">Ver reglas</button>';
+  renderWizardAlert({ message: safeMessage, details, actions, reason });
+}
+
+function renderWizardAlert({ message, details = '', actions = '', reason = 'info' }) {
+  if (!dom.wizard.alert) return;
+  const safeMessage = message || '';
+  const actionsMarkup = actions ? `<div class="d-flex gap-2">${actions}</div>` : '';
+  dom.wizard.alert.classList.remove('d-none');
+  dom.wizard.alert.dataset.tcConflictReason = reason;
+  dom.wizard.alert.innerHTML = `
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
       <div>
         <div class="fw-semibold">${safeMessage}</div>
         ${details}
       </div>
-      <div class="d-flex gap-2">
-        <button type="button" class="btn btn-outline-primary btn-sm" data-tc-action="view-rules">Ver reglas</button>
-      </div>
+      ${actionsMarkup}
     </div>
   `;
-  dom.wizard.alert.innerHTML = content;
 }
 
-function hideConflict() {
+function clearWizardAlert() {
   if (!dom.wizard.alert) return;
   dom.wizard.alert.classList.add('d-none');
   dom.wizard.alert.innerHTML = '';
@@ -2369,7 +2376,7 @@ function toggleSimulator(open) {
     descripcion: '',
     servicio_id: '',
     plan_id: '',
-    rol_aplica: 'ambos',
+    rol_aplica: 'cliente',
     moneda: econconfig?.moneda_defecto || '',
     metodo_pago: '',
     ambito_region: '',
