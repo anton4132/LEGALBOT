@@ -54,6 +54,47 @@ const PARAM_SCHEMAS = {
     },
   },
 };
+
+
+const PAYMENT_METHODS_PERU = [
+  { id: 'tarjeta_credito', nombre: 'Tarjeta de crédito' },
+  { id: 'tarjeta_debito', nombre: 'Tarjeta de débito' },
+  { id: 'transferencia_bancaria', nombre: 'Transferencia bancaria' },
+  { id: 'deposito_bancario', nombre: 'Depósito bancario' },
+  { id: 'yape', nombre: 'Yape' },
+  { id: 'plin', nombre: 'Plin' },
+];
+
+const PERU_REGIONS = [
+  { id: 'PER-AMA', nombre: 'Amazonas' },
+  { id: 'PER-ANC', nombre: 'Áncash' },
+  { id: 'PER-APU', nombre: 'Apurímac' },
+  { id: 'PER-ARE', nombre: 'Arequipa' },
+  { id: 'PER-AYA', nombre: 'Ayacucho' },
+  { id: 'PER-CAJ', nombre: 'Cajamarca' },
+  { id: 'PER-CAL', nombre: 'Callao' },
+  { id: 'PER-CUS', nombre: 'Cusco' },
+  { id: 'PER-HUV', nombre: 'Huancavelica' },
+  { id: 'PER-HUC', nombre: 'Huánuco' },
+  { id: 'PER-ICA', nombre: 'Ica' },
+  { id: 'PER-JUN', nombre: 'Junín' },
+  { id: 'PER-LAL', nombre: 'La Libertad' },
+  { id: 'PER-LAM', nombre: 'Lambayeque' },
+  { id: 'PER-LIM', nombre: 'Lima' },
+  { id: 'PER-LOR', nombre: 'Loreto' },
+  { id: 'PER-MAD', nombre: 'Madre de Dios' },
+  { id: 'PER-MOQ', nombre: 'Moquegua' },
+  { id: 'PER-PAS', nombre: 'Pasco' },
+  { id: 'PER-PIU', nombre: 'Piura' },
+  { id: 'PER-PUN', nombre: 'Puno' },
+  { id: 'PER-SAM', nombre: 'San Martín' },
+  { id: 'PER-TAC', nombre: 'Tacna' },
+  { id: 'PER-TUM', nombre: 'Tumbes' },
+  { id: 'PER-UCA', nombre: 'Ucayali' },
+];
+
+const PAYMENT_METHOD_LABELS = new Map(PAYMENT_METHODS_PERU.map((item) => [item.id, item.nombre]));
+const REGION_LABELS = new Map(PERU_REGIONS.map((item) => [item.id, item.nombre]));
 function cloneTemplateFromCatalogs(tipo, catalogs) {
   const template = catalogs?.parametrosPlantilla?.[tipo] || PARAM_TEMPLATES[tipo] || {};
   return JSON.parse(JSON.stringify(template));
@@ -117,6 +158,8 @@ const state = {
   },
   ui: {
     view: 'reglas',
+    filtersApplied: false,
+
   },
 };
 state.wizard.data = createEmptyRule(initialCatalogsState);
@@ -591,6 +634,48 @@ function apiDelete(path) {
     if (Number.isNaN(date.getTime())) return value;
     return date.toISOString();
   }
+
+  function toNullableNumber(value) {
+    const normalized = normalizeNullableValue(value);
+    if (normalized === null) return null;
+    const numeric = Number(normalized);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  function normalizeDateValue(value) {
+    if (!value) return null;
+    const limaIso = toLimaIso(value);
+    if (limaIso) return limaIso;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toISOString();
+  }
+
+  function toLimaIso(value) {
+    if (!value) return null;
+    const trimmed = value.toString().trim();
+    if (!trimmed) return null;
+    const timezonePattern = /([zZ]|[+-]\d{2}:?\d{2})$/;
+    let date;
+    if (timezonePattern.test(trimmed)) {
+      date = new Date(trimmed);
+    } else {
+      const [datePart, timePart = '00:00'] = trimmed.split('T');
+      if (!datePart) return null;
+      const [year, month, day] = datePart.split('-').map((part) => Number(part));
+      if (![year, month, day].every((num) => Number.isFinite(num))) return null;
+      const timeSegments = timePart.split(':');
+      const hour = Number(timeSegments[0] ?? 0);
+      const minute = Number(timeSegments[1] ?? 0);
+      const second = Number(timeSegments[2] ?? 0);
+      if ([hour, minute, second].some((num) => Number.isNaN(num))) return null;
+      const utcMillis = Date.UTC(year, (month || 1) - 1, day || 1, hour + 5, minute, second);
+      date = new Date(utcMillis);
+    }
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+  }
+
   
   function rangesOverlap(aStart, aEnd, bStart, bEnd) {
     const minDate = new Date(-8640000000000000);
@@ -988,7 +1073,8 @@ function apiDelete(path) {
     }
     return { valid: errors.length === 0, messages: errors };
   }
-async function loadCatalogs() {
+async function loadCatalogs(options = {}) {
+  const { silent = false } = options;
   try {
     const data = await apiGet('/tarifas/catalogs');
     state.catalogs = {
@@ -1008,30 +1094,57 @@ async function loadCatalogs() {
     updateImpuestoLabel(dom.wizard.inputs?.vigenciaDesde?.value || dom.wizard.inputs?.vigenciaHasta?.value || null);
   } catch (error) {
     console.error('Error cargando catálogos', error);
-    window.alert(error.message || 'No se pudieron cargar los catálogos de tarifas');
+    if (!silent) {
+      const rawMessage = error.message || '';
+      const fallback = 'No se pudieron cargar los catálogos de tarifas. Intenta nuevamente.';
+      const sanitized = rawMessage && rawMessage !== 'Error obteniendo catálogos' ? rawMessage : fallback;
+      window.alert(sanitized);
+    }
   }
 }
 
 function populateCatalogSelects() {
   const { servicios, planes, monedas, metodos_pago, regiones, econconfig } = state.catalogs;
 
-  fillSelect(dom.filters.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true);
-  
+  const metodoOptions = buildMetodoOptions(metodos_pago);
+  fillSelect(dom.filters.metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
+
   const wizardInputs = dom.wizard.inputs;
   fillSelect(wizardInputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
   refreshServicioOptionsForSelect(wizardInputs.servicio, wizardInputs.plan?.value || '', 'Todos');
-  fillSelect(wizardInputs.moneda, monedas.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, econconfig?.moneda_defecto || '');
-  fillSelect(wizardInputs.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, 'Todos');
+
+  const monedaGlobal = econconfig?.moneda_defecto || (Array.isArray(monedas) && monedas.length ? monedas[0] : '');
+  const monedaOptions = monedaGlobal
+    ? [{ id: monedaGlobal, nombre: monedaGlobal }]
+    : (monedas || []).map((m) => ({ id: m, nombre: m }));
+  const allowEmptyMoneda = monedaOptions.length === 0;
+  fillSelect(wizardInputs.moneda, monedaOptions, { value: 'id', label: 'nombre' }, allowEmptyMoneda, monedaGlobal || 'Selecciona');
+  if (wizardInputs.moneda) {
+    const defaultValue = monedaGlobal || (monedaOptions[0]?.id ?? '');
+    wizardInputs.moneda.value = defaultValue;
+    wizardInputs.moneda.disabled = monedaOptions.length <= 1;
+  }
+
+  fillSelect(wizardInputs.metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
+
+  const regionOptions = buildRegionOptions(regiones);
+  fillSelect(wizardInputs.region, regionOptions, { value: 'id', label: 'nombre' }, true, 'Global');
+
   fillSelect(dom.simulator.inputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
   refreshServicioOptionsForSelect(dom.simulator.inputs.servicio, dom.simulator.inputs.plan?.value || '', 'Todos');
-  fillSelect(dom.simulator.inputs.moneda, monedas.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, econconfig?.moneda_defecto || '');
-  fillSelect(dom.simulator.inputs.metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, 'Todos');
-  if (wizardInputs.rol && !wizardInputs.rol.value) {
-    wizardInputs.rol.value = 'ambos';
+  fillSelect(dom.simulator.inputs.moneda, monedaOptions, { value: 'id', label: 'nombre' }, true, monedaGlobal || '');
+  if (dom.simulator.inputs.moneda && monedaGlobal) {
+    dom.simulator.inputs.moneda.value = monedaGlobal;
   }
-  fillSelect(dom.simulator.inputs.region, regiones.map((r) => ({ id: r, nombre: r })), { value: 'id', label: 'nombre' }, true, 'Todos');
+  fillSelect(dom.simulator.inputs.metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
+  fillSelect(dom.simulator.inputs.region, regionOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
+
+  if (wizardInputs.rol && !wizardInputs.rol.value) {
+    wizardInputs.rol.value = 'cliente';
+  }
+
   fillSelect(dom.wizard.inputs.step3Plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
-  fillSelect(dom.wizard.inputs.step3Metodo, metodos_pago.map((m) => ({ id: m, nombre: m })), { value: 'id', label: 'nombre' }, true, 'Todos');
+  fillSelect(dom.wizard.inputs.step3Metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
   dom.simulator.inputs.rol.value = 'cliente';
   dom.simulator.inputs.fecha.value = state.simulator.inputs.fecha;
   dom.wizard.inputs.step3Fecha.value = new Date().toISOString().substring(0, 10);
@@ -1058,6 +1171,75 @@ function fillSelect(select, items, { value, label }, allowEmpty = true, emptyLab
     select.value = current;
   }
 }
+
+
+function ensureSelectOption(select, value, label) {
+  if (!select) return;
+  if (value === undefined || value === null || value === '') return;
+  const normalized = `${value}`;
+  const exists = Array.from(select.options).some((option) => option.value === normalized);
+  if (!exists) {
+    const option = document.createElement('option');
+    option.value = normalized;
+    option.textContent = label || normalized;
+    option.dataset.tcDynamicOption = 'true';
+    select.appendChild(option);
+  }
+}
+
+function buildMetodoOptions(existing = []) {
+  const map = new Map(PAYMENT_METHODS_PERU.map((item) => [item.id, item.nombre]));
+  (existing || []).forEach((item) => {
+    const option = typeof item === 'string' ? { id: item.trim(), nombre: null } : item;
+    if (!option || !option.id) return;
+    const key = option.id.trim();
+    if (!key || key === '*') return;
+    if (!map.has(key)) {
+      const label = option.nombre || PAYMENT_METHOD_LABELS.get(key) || prettifyIdentifier(key);
+      map.set(key, label);
+    }
+  });
+  return Array.from(map.entries())
+    .map(([id, nombre]) => ({ id, nombre }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es-PE', { sensitivity: 'base' }));
+}
+
+function buildRegionOptions(existing = []) {
+  const map = new Map(REGION_LABELS);
+  (existing || []).forEach((item) => {
+    const option = typeof item === 'string' ? { id: item.trim(), nombre: null } : item;
+    if (!option || !option.id) return;
+    const key = option.id.trim();
+    if (!key) return;
+    if (!map.has(key)) {
+      const label = option.nombre || REGION_LABELS.get(key) || prettifyRegionCode(key);
+      map.set(key, label);
+    }
+  });
+  return Array.from(map.entries())
+    .map(([id, nombre]) => ({ id, nombre }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es-PE', { sensitivity: 'base' }));
+}
+
+function prettifyIdentifier(value) {
+  if (!value) return '';
+  return value
+    .toString()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/(^|\s)(\S)/g, (match, separator, letter) => `${separator}${letter.toUpperCase()}`);
+}
+
+function prettifyRegionCode(code) {
+  if (!code) return '';
+  const parts = code.split('-');
+  const suffix = parts[parts.length - 1] || code;
+  return prettifyIdentifier(suffix);
+}
+
+
 function resetFilters() {
   state.filters = {
     rol_aplica: '',
@@ -1065,6 +1247,7 @@ function resetFilters() {
     metodo_pago: '',
     vigencia: 'vigentes',
   };
+  state.ui.filtersApplied = false;
   if (dom.filters.rol) dom.filters.rol.value = '';
   if (dom.filters.estado) dom.filters.estado.value = '';
   if (dom.filters.metodo) dom.filters.metodo.value = '';
@@ -1098,7 +1281,12 @@ function renderTable() {
   if (!dom.table.body) return;
   dom.table.body.innerHTML = '';
   if (!state.rules.length) {
-    if (dom.table.empty) dom.table.empty.classList.remove('d-none');
+if (dom.table.empty) {
+      dom.table.empty.textContent = state.ui.filtersApplied
+        ? 'No se encontraron reglas que coincidan con los filtros aplicados.'
+        : 'Aún no hay reglas registradas.';
+      dom.table.empty.classList.remove('d-none');
+    }
     return;
   }
   if (dom.table.empty) dom.table.empty.classList.add('d-none');
