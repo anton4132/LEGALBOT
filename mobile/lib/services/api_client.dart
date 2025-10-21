@@ -52,6 +52,11 @@ class ApiClient {
     return const [];
   }
 
+  static Object? _mapValue(Map<String, dynamic>? map, Object key) {
+    if (map == null) return null;
+    return map[key];
+  }
+
   static Map<String, String> _authHeaders(String token, {bool json = false}) {
     final headers = <String, String>{'Authorization': 'Bearer $token'};
     if (json) {
@@ -74,8 +79,9 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
-    if (response.statusCode == 200 && data?['success'] == true) {
-      final payload = _asJsonMap(data?['data']);
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      final payload = _asJsonMap(_mapValue(data, 'data'));
       if (payload != null) {
         return DniLookupResult.fromJson(payload);
       }
@@ -124,8 +130,9 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
-    if (response.statusCode == 200 && data?['success'] == true) {
-      final conflictsMap = _asJsonMap(data?['conflicts']);
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      final conflictsMap = _asJsonMap(_mapValue(data, 'conflicts'));
       final result = <String>{};
       conflictsMap?.forEach((key, value) {
         if (value is bool && value) {
@@ -159,8 +166,9 @@ class ApiClient {
       throw UnauthorizedException(message);
     }
 
-    if (response.statusCode == 200 && data?['success'] == true) {
-      final userJson = _asJsonMap(data?['user']);
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      final userJson = _asJsonMap(_mapValue(data, 'user'));
       return ClientContactSettings.fromUserJson(userJson);
     }
 
@@ -219,8 +227,9 @@ class ApiClient {
       throw UnauthorizedException(message);
     }
 
-    if (response.statusCode == 200 && data?['success'] == true) {
-      final userJson = _asJsonMap(data?['user']);
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      final userJson = _asJsonMap(_mapValue(data, 'user'));
       return ClientContactSettings.fromUserJson(userJson);
     }
 
@@ -248,7 +257,8 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
-    if (response.statusCode == 200 && data?['success'] == true) {
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
       return;
     }
 
@@ -276,8 +286,9 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
-    if (response.statusCode == 200 && data?['success'] == true) {
-      final expirationRaw = data?['expiracion'];
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      final expirationRaw = _mapValue(data, 'expiracion');
       if (expirationRaw is String) {
         return DateTime.tryParse(expirationRaw);
       }
@@ -310,7 +321,8 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
-    if (response.statusCode == 200 && data?['success'] == true) {
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
       return;
     }
 
@@ -342,7 +354,8 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
 
-    if (response.statusCode == 200 && data?['success'] == true) {
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
       return;
     }
 
@@ -375,8 +388,9 @@ class ApiClient {
       throw UnauthorizedException(message);
     }
 
-    if (response.statusCode == 200 && data?['success'] == true) {
-      final userJson = _asJsonMap(data?['user']);
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      final userJson = _asJsonMap(_mapValue(data, 'user'));
       return ClientContactSettings.fromUserJson(userJson);
     }
 
@@ -526,7 +540,7 @@ class ApiClient {
     }
 
     final isErrorStatus = response.statusCode >= 400;
-    final successFlag = data?['success'] as bool?;
+    final successFlag = _mapValue(data, 'success') as bool?;
 
     if (isErrorStatus || successFlag == false) {
       final message =
@@ -557,7 +571,8 @@ class ApiClient {
     final decoded = _tryDecodeJson(response.body);
     final data = _asJsonMap(decoded);
     final bool success =
-        response.statusCode == 200 && (data?['success'] as bool? ?? false);
+        response.statusCode == 200 &&
+        ((_mapValue(data, 'success') as bool?) ?? false);
     if (success && data != null) {
       try {
         return UserSession.fromLoginResponse(data);
@@ -627,7 +642,7 @@ class ApiClient {
 
     if (response.statusCode == 200) {
       return LawyerApplicationStatus.fromJson(
-        data?['application'] as Map<String, dynamic>?,
+        _mapValue(data, 'application') as Map<String, dynamic>?,
       );
     }
 
@@ -697,7 +712,7 @@ class ApiClient {
     }
     if (response.statusCode == 200 || response.statusCode == 201) {
       return LawyerApplicationStatus.fromJson(
-        data?['application'] as Map<String, dynamic>?,
+        _mapValue(data, 'application') as Map<String, dynamic>?,
       );
     }
 
@@ -1064,7 +1079,8 @@ class ApiClient {
     }
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      final slotJson = data?['slot'] as Map<String, dynamic>? ?? const {};
+      final slotJson =
+          _mapValue(data, 'slot') as Map<String, dynamic>? ?? const {};
       return LawyerAvailabilitySlot.fromJson(slotJson);
     }
 
