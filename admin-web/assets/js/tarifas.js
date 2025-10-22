@@ -1,275 +1,184 @@
-const API_BASE_URL = (typeof window !== 'undefined' && window.LEGALBOT_ADMIN_API_BASE_URL) || '/api';
 
-const PARAM_TEMPLATES = {
-  fijo: { monto: 0 },
-  minimo_mas_variable: { minimo: 0, porcentaje_variable: 0 },
-  paquete: { tamano_bloque: 0, precio_bloque: 0 },
-  consumo_ia: { rate: 0, minimo: 0 },
-  estacional: { multiplicadores: [{ desde: '', hasta: '', factor: 1 }] },
-};
+const API_BASE_URL =
+  (typeof window !== 'undefined' && window.LEGALBOT_ADMIN_API_BASE_URL) || '/api';
 
-const PARAM_SCHEMAS = {
-  fijo: {
-    required: ['monto'],
-    properties: {
-      monto: { type: 'number', min: 0 },
-    },
-  },
-  minimo_mas_variable: {
-    required: ['minimo', 'porcentaje_variable'],
-    properties: {
-      minimo: { type: 'number', min: 0 },
-      porcentaje_variable: { type: 'number', min: 0 },
-    },
-  },
-  paquete: {
-    required: ['tamano_bloque', 'precio_bloque'],
-    properties: {
-      tamano_bloque: { type: 'number', min: 0, exclusive: true },
-      precio_bloque: { type: 'number', min: 0 },
-    },
-  },
-  consumo_ia: {
-    required: ['rate', 'minimo'],
-    properties: {
-      rate: { type: 'number', min: 0 },
-      minimo: { type: 'number', min: 0 },
-    },
-  },
-  estacional: {
-    required: ['multiplicadores'],
-    properties: {
-      multiplicadores: {
-        type: 'array',
-        minItems: 1,
-        items: {
-          required: ['desde', 'hasta', 'factor'],
-          properties: {
-            desde: { type: 'string' },
-            hasta: { type: 'string' },
-            factor: { type: 'number', min: 0 },
-          },
-        },
-      },
-    },
-  },
-};
+const DATE_FORMATTER = new Intl.DateTimeFormat('es-PE', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
-
-const PAYMENT_METHODS_PERU = [
-  { id: 'tarjeta_credito', nombre: 'Tarjeta de crédito' },
-  { id: 'tarjeta_debito', nombre: 'Tarjeta de débito' },
-  { id: 'transferencia_bancaria', nombre: 'Transferencia bancaria' },
-  { id: 'deposito_bancario', nombre: 'Depósito bancario' },
-  { id: 'yape', nombre: 'Yape' },
-  { id: 'plin', nombre: 'Plin' },
+const RELATIVE_UNITS = [
+  { limit: 60, divisor: 1, suffix: 's' },
+  { limit: 3600, divisor: 60, suffix: 'min' },
+  { limit: 86400, divisor: 3600, suffix: 'h' },
+  { limit: 604800, divisor: 86400, suffix: 'd' },
+  { limit: 2629800, divisor: 604800, suffix: 'sem' },
+  { limit: 31557600, divisor: 2629800, suffix: 'mes' },
 ];
 
-const PERU_REGIONS = [
-  { id: 'PER-AMA', nombre: 'Amazonas' },
-  { id: 'PER-ANC', nombre: 'Áncash' },
-  { id: 'PER-APU', nombre: 'Apurímac' },
-  { id: 'PER-ARE', nombre: 'Arequipa' },
-  { id: 'PER-AYA', nombre: 'Ayacucho' },
-  { id: 'PER-CAJ', nombre: 'Cajamarca' },
-  { id: 'PER-CAL', nombre: 'Callao' },
-  { id: 'PER-CUS', nombre: 'Cusco' },
-  { id: 'PER-HUV', nombre: 'Huancavelica' },
-  { id: 'PER-HUC', nombre: 'Huánuco' },
-  { id: 'PER-ICA', nombre: 'Ica' },
-  { id: 'PER-JUN', nombre: 'Junín' },
-  { id: 'PER-LAL', nombre: 'La Libertad' },
-  { id: 'PER-LAM', nombre: 'Lambayeque' },
-  { id: 'PER-LIM', nombre: 'Lima' },
-  { id: 'PER-LOR', nombre: 'Loreto' },
-  { id: 'PER-MAD', nombre: 'Madre de Dios' },
-  { id: 'PER-MOQ', nombre: 'Moquegua' },
-  { id: 'PER-PAS', nombre: 'Pasco' },
-  { id: 'PER-PIU', nombre: 'Piura' },
-  { id: 'PER-PUN', nombre: 'Puno' },
-  { id: 'PER-SAM', nombre: 'San Martín' },
-  { id: 'PER-TAC', nombre: 'Tacna' },
-  { id: 'PER-TUM', nombre: 'Tumbes' },
-  { id: 'PER-UCA', nombre: 'Ucayali' },
-];
+const TARIFA_TIPO_CALCULO_LABEL = {
+  fijo: 'Fijo',
+  consumo_ia: 'Consumo IA',
+};
 
-const PAYMENT_METHOD_LABELS = new Map(PAYMENT_METHODS_PERU.map((item) => [item.id, item.nombre]));
-const REGION_LABELS = new Map(PERU_REGIONS.map((item) => [item.id, item.nombre]));
-function cloneTemplateFromCatalogs(tipo, catalogs) {
-  const template = catalogs?.parametrosPlantilla?.[tipo] || PARAM_TEMPLATES[tipo] || {};
-  return JSON.parse(JSON.stringify(template));
-}
-
-const initialCatalogsState = {
-  servicios: [],
-  planes: [],
-  planServicios: [],
-  monedas: [],
-  metodos_pago: [],
-  regiones: [],
-  econconfig: null,
-  impuestos: [],
-  parametrosPlantilla: PARAM_TEMPLATES,
+const CHIP_LABELS = {
+  aplicable: 'Aplicable',
+  programada: 'Programada',
+  expirada: 'Expirada',
+  pausada: 'Pausada',
 };
 
 const state = {
-  catalogs: initialCatalogsState,
-  filters: {
-    rol_aplica: '',
-    activo: '',
-    metodo_pago: '',
-    vigencia: 'vigentes',
+  ready: false,
+  monedaFallback: 'PEN',
+  tabs: 'tarifas',
+  tarifas: {
+    items: [],
+    filters: {
+      ambito: 'servicio',
+      nombreAmbito: '',
+      estado: 'activas',
+      vigencia: 'hoy',
+      vigenciaDesde: '',
+      vigenciaHasta: '',
+      search: '',
+    },
+    selection: new Set(),
+    sort: { field: 'vigencia', direction: 'asc' },
+    paginator: { page: 1, perPage: 10, total: 0 },
+    form: { mode: 'create', data: null },
   },
-  pagination: {
-    page: 1,
-    perPage: 10,
-    total: 0,
-  },
-  rules: [],
-  wizard: {
-    open: false,
-    step: 1,
-    mode: 'create',
-    id: null,
-    sourceId: null,
-    data: null,
-    conflicts: [],
+  comisiones: {
+    items: [],
+    filters: {
+      ambito: 'servicio',
+      nombreAmbito: '',
+      rol: '',
+      estado: 'activas',
+      vigencia: 'hoy',
+      vigenciaDesde: '',
+      vigenciaHasta: '',
+      search: '',
+    },
+    selection: new Set(),
+    sort: { field: 'vigencia', direction: 'asc' },
+    paginator: { page: 1, perPage: 10, total: 0 },
+    form: { mode: 'create', data: null },
   },
   simulator: {
-    open: false,
+    panelOpen: false,
     loading: false,
     result: null,
     inputs: {
-      servicio_id: '',
-      plan_id: '',
-      rol_aplica: 'cliente',
-      moneda: '',
-      metodo_pago: '',
-      ambito_region: '',
-      fecha: new Date().toISOString().substring(0, 10),
+      ambito: 'servicio',
+      referencia: '',
+      usuarioId: '',
+      fecha: new Date().toISOString().slice(0, 10),
       consumo: 0,
     },
   },
   quick: {
     impuestos: [],
-    currentImpuestoId: null,
     econconfig: null,
-    impuestosLoaded: false,
   },
-  ui: {
-    view: 'reglas',
-    filtersApplied: false,
-
-  },
+  dom: {},
 };
-state.wizard.data = createEmptyRule(initialCatalogsState);
 
-const dom = {};
-const bootstrapLib = typeof window !== 'undefined' ? window.bootstrap : undefined;
-let syncingParamForm = false;
-let syncingParamJson = false;
-
+/**
+ * ------------------------------
+ * Inicialización principal
+ * ------------------------------
+ */
 
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   cacheDom();
-  setupOverlays();
-  bindEvents();
-  resetWizardFormState();
-  await loadCatalogs();
-  resetFilters();
-  await loadRules();
-  hydrateSimulatorInputs();
-  updateViewVisibility();
+  bindGlobalEvents();
+  await Promise.all([
+    loadTarifas(),
+    loadComisiones(),
+    loadImpuestos(),
+    loadEconconfig(),
+  ]);
+  state.ready = true;
+  renderAll();
+  setupShortcuts();
 }
 
 function cacheDom() {
-  dom.filters = {
-    form: document.getElementById('tc-filters-form'),
-    rol: document.getElementById('tc-filter-rol'),
-    estado: document.getElementById('tc-filter-estado'),
-    metodo: document.getElementById('tc-filter-metodo'),
-    vigencia: document.getElementById('tc-filter-vigencia'),
-    reset: document.getElementById('tc-filters-reset'),
-  };
-  dom.table = {
-    body: document.getElementById('tc-table-body'),
-    empty: document.getElementById('tc-empty-state'),
-    rowsPerPage: document.getElementById('tc-rows-per-page'),
-    pagination: document.getElementById('tc-pagination'),
-  };
-  dom.actions = {
-    newRule: document.getElementById('tc-new-rule-btn'),
-    exportCsv: document.getElementById('tc-export-csv-btn'),
-    exportExcel: document.getElementById('tc-export-excel-btn'),
-    toggleSimulator: document.getElementById('tc-simulator-toggle'),
-  };
-  dom.simulator = {
-    panel: document.getElementById('tc-simulator-panel'),
-    close: document.getElementById('tc-simulator-close'),
-    form: document.getElementById('tc-simulator-form'),
-    result: document.getElementById('tc-simulator-result'),
-    inputs: {
-      servicio: document.getElementById('tc-sim-servicio'),
-      plan: document.getElementById('tc-sim-plan'),
-      rol: document.getElementById('tc-sim-rol'),
-      moneda: document.getElementById('tc-sim-moneda'),
-      metodo: document.getElementById('tc-sim-metodo'),
-      region: document.getElementById('tc-sim-region'),
-      fecha: document.getElementById('tc-sim-fecha'),
-      consumo: document.getElementById('tc-sim-consumo'),
-    },
-  };
-  dom.wizard = {
-    modal: document.getElementById('tc-wizard'),
-    title: document.getElementById('tc-wizard-title'),
-    close: document.getElementById('tc-wizard-close'),
-    cancel: document.getElementById('tc-wizard-cancel'),
-    next: document.getElementById('tc-wizard-next'),
-    prev: document.getElementById('tc-wizard-prev'),
-    save: document.getElementById('tc-wizard-save'),
-    saveInactive: document.getElementById('tc-wizard-save-inactive'),
-    form: document.getElementById('tc-wizard-form'),
-    steps: Array.from(document.querySelectorAll('[data-tc-step]')),
-    indicators: Array.from(document.querySelectorAll('[data-tc-step-indicator]')),
-    alert: document.getElementById('tc-conflict-alert'),
-    inputs: {
-      codigo: document.getElementById('tc-input-codigo'),
-      codigoRegenerar: document.getElementById('tc-btn-codigo-regenerar'),
-      servicio: document.getElementById('tc-input-servicio'),
-      plan: document.getElementById('tc-input-plan'),
-      rol: document.getElementById('tc-input-rol'),
-      moneda: document.getElementById('tc-input-moneda'),
-      metodo: document.getElementById('tc-input-metodo'),
-      region: document.getElementById('tc-input-region'),
-      prioridad: document.getElementById('tc-input-prioridad'),
-      vigenciaDesde: document.getElementById('tc-input-vigencia-desde'),
-      vigenciaHasta: document.getElementById('tc-input-vigencia-hasta'),
-      descripcion: document.getElementById('tc-input-descripcion'),
-      activo: document.getElementById('tc-input-activo'),
-      tipoCalculo: document.getElementById('tc-input-tipo-calculo'),
-      valor: document.getElementById('tc-input-valor'),
-      incluyeImpuesto: document.getElementById('tc-input-incluye-impuesto'),
-      parametros: document.getElementById('tc-input-parametros'),
-      step3Plan: document.getElementById('tc-step3-plan'),
-      step3Metodo: document.getElementById('tc-step3-metodo'),
-      step3Fecha: document.getElementById('tc-step3-fecha'),
-      step3Consumo: document.getElementById('tc-step3-consumo'),
-    },
-    step3Simulate: document.getElementById('tc-step3-simular'),
-    step3Result: document.getElementById('tc-step3-result'),
-    labels: {
-      incluyeImpuesto: document.querySelector('label[for="tc-input-incluye-impuesto"]'),
-    },
-    parametrosForm: document.getElementById('tc-parametros-form'),
-    manualBackdrop: null,
+  const dom = {};
 
+  dom.navTabs = document.querySelectorAll('[data-lb-tab]');
+  dom.views = document.querySelectorAll('[data-lb-view]');
+
+  dom.tarifas = {
+    tableBody: document.getElementById('tarifas-table-body'),
+    empty: document.getElementById('tarifas-empty-state'),
+    filters: {
+      ambito: document.getElementById('tarifas-filter-ambito'),
+      nombre: document.getElementById('tarifas-filter-nombre'),
+      estado: document.getElementById('tarifas-filter-estado'),
+      vigencia: document.getElementById('tarifas-filter-vigencia'),
+      vigenciaDesde: document.getElementById('tarifas-filter-desde'),
+      vigenciaHasta: document.getElementById('tarifas-filter-hasta'),
+      search: document.getElementById('tarifas-filter-search'),
+      reset: document.getElementById('tarifas-filter-reset'),
+    },
+    paginator: document.getElementById('tarifas-pagination'),
+    rowsPerPage: document.getElementById('tarifas-rows-per-page'),
+    newButton: document.getElementById('tarifas-new-btn'),
+    exportBtn: document.getElementById('tarifas-export-btn'),
+    exportSelectionBtn: document.getElementById('tarifas-export-selection-btn'),
+    actions: document.getElementById('tarifas-mass-actions'),
+    conflictModal: document.getElementById('tarifas-conflict-modal'),
+    conflictResolveButtons: document.querySelectorAll(
+      '#tarifas-conflict-modal [data-conflict-action]'
+    ),
+    formModal: document.getElementById('tarifas-form-modal'),
+    form: document.getElementById('tarifas-form'),
   };
-  dom.views = {
-    buttons: Array.from(document.querySelectorAll('[data-tc-view-button]')),
-    containers: Array.from(document.querySelectorAll('[data-tc-view]')),
+
+  dom.comisiones = {
+    tableBody: document.getElementById('comisiones-table-body'),
+    empty: document.getElementById('comisiones-empty-state'),
+    filters: {
+      ambito: document.getElementById('comisiones-filter-ambito'),
+      nombre: document.getElementById('comisiones-filter-nombre'),
+      rol: document.getElementById('comisiones-filter-rol'),
+      estado: document.getElementById('comisiones-filter-estado'),
+      vigencia: document.getElementById('comisiones-filter-vigencia'),
+      vigenciaDesde: document.getElementById('comisiones-filter-desde'),
+      vigenciaHasta: document.getElementById('comisiones-filter-hasta'),
+      search: document.getElementById('comisiones-filter-search'),
+      reset: document.getElementById('comisiones-filter-reset'),
+    },
+    paginator: document.getElementById('comisiones-pagination'),
+    rowsPerPage: document.getElementById('comisiones-rows-per-page'),
+    newButton: document.getElementById('comisiones-new-btn'),
+    exportBtn: document.getElementById('comisiones-export-btn'),
+    exportSelectionBtn: document.getElementById('comisiones-export-selection-btn'),
+    actions: document.getElementById('comisiones-mass-actions'),
+    conflictModal: document.getElementById('comisiones-conflict-modal'),
+    conflictResolveButtons: document.querySelectorAll(
+      '#comisiones-conflict-modal [data-conflict-action]'
+    ),
+    formModal: document.getElementById('comisiones-form-modal'),
+    form: document.getElementById('comisiones-form'),
   };
+
+  dom.simulator = {
+    toggle: document.getElementById('simulator-toggle'),
+    close: document.getElementById('simulator-close'),
+    panel: document.getElementById('simulator-panel'),
+    form: document.getElementById('simulator-form'),
+    result: document.getElementById('simulator-result'),
+    loading: document.getElementById('simulator-loading'),
+  };
+
+  dom.helpBanner = document.getElementById('tarifas-help-banner');
+
   dom.impuestos = {
     tableBody: document.getElementById('tc-impuestos-table-body'),
     estado: document.getElementById('tc-impuestos-estado'),
@@ -286,6 +195,7 @@ function cacheDom() {
     historyModal: document.getElementById('tc-impuestos-history-modal'),
     historyContent: document.getElementById('tc-impuestos-history-content'),
   };
+
   dom.econconfig = {
     form: document.getElementById('tc-econfig-form'),
     moneda: document.getElementById('tc-econfig-moneda'),
@@ -296,2545 +206,1673 @@ function cacheDom() {
     previewResult: document.getElementById('tc-econfig-preview-result'),
     updatedLabel: document.getElementById('tc-econfig-actualizado'),
   };
-  if (dom.wizard.labels?.incluyeImpuesto) {
-    dom.wizard.labels.defaultIncluyeImpuesto = dom.wizard.labels.incluyeImpuesto.textContent.trim();
-    if (bootstrapLib?.Tooltip) {
-      dom.wizard.labels.incluyeImpuestoTooltip = bootstrapLib.Tooltip.getOrCreateInstance(dom.wizard.labels.incluyeImpuesto);
-    }
-  }
+
+  state.dom = dom;
 }
 
+function bindGlobalEvents() {
+  const { dom } = state;
 
-function setupOverlays() {
-    if (dom.wizard?.modal) {
-      if (bootstrapLib?.Modal) {
-        dom.wizard.modalInstance = bootstrapLib.Modal.getOrCreateInstance(dom.wizard.modal, {
-          backdrop: 'static',
-          keyboard: false,
-        });
-        dom.wizard.modal.addEventListener('hidden.bs.modal', () => {
-          resetWizardFormState();
-        });
-        dom.wizard.modal.addEventListener('shown.bs.modal', () => {
-          state.wizard.open = true;
-          updateWizardUi();
-        });
-      } else {
-        dom.wizard.modal.classList.add('d-none');
+  dom.navTabs.forEach((tab) => {
+    tab.addEventListener('click', (event) => {
+      event.preventDefault();
+      const nextTab = tab.getAttribute('data-lb-tab');
+      if (nextTab && nextTab !== state.tabs) {
+        state.tabs = nextTab;
+        renderTabs();
       }
-    }
-    if (dom.simulator?.panel) {
-      if (bootstrapLib?.Offcanvas) {
-        dom.simulator.offcanvasInstance = bootstrapLib.Offcanvas.getOrCreateInstance(dom.simulator.panel, {
-          scroll: true,
-        });
-        dom.simulator.panel.addEventListener('hidden.bs.offcanvas', () => {
-          state.simulator.open = false;
-        });
-        dom.simulator.panel.addEventListener('shown.bs.offcanvas', () => {
-          state.simulator.open = true;
-        });
-      } else {
-        dom.simulator.panel.classList.remove('show');
-        dom.simulator.panel.setAttribute('aria-hidden', 'true');
-        state.simulator.open = false;
-      }
-      state.simulator.open = false;
-    }
-  }
-
-  
-function bindEvents() {
-  if (dom.filters.form) {
-    dom.filters.form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      applyFilters();
     });
-  }
-  if (dom.filters.reset) {
-    dom.filters.reset.addEventListener('click', (event) => {
-      event.preventDefault();
-      resetFilters();
-      loadRules();
-    });
-  }
-  if (dom.table.rowsPerPage) {
-    dom.table.rowsPerPage.addEventListener('change', () => {
-      state.pagination.perPage = Number(dom.table.rowsPerPage.value) || 10;
-      state.pagination.page = 1;
-      loadRules();
-    });
-  }
-  if (dom.actions.newRule) {
-    dom.actions.newRule.addEventListener('click', () => openWizard('create'));
-  }
-  if (dom.actions.exportCsv) {
-    dom.actions.exportCsv.addEventListener('click', exportCsv);
-  }
-
-  if (dom.actions.exportExcel) {
-    dom.actions.exportExcel.addEventListener('click', exportExcel);
-  }
-
-  if (dom.table.body) {
-    dom.table.body.addEventListener('click', handleTableAction);
-  }
-  if (dom.actions.toggleSimulator) {
-    dom.actions.toggleSimulator.addEventListener('click', () => toggleSimulator(!state.simulator.open));
-  }
-  if (dom.simulator.close) {
-    dom.simulator.close.addEventListener('click', () => toggleSimulator(false));
-  }
-  if (dom.simulator.form) {
-    dom.simulator.form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      await runPanelSimulation();
-    });
-  }
-  if (dom.simulator.inputs?.plan) {
-    dom.simulator.inputs.plan.addEventListener('change', handleSimulatorPlanChange);
-  }
-  if (dom.wizard.close) {
-    dom.wizard.close.addEventListener('click', () => toggleWizard(false));
-  }
-  if (dom.wizard.cancel) {
-    dom.wizard.cancel.addEventListener('click', () => toggleWizard(false));
-  }
-  if (dom.wizard.next) {
-    dom.wizard.next.addEventListener('click', () => goToWizardStep(state.wizard.step + 1));
-  }
-  if (dom.wizard.prev) {
-    dom.wizard.prev.addEventListener('click', () => goToWizardStep(state.wizard.step - 1));
-  }
-  if (dom.wizard.save) {
-    dom.wizard.save.addEventListener('click', saveWizard);
-  }
-  if (dom.wizard.saveInactive) {
-    dom.wizard.saveInactive.addEventListener('click', () => saveWizard(true));
-  }
-  if (dom.wizard.inputs.tipoCalculo) {
-    dom.wizard.inputs.tipoCalculo.addEventListener('change', handleTipoCalculoChange);
-  }
-  if (dom.wizard.inputs.plan) {
-    dom.wizard.inputs.plan.addEventListener('change', handleWizardPlanChange);
-  }
-
-  if (dom.wizard.inputs.servicio) {
-    dom.wizard.inputs.servicio.addEventListener('change', handleWizardServicioChange);
-  }
-  if (dom.wizard.inputs.metodo) {
-    dom.wizard.inputs.metodo.addEventListener('change', handleWizardMetodoChange);
-  }
-  if (dom.wizard.inputs.vigenciaDesde) {
-    dom.wizard.inputs.vigenciaDesde.addEventListener('change', () => {
-      updateImpuestoLabel(dom.wizard.inputs.vigenciaDesde.value || dom.wizard.inputs.vigenciaHasta.value || null);
-    });
-  }
-  if (dom.wizard.inputs.vigenciaHasta) {
-    dom.wizard.inputs.vigenciaHasta.addEventListener('change', () => {
-      updateImpuestoLabel(dom.wizard.inputs.vigenciaDesde.value || dom.wizard.inputs.vigenciaHasta.value || null);
-    });
-  }
-  if (dom.wizard.inputs.activo) {
-    dom.wizard.inputs.activo.addEventListener('change', updateCodigoReadonlyState);
-  }
-  if (dom.wizard.inputs.codigoRegenerar) {
-    dom.wizard.inputs.codigoRegenerar.addEventListener('click', handleCodigoRegenerar);
-  }
-  if (dom.wizard.inputs.parametros) {
-    dom.wizard.inputs.parametros.addEventListener('input', debounce(handleParametrosJsonChange, 400));
-  }
-  if (dom.wizard.parametrosForm) {
-    dom.wizard.parametrosForm.addEventListener('input', handleParametrosFormChange);
-    dom.wizard.parametrosForm.addEventListener('change', handleParametrosFormChange);
-    dom.wizard.parametrosForm.addEventListener('click', handleParametrosFormClick);
-  }
-  if (dom.wizard.alert) {
-    dom.wizard.alert.addEventListener('click', handleConflictAlertClick);
-  }
-
-  if (dom.wizard.step3Simulate) {
-    dom.wizard.step3Simulate.addEventListener('click', simulateFromWizard);
-  }
-  if (dom.wizard.indicators.length) {
-    dom.wizard.indicators.forEach((button) => {
-      button.addEventListener('click', () => {
-        const target = Number(button.getAttribute('data-tc-step-indicator'));
-        if (target < state.wizard.step) {
-          goToWizardStep(target);
-        }
-      });
-    });
-  } if (dom.views?.buttons?.length) {
-    dom.views.buttons.forEach((button) => {
-      button.addEventListener('click', () => switchView(button.getAttribute('data-tc-view-button')));
-    });
-  }
-  if (dom.impuestos?.estado) {
-    dom.impuestos.estado.addEventListener('change', () => refreshImpuestosList());
-  }
-  if (dom.impuestos?.tableBody) {
-    dom.impuestos.tableBody.addEventListener('click', handleImpuestoTableClick);
-  }
-  if (dom.impuestos?.form) {
-    dom.impuestos.form.addEventListener('submit', submitImpuestoForm);
-  }
-  if (dom.impuestos?.reset) {
-    dom.impuestos.reset.addEventListener('click', resetImpuestoForm);
-  }
-  if (dom.econconfig?.form) {
-    dom.econconfig.form.addEventListener('submit', submitEconfigForm);
-  }
-  if (dom.econconfig?.previewInput) {
-    dom.econconfig.previewInput.addEventListener('input', updateEconfigPreview);
-  }
-  ['moneda', 'decimales', 'regla'].forEach((key) => {
-    const input = dom.econconfig?.[key];
-    if (input) {
-      input.addEventListener('change', updateEconfigPreview);
-      input.addEventListener('input', updateEconfigPreview);
-    }
   });
-  if (dom.pasarelas?.tableBody) {
-    dom.pasarelas.tableBody.addEventListener('click', handlePasarelaTableClick);
-  }
-  if (dom.pasarelas?.form) {
-    dom.pasarelas.form.addEventListener('submit', submitPasarelaForm);
-  }
-  if (dom.pasarelas?.reset) {
-    dom.pasarelas.reset.addEventListener('click', resetPasarelaForm);
-  }
-  if (dom.pasarelas?.methods?.tableBody) {
-    dom.pasarelas.methods.tableBody.addEventListener('click', handlePasarelaMetodoTableClick);
-  }
-  if (dom.pasarelas?.methods?.form) {
-    dom.pasarelas.methods.form.addEventListener('submit', submitPasarelaMetodoForm);
-  }
-  if (dom.pasarelas?.methods?.reset) {
-    dom.pasarelas.methods.reset.addEventListener('click', resetPasarelaMetodoForm);
-  }
-  if (dom.pasarelas?.simulator?.run) {
-    dom.pasarelas.simulator.run.addEventListener('click', runPasarelaSimulation);
-  }
-  if (dom.pasarelas?.simulator?.importe) {
-    dom.pasarelas.simulator.importe.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        runPasarelaSimulation();
-      }
-    });
-  }
+
+  bindTarifasEvents();
+  bindComisionesEvents();
+  bindSimulatorEvents();
+  bindImpuestosEvents();
+  bindEconconfigEvents();
 }
 
-function buildUrl(path, params) {
-  const base = (API_BASE_URL || '/api').replace(/\/$/, '');
-  const full = `${base}${path}`;
-  const url = base.startsWith('http') ? new URL(full) : new URL(full, window.location.origin);
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === undefined || value === null || value === '') return;
-      url.searchParams.append(key, value);
-    });
-  }
-  return url;
+function renderAll() {
+  renderTabs();
+  renderTarifas();
+  renderComisiones();
+  renderHelpBanner();
+  renderSimulator();
+  renderImpuestosTable();
+  renderImpuestoForm();
+  renderEconconfig();
 }
 
-function escapeHtml(value) {
-    if (value === undefined || value === null) return '';
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+function renderTabs() {
+  const { dom } = state;
+  dom.navTabs.forEach((tab) => {
+    const name = tab.getAttribute('data-lb-tab');
+    const active = name === state.tabs;
+    tab.classList.toggle('active', active);
+  });
 
-  
-async function apiRequest(method, path, body, params) {
-  const url = buildUrl(path, params);
-  const options = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-  };
-  if (body !== undefined) {
-    options.body = JSON.stringify(body);
-  }
-  const response = await fetch(url, options);
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch (error) {
-    payload = null;
-  }
-  if (!response.ok) {
-    const message = (payload && payload.message) || 'Error de comunicación con el servidor';
-    const error = new Error(message);
-    error.status = response.status;
-    error.response = payload;
-    throw error;
-  }
-  return payload;
+  dom.views.forEach((view) => {
+    const name = view.getAttribute('data-lb-view');
+    view.classList.toggle('d-none', name !== state.tabs);
+  });
 }
 
-function apiGet(path, params) {
-  return apiRequest('GET', path, undefined, params);
+function renderHelpBanner() {
+  const banner = state.dom.helpBanner;
+  if (!banner) return;
+  banner.innerHTML = `
+    <div class="alert alert-info d-flex flex-column flex-lg-row align-items-lg-center gap-3">
+      <div>
+        <strong>Prioridad:</strong> Plan &gt; Servicio. Impuestos incluidos se
+        desglosan automáticamente. Redondeo según
+        <code>${state.quick.econconfig?.regla_redondeo || 'dos_decimales'}</code>.
+      </div>
+      <div class="ms-lg-auto">
+        <span class="me-3">Auditoría disponible en cada fila.</span>
+        <a href="#" class="btn btn-sm btn-outline-secondary" data-lb-help="auditoria">
+          Ver documentación
+        </a>
+      </div>
+    </div>
+  `;
 }
 
-function apiPost(path, body) {
-  return apiRequest('POST', path, body);
-}
-
-function apiPut(path, body) {
-  return apiRequest('PUT', path, body);
-  
-}
-
-function apiPatch(path, body) {
-  return apiRequest('PATCH', path, body);
-}
-
-function apiDelete(path) {
-    return apiRequest('DELETE', path);
-  }
 
 
+/**
+ * ------------------------------
+ * Tarifa helpers y renderizado
+ * ------------------------------
+ */
 
-  function generateCodigo() {
-    const timestamp = new Date();
-    const parts = [
-      timestamp.getFullYear(),
-      `${timestamp.getMonth() + 1}`.padStart(2, '0'),
-      `${timestamp.getDate()}`.padStart(2, '0'),
-      `${timestamp.getHours()}`.padStart(2, '0'),
-      `${timestamp.getMinutes()}`.padStart(2, '0'),
-      `${timestamp.getSeconds()}`.padStart(2, '0'),
-    ];
-    return `TC-${parts.join('')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-  }
-  
-  function normalizeNullableValue(value) {
-    if (value === undefined || value === null || value === '') return null;
-    if (typeof value === 'number') return value;
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!trimmed) return null;
-      const numeric = Number(trimmed);
-      if (!Number.isNaN(numeric) && `${numeric}` === trimmed) {
-        return numeric;
-      }
-      return trimmed;
-    }
-    return value;
-  }
-  
-  function normalizeDateValue(value) {
-    if (!value) return null;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toISOString();
-  }
+function bindTarifasEvents() {
+  const { tarifas } = state.dom;
+  if (!tarifas) return;
 
-  function toNullableNumber(value) {
-    const normalized = normalizeNullableValue(value);
-    if (normalized === null) return null;
-    const numeric = Number(normalized);
-    return Number.isFinite(numeric) ? numeric : null;
-  }
-
-  function normalizeDateValue(value) {
-    if (!value) return null;
-    const limaIso = toLimaIso(value);
-    if (limaIso) return limaIso;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toISOString();
-  }
-
-  function toLimaIso(value) {
-    if (!value) return null;
-    const trimmed = value.toString().trim();
-    if (!trimmed) return null;
-    const timezonePattern = /([zZ]|[+-]\d{2}:?\d{2})$/;
-    let date;
-    if (timezonePattern.test(trimmed)) {
-      date = new Date(trimmed);
+  Object.entries(tarifas.filters).forEach(([key, input]) => {
+    if (!input) return;
+    if (key === 'reset') {
+      input.addEventListener('click', () => {
+        resetTarifaFilters();
+        renderTarifas();
+      });
     } else {
-      const [datePart, timePart = '00:00'] = trimmed.split('T');
-      if (!datePart) return null;
-      const [year, month, day] = datePart.split('-').map((part) => Number(part));
-      if (![year, month, day].every((num) => Number.isFinite(num))) return null;
-      const timeSegments = timePart.split(':');
-      const hour = Number(timeSegments[0] ?? 0);
-      const minute = Number(timeSegments[1] ?? 0);
-      const second = Number(timeSegments[2] ?? 0);
-      if ([hour, minute, second].some((num) => Number.isNaN(num))) return null;
-      const utcMillis = Date.UTC(year, (month || 1) - 1, day || 1, hour + 5, minute, second);
-      date = new Date(utcMillis);
-    }
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toISOString();
-  }
-
-  
-  function rangesOverlap(aStart, aEnd, bStart, bEnd) {
-    const minDate = new Date(-8640000000000000);
-    const maxDate = new Date(8640000000000000);
-    const startA = aStart ? new Date(aStart) : minDate;
-    const endA = aEnd ? new Date(aEnd) : maxDate;
-    const startB = bStart ? new Date(bStart) : minDate;
-    const endB = bEnd ? new Date(bEnd) : maxDate;
-    if (Number.isNaN(startA.getTime()) || Number.isNaN(endA.getTime()) || Number.isNaN(startB.getTime()) || Number.isNaN(endB.getTime())) {
-      return true;
-    }
-    return startA <= endB && startB <= endA;
-  }
-  
-  function findImpuestoVigente(fecha) {
-    const target = fecha ? new Date(fecha) : new Date();
-    if (Number.isNaN(target.getTime())) return null;
-    return state.catalogs.impuestos.find((imp) => {
-      if (imp.activo === false) return false;
-      const desde = imp.vigencia_desde ? new Date(imp.vigencia_desde) : null;
-      const hasta = imp.vigencia_hasta ? new Date(imp.vigencia_hasta) : null;
-      if (desde && target < desde) return false;
-      if (hasta && target > hasta) return false;
-      return true;
-    }) || null;
-  }
-  
-  function updateImpuestoLabel(fecha) {
-    if (!dom.wizard.labels?.incluyeImpuesto) return;
-    const label = dom.wizard.labels.incluyeImpuesto;
-    const impuesto = findImpuestoVigente(fecha);
-    if (impuesto) {
-      let porcentaje = '';
-      if (impuesto.porcentaje !== undefined && impuesto.porcentaje !== null) {
-        const numeric = Number(impuesto.porcentaje);
-        if (Number.isFinite(numeric)) {
-          const percentageValue = numeric * 100;
-          porcentaje = percentageValue.toLocaleString('es-PE', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-        }
-      }
-      const nombre = impuesto.nombre || impuesto.codigo || 'Impuesto';
-      label.textContent = `Incluye impuesto (${nombre} Vigente${porcentaje ? ` ${porcentaje}%` : ''})`;
-    } else {
-      label.textContent = dom.wizard.labels.defaultIncluyeImpuesto || 'Incluye impuesto';
-    }
-  }
-  function getServiciosByPlan(planId) {
-    if (!planId) return state.catalogs.servicios || [];
-    const id = Number(planId);
-    if (!Number.isFinite(id)) return state.catalogs.servicios || [];
-    const relations = (state.catalogs.planServicios || []).filter((rel) => Number(rel.plan_id) === id && rel.activo !== false);
-    if (!relations.length) return state.catalogs.servicios || [];
-    const allowed = new Set(relations.map((rel) => Number(rel.servicio_id)));
-    return (state.catalogs.servicios || []).filter((servicio) => allowed.has(Number(servicio.id)));
-  }
-  
-  function refreshServicioOptionsForSelect(select, planId, emptyLabel = 'Todos') {
-    if (!select) return;
-    const current = select.value;
-    const servicios = getServiciosByPlan(planId);
-    fillSelect(select, servicios, { value: 'id', label: (s) => `${s.codigo} - ${s.nombre}` }, true, emptyLabel);
-    if (current && Array.from(select.options).some((option) => option.value === current)) {
-      select.value = current;
-    } else if (select.value !== current) {
-      select.value = '';
-      select.dispatchEvent(new Event('change'));
-    }
-  }
-  
-  function syncServicioDependencies() {
-    const wizardPlan = dom.wizard.inputs?.plan?.value || '';
-    refreshServicioOptionsForSelect(dom.wizard.inputs?.servicio, wizardPlan, 'Todos');
-    const simulatorPlan = dom.simulator.inputs?.plan?.value || '';
-    refreshServicioOptionsForSelect(dom.simulator.inputs?.servicio, simulatorPlan, 'Todos');
-  }
-    
-  function ensureCodigoValue() {
-    if (!dom.wizard.inputs?.codigo) return;
-    if (!dom.wizard.inputs.codigo.value) {
-      const generated = generateCodigo();
-      dom.wizard.inputs.codigo.value = generated;
-      state.wizard.data = { ...state.wizard.data, codigo: generated };
-    }
-  }
-  
-  function cloneParametros(parametros) {
-    try {
-      return JSON.parse(JSON.stringify(parametros ?? {}));
-    } catch (error) {
-      return {};
-    }
-  }
-  
-  function updateParametrosJson(parametros) {
-    if (!dom.wizard.inputs?.parametros) return;
-    syncingParamJson = true;
-    dom.wizard.inputs.parametros.classList.remove('is-invalid');
-    dom.wizard.inputs.parametros.value = JSON.stringify(parametros ?? {}, null, 2);
-    syncingParamJson = false;
-  }
-  
-  function setParametrosState(parametros, { skipForm = false, skipJson = false } = {}) {
-    const normalized = parametros && typeof parametros === 'object' ? parametros : {};
-    state.wizard.data = { ...state.wizard.data, parametros: normalized };
-    if (!skipForm) {
-      renderParametrosForm(dom.wizard.inputs?.tipoCalculo?.value || state.wizard.data.tipo_calculo || 'fijo', normalized);
-    }
-    if (!skipJson) {
-      updateParametrosJson(normalized);
-    }
-  }
-  
-  function renderParametrosForm(tipo, parametros = {}) {
-    if (!dom.wizard.parametrosForm) return;
-    syncingParamForm = true;
-    const container = dom.wizard.parametrosForm;
-    container.innerHTML = '';
-    container.dataset.tipo = tipo;
-  
-    const builders = {
-      fijo: () => renderSimpleParametros(container, tipo, [
-        { key: 'monto', label: 'Monto', min: 0, step: 0.01 },
-      ], parametros),
-      minimo_mas_variable: () => renderSimpleParametros(container, tipo, [
-        { key: 'minimo', label: 'Mínimo', min: 0, step: 0.01 },
-        { key: 'porcentaje_variable', label: 'Porcentaje variable (%)', min: 0, step: 0.01 },
-      ], parametros),
-      paquete: () => renderSimpleParametros(container, tipo, [
-        { key: 'tamano_bloque', label: 'Tamaño de bloque', min: 0, step: 1, help: 'Debe ser mayor a 0.' },
-        { key: 'precio_bloque', label: 'Precio por bloque', min: 0, step: 0.01 },
-      ], parametros),
-      consumo_ia: () => renderSimpleParametros(container, tipo, [
-        { key: 'rate', label: 'Tarifa por unidad', min: 0, step: 0.0001 },
-        { key: 'minimo', label: 'Mínimo facturable', min: 0, step: 0.01 },
-      ], parametros),
-      estacional: () => renderEstacionalParametros(container, parametros),
-    };
-  
-    if (builders[tipo]) {
-      builders[tipo]();
-    }
-    syncingParamForm = false;
-  }
-  
-  function renderSimpleParametros(container, tipo, fields, parametros) {
-    fields.forEach((field) => {
-      const value = parametros?.[field.key];
-      const wrapper = document.createElement('div');
-      wrapper.className = 'col-12 col-md-6 col-lg-4 form-group';
-      const label = document.createElement('label');
-      label.className = 'form-label';
-      label.setAttribute('for', `tc-param-${tipo}-${field.key}`);
-      label.textContent = field.label;
-      const input = document.createElement('input');
-      input.type = 'number';
-      input.className = 'form-control';
-      input.id = `tc-param-${tipo}-${field.key}`;
-      if (field.min !== undefined) input.min = field.min;
-      if (field.step !== undefined) input.step = field.step;
-      input.dataset.paramKey = field.key;
-      input.dataset.paramType = 'number';
-      input.value = value ?? '';
-      wrapper.appendChild(label);
-      wrapper.appendChild(input);
-      if (field.help) {
-        const help = document.createElement('div');
-        help.className = 'form-text';
-        help.textContent = field.help;
-        wrapper.appendChild(help);
-      }
-      container.appendChild(wrapper);
-    });
-  }
-  
-  function renderEstacionalParametros(container, parametros) {
-    const rows = Array.isArray(parametros?.multiplicadores) && parametros.multiplicadores.length
-      ? parametros.multiplicadores
-      : [{ desde: '', hasta: '', factor: 1 }];
-    const header = document.createElement('div');
-    header.className = 'col-12';
-    header.innerHTML = '<p class="text-muted small mb-2">Configura multiplicadores por rango de vigencia. No deben solaparse.</p>';
-    container.appendChild(header);
-    rows.forEach((row, index) => {
-      const rowWrapper = document.createElement('div');
-      rowWrapper.className = 'col-12';
-      rowWrapper.dataset.paramIndex = index;
-      const inner = document.createElement('div');
-      inner.className = 'row g-2 align-items-end';
-      inner.innerHTML = `
-        <div class="col-12 col-md-3">
-          <label class="form-label" for="tc-param-estacional-desde-${index}">Desde</label>
-          <input type="date" class="form-control" id="tc-param-estacional-desde-${index}" data-param-collection="multiplicadores" data-param-index="${index}" data-param-key="desde" value="${row.desde ?? ''}" />
-        </div>
-        <div class="col-12 col-md-3">
-          <label class="form-label" for="tc-param-estacional-hasta-${index}">Hasta</label>
-          <input type="date" class="form-control" id="tc-param-estacional-hasta-${index}" data-param-collection="multiplicadores" data-param-index="${index}" data-param-key="hasta" value="${row.hasta ?? ''}" />
-        </div>
-        <div class="col-12 col-md-3">
-          <label class="form-label" for="tc-param-estacional-factor-${index}">Factor</label>
-          <input type="number" class="form-control" id="tc-param-estacional-factor-${index}" min="0" step="0.01" data-param-collection="multiplicadores" data-param-index="${index}" data-param-key="factor" data-param-type="number" value="${row.factor ?? 1}" />
-        </div>
-        <div class="col-12 col-md-3 d-flex gap-2 align-items-end justify-content-end">
-          <button type="button" class="btn btn-outline-danger" data-param-action="remove-multiplicador" data-param-index="${index}" ${rows.length === 1 ? 'disabled' : ''}>Eliminar</button>
-        </div>
-      `;
-      rowWrapper.appendChild(inner);
-      container.appendChild(rowWrapper);
-    });
-    const footer = document.createElement('div');
-    footer.className = 'col-12 d-flex justify-content-end';
-    footer.innerHTML = '<button type="button" class="btn btn-outline-primary" data-param-action="add-multiplicador">Agregar</button>';
-    container.appendChild(footer);
-  }
-  
-  function handleParametrosFormChange(event) {
-    if (syncingParamForm) return;
-    const target = event.target;
-    if (!target || (!target.dataset.paramKey && !target.dataset.paramCollection)) return;
-    const parametros = cloneParametros(state.wizard.data.parametros);
-    if (target.dataset.paramCollection === 'multiplicadores') {
-      const index = Number(target.dataset.paramIndex);
-      if (!Array.isArray(parametros.multiplicadores)) {
-        parametros.multiplicadores = [];
-      }
-      if (!parametros.multiplicadores[index]) {
-        parametros.multiplicadores[index] = { desde: '', hasta: '', factor: 1 };
-      }
-      const key = target.dataset.paramKey;
-      if (key) {
-        if (target.dataset.paramType === 'number') {
-          parametros.multiplicadores[index][key] = target.value === '' ? '' : Number(target.value);
-        } else {
-          parametros.multiplicadores[index][key] = target.value;
-        }
-      }
-    } else if (target.dataset.paramKey) {
-      const key = target.dataset.paramKey;
-      if (target.dataset.paramType === 'number') {
-        parametros[key] = target.value === '' ? '' : Number(target.value);
-      } else {
-        parametros[key] = target.value;
-      }
-    } else {
-      return;
-    }
-    setParametrosState(parametros, { skipForm: true });
-    if (dom.wizard.inputs?.parametros) {
-      dom.wizard.inputs.parametros.classList.remove('is-invalid');
-    }
-  }
-  
-  function handleParametrosFormClick(event) {
-    const button = event.target.closest('[data-param-action]');
-    if (!button) return;
-    const action = button.dataset.paramAction;
-    if (action === 'add-multiplicador') {
-      const parametros = cloneParametros(state.wizard.data.parametros);
-      const list = Array.isArray(parametros.multiplicadores) ? parametros.multiplicadores.slice() : [];
-      list.push({ desde: '', hasta: '', factor: 1 });
-      parametros.multiplicadores = list;
-      setParametrosState(parametros);
-    } else if (action === 'remove-multiplicador') {
-      const index = Number(button.dataset.paramIndex);
-      const parametros = cloneParametros(state.wizard.data.parametros);
-      const list = Array.isArray(parametros.multiplicadores) ? parametros.multiplicadores.slice() : [];
-      if (list.length > 1 && index >= 0 && index < list.length) {
-        list.splice(index, 1);
-        parametros.multiplicadores = list;
-        setParametrosState(parametros);
-      }
-    }
-  }
-  
-  function handleParametrosJsonChange() {
-    if (syncingParamJson) return;
-    if (!dom.wizard.inputs?.parametros) return;
-    const raw = dom.wizard.inputs.parametros.value.trim();
-    if (!raw) {
-      const template = cloneTemplate(dom.wizard.inputs?.tipoCalculo?.value || 'fijo');
-      setParametrosState(template, { skipJson: true });
-      dom.wizard.inputs.parametros.classList.remove('is-invalid');
-      return;
-    }
-    try {
-      const parsed = JSON.parse(raw);
-      if (dom.wizard.inputs?.parametros) {
-        dom.wizard.inputs.parametros.classList.remove('is-invalid');
-      }
-      setParametrosState(parsed, { skipJson: true });
-    } catch (error) {
-      dom.wizard.inputs.parametros.classList.add('is-invalid');
-    }
-  }
-  
-  function validateParametrosSchema(tipo, parametros) {
-    const schema = PARAM_SCHEMAS[tipo];
-    if (!schema) return { valid: true };
-    const errors = [];
-    if (schema.required) {
-      schema.required.forEach((key) => {
-        if (parametros[key] === undefined || parametros[key] === null || parametros[key] === '') {
-          errors.push(`El parámetro "${key}" es obligatorio.`);
-        }
+      const handler = key === 'nombre' || key === 'search' ? 'input' : 'change';
+      input.addEventListener(handler, () => {
+        updateTarifaFilter(key, input.value);
       });
     }
-    if (schema.properties) {
-      Object.entries(schema.properties).forEach(([key, rule]) => {
-        const value = parametros[key];
-        if (value === undefined || value === null) return;
-        if (rule.type === 'number') {
-          const number = Number(value);
-          if (Number.isNaN(number)) {
-            errors.push(`"${key}" debe ser numérico.`);
-            return;
-          }
-          if (rule.min !== undefined && number < rule.min) {
-            errors.push(`"${key}" debe ser mayor o igual a ${rule.min}.`);
-          }
-          if (rule.exclusive && rule.min !== undefined && number <= rule.min) {
-            errors.push(`"${key}" debe ser mayor a ${rule.min}.`);
-          }
-        } else if (rule.type === 'array') {
-          if (!Array.isArray(value)) {
-            errors.push(`"${key}" debe ser un arreglo.`);
-            return;
-          }
-          if (rule.minItems && value.length < rule.minItems) {
-            errors.push(`"${key}" debe contener al menos ${rule.minItems} elemento(s).`);
-          }
-          if (rule.items) {
-            value.forEach((item, index) => {
-              if (rule.items.required) {
-                rule.items.required.forEach((prop) => {
-                  if (item[prop] === undefined || item[prop] === null || item[prop] === '') {
-                    errors.push(`"${key}[${index}].${prop}" es obligatorio.`);
-                  }
-                });
-              }
-              if (rule.items.properties) {
-                Object.entries(rule.items.properties).forEach(([prop, propRule]) => {
-                  const propValue = item[prop];
-                  if (propRule.type === 'number' && propValue !== undefined && propValue !== null) {
-                    const number = Number(propValue);
-                    if (Number.isNaN(number)) {
-                      errors.push(`"${key}[${index}].${prop}" debe ser numérico.`);
-                    } else if (propRule.min !== undefined && number < propRule.min) {
-                      errors.push(`"${key}[${index}].${prop}" debe ser mayor o igual a ${propRule.min}.`);
-                    } else if (propRule.exclusive && propRule.min !== undefined && number <= propRule.min) {
-                      errors.push(`"${key}[${index}].${prop}" debe ser mayor a ${propRule.min}.`);
-                    }
-                  }
-                });
-              }
-            });
-          }
-        }
-      });
-    }
-    return { valid: errors.length === 0, message: errors.join('\n') };
-  }
-
-
-  function validateEstacionalRanges(multiplicadores) {
-    if (!Array.isArray(multiplicadores)) {
-      return { valid: true, messages: [] };
-    }
-    const errors = [];
-    const ranges = multiplicadores.map((item, index) => {
-      const desde = item?.desde ? new Date(item.desde) : null;
-      const hasta = item?.hasta ? new Date(item.hasta) : null;
-      const startTime = desde && !Number.isNaN(desde.getTime()) ? desde.getTime() : Number.NEGATIVE_INFINITY;
-      const endTime = hasta && !Number.isNaN(hasta.getTime()) ? hasta.getTime() : Number.POSITIVE_INFINITY;
-      if (desde && Number.isNaN(desde.getTime())) {
-        errors.push(`Fila ${index + 1}: la fecha "desde" es inválida.`);
-      }
-      if (hasta && Number.isNaN(hasta.getTime())) {
-        errors.push(`Fila ${index + 1}: la fecha "hasta" es inválida.`);
-      }
-      if (startTime > endTime) {
-        errors.push(`Fila ${index + 1}: la fecha "hasta" debe ser posterior a "desde".`);
-      }
-      return { index, startTime, endTime };
-    });
-    for (let i = 0; i < ranges.length; i += 1) {
-      for (let j = i + 1; j < ranges.length; j += 1) {
-        const a = ranges[i];
-        const b = ranges[j];
-        if (a.startTime <= b.endTime && b.startTime <= a.endTime) {
-          errors.push(`Las filas ${a.index + 1} y ${b.index + 1} se solapan.`);
-        }
-      }
-    }
-    return { valid: errors.length === 0, messages: errors };
-  }
-async function loadCatalogs(options = {}) {
-  const { silent = false } = options;
-  try {
-    const data = await apiGet('/tarifas/catalogs');
-    state.catalogs = {
-      servicios: data.servicios || [],
-      planes: data.planes || [],
-      planServicios: data.planServicios || data.plan_servicios || [],
-      monedas: data.monedas || [],
-      metodos_pago: data.metodos_pago || [],
-      regiones: data.regiones || [],
-      econconfig: data.econconfig || null,
-      impuestos: data.impuestos || [],
-      parametrosPlantilla: data.parametrosPlantilla || PARAM_TEMPLATES,
-    };
-    state.quick.econconfig = data.econconfig || null;
-    populateCatalogSelects();
-    syncServicioDependencies();
-    updateImpuestoLabel(dom.wizard.inputs?.vigenciaDesde?.value || dom.wizard.inputs?.vigenciaHasta?.value || null);
-  } catch (error) {
-    console.error('Error cargando catálogos', error);
-    if (!silent) {
-      const rawMessage = error.message || '';
-      const fallback = 'No se pudieron cargar los catálogos de tarifas. Intenta nuevamente.';
-      const sanitized = rawMessage && rawMessage !== 'Error obteniendo catálogos' ? rawMessage : fallback;
-      window.alert(sanitized);
-    }
-  }
-}
-
-function populateCatalogSelects() {
-  const { servicios, planes, monedas, metodos_pago, regiones, econconfig } = state.catalogs;
-
-  const metodoOptions = buildMetodoOptions(metodos_pago);
-  fillSelect(dom.filters.metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
-
-  const wizardInputs = dom.wizard.inputs;
-  fillSelect(wizardInputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
-  refreshServicioOptionsForSelect(wizardInputs.servicio, wizardInputs.plan?.value || '', 'Todos');
-
-  const monedaGlobal = econconfig?.moneda_defecto || (Array.isArray(monedas) && monedas.length ? monedas[0] : '');
-  const monedaOptions = monedaGlobal
-    ? [{ id: monedaGlobal, nombre: monedaGlobal }]
-    : (monedas || []).map((m) => ({ id: m, nombre: m }));
-  const allowEmptyMoneda = monedaOptions.length === 0;
-  fillSelect(wizardInputs.moneda, monedaOptions, { value: 'id', label: 'nombre' }, allowEmptyMoneda, monedaGlobal || 'Selecciona');
-  if (wizardInputs.moneda) {
-    const defaultValue = monedaGlobal || (monedaOptions[0]?.id ?? '');
-    wizardInputs.moneda.value = defaultValue;
-    wizardInputs.moneda.disabled = monedaOptions.length <= 1;
-  }
-
-  fillSelect(wizardInputs.metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
-
-  const regionOptions = buildRegionOptions(regiones);
-  fillSelect(wizardInputs.region, regionOptions, { value: 'id', label: 'nombre' }, true, 'Global');
-
-  fillSelect(dom.simulator.inputs.plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
-  refreshServicioOptionsForSelect(dom.simulator.inputs.servicio, dom.simulator.inputs.plan?.value || '', 'Todos');
-  fillSelect(dom.simulator.inputs.moneda, monedaOptions, { value: 'id', label: 'nombre' }, true, monedaGlobal || '');
-  if (dom.simulator.inputs.moneda && monedaGlobal) {
-    dom.simulator.inputs.moneda.value = monedaGlobal;
-  }
-  fillSelect(dom.simulator.inputs.metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
-  fillSelect(dom.simulator.inputs.region, regionOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
-
-  if (wizardInputs.rol && !wizardInputs.rol.value) {
-    wizardInputs.rol.value = 'cliente';
-  }
-
-  fillSelect(dom.wizard.inputs.step3Plan, planes, { value: 'id', label: 'nombre' }, true, 'Todos');
-  fillSelect(dom.wizard.inputs.step3Metodo, metodoOptions, { value: 'id', label: 'nombre' }, true, 'Todos');
-  dom.simulator.inputs.rol.value = 'cliente';
-  dom.simulator.inputs.fecha.value = state.simulator.inputs.fecha;
-  dom.wizard.inputs.step3Fecha.value = new Date().toISOString().substring(0, 10);
-}
-
-function fillSelect(select, items, { value, label }, allowEmpty = true, emptyLabel = 'Todos') {
-  if (!select) return;
-  const current = select.value;
-  select.innerHTML = '';
-  if (allowEmpty) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = emptyLabel;
-    select.appendChild(option);
-  }
-  items.forEach((item) => {
-    const option = document.createElement('option');
-    const optionValue = typeof value === 'function' ? value(item) : item[value];
-    option.value = optionValue ?? '';
-    option.textContent = typeof label === 'function' ? label(item) : item[label];
-    select.appendChild(option);
   });
-  if (current) {
-    select.value = current;
-  }
-}
 
-
-function ensureSelectOption(select, value, label) {
-  if (!select) return;
-  if (value === undefined || value === null || value === '') return;
-  const normalized = `${value}`;
-  const exists = Array.from(select.options).some((option) => option.value === normalized);
-  if (!exists) {
-    const option = document.createElement('option');
-    option.value = normalized;
-    option.textContent = label || normalized;
-    option.dataset.tcDynamicOption = 'true';
-    select.appendChild(option);
-  }
-}
-
-function buildMetodoOptions(existing = []) {
-  const map = new Map(PAYMENT_METHODS_PERU.map((item) => [item.id, item.nombre]));
-  (existing || []).forEach((item) => {
-    const option = typeof item === 'string' ? { id: item.trim(), nombre: null } : item;
-    if (!option || !option.id) return;
-    const key = option.id.trim();
-    if (!key || key === '*') return;
-    if (!map.has(key)) {
-      const label = option.nombre || PAYMENT_METHOD_LABELS.get(key) || prettifyIdentifier(key);
-      map.set(key, label);
-    }
+  tarifas.rowsPerPage?.addEventListener('change', () => {
+    const perPage = Number(tarifas.rowsPerPage.value) || 10;
+    state.tarifas.paginator.perPage = perPage;
+    state.tarifas.paginator.page = 1;
+    renderTarifas();
   });
-  return Array.from(map.entries())
-    .map(([id, nombre]) => ({ id, nombre }))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es-PE', { sensitivity: 'base' }));
-}
 
-function buildRegionOptions(existing = []) {
-  const map = new Map(REGION_LABELS);
-  (existing || []).forEach((item) => {
-    const option = typeof item === 'string' ? { id: item.trim(), nombre: null } : item;
-    if (!option || !option.id) return;
-    const key = option.id.trim();
-    if (!key) return;
-    if (!map.has(key)) {
-      const label = option.nombre || REGION_LABELS.get(key) || prettifyRegionCode(key);
-      map.set(key, label);
-    }
+  tarifas.newButton?.addEventListener('click', () => {
+    openTarifaForm('create');
   });
-  return Array.from(map.entries())
-    .map(([id, nombre]) => ({ id, nombre }))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es-PE', { sensitivity: 'base' }));
-}
 
-function prettifyIdentifier(value) {
-  if (!value) return '';
-  return value
-    .toString()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase()
-    .replace(/(^|\s)(\S)/g, (match, separator, letter) => `${separator}${letter.toUpperCase()}`);
-}
+  tarifas.exportBtn?.addEventListener('click', () => exportTarifas(false));
+  tarifas.exportSelectionBtn?.addEventListener('click', () => exportTarifas(true));
 
-function prettifyRegionCode(code) {
-  if (!code) return '';
-  const parts = code.split('-');
-  const suffix = parts[parts.length - 1] || code;
-  return prettifyIdentifier(suffix);
-}
+  tarifas.actions?.addEventListener('change', handleTarifaMassAction);
 
-
-function resetFilters() {
-  state.filters = {
-    rol_aplica: '',
-    activo: '',
-    metodo_pago: '',
-    vigencia: 'vigentes',
-  };
-  state.ui.filtersApplied = false;
-  if (dom.filters.rol) dom.filters.rol.value = '';
-  if (dom.filters.estado) dom.filters.estado.value = '';
-  if (dom.filters.metodo) dom.filters.metodo.value = '';
-  if (dom.filters.vigencia) dom.filters.vigencia.value = 'vigentes';
-  state.pagination.page = 1;
-  syncServicioDependencies();
-
-}
-
-async function loadRules() {
-  try {
-    const params = {
-      ...state.filters,
-      page: state.pagination.page,
-      per_page: state.pagination.perPage,
-    };
-    const data = await apiGet('/tarifas', params);
-    state.rules = data.items || [];
-    state.pagination.total = data.total || 0;
-    state.pagination.page = data.page || 1;
-    state.pagination.perPage = data.perPage || state.pagination.perPage;
-    renderTable();
-    renderPagination();
-  } catch (error) {
-    console.error('Error cargando reglas', error);
-    window.alert(error.message || 'No se pudieron cargar las reglas');
-  }
-}
-
-function renderTable() {
-  if (!dom.table.body) return;
-  dom.table.body.innerHTML = '';
-  if (!state.rules.length) {
-if (dom.table.empty) {
-      dom.table.empty.textContent = state.ui.filtersApplied
-        ? 'No se encontraron reglas que coincidan con los filtros aplicados.'
-        : 'Aún no hay reglas registradas.';
-      dom.table.empty.classList.remove('d-none');
-    }
-    return;
-  }
-  if (dom.table.empty) dom.table.empty.classList.add('d-none');
-  const fragment = document.createDocumentFragment();
-  state.rules.forEach((rule) => {
-    const row = document.createElement('tr');
-    row.dataset.id = rule.id;
-    row.innerHTML = `
-      <td>
-        <div class="fw-semibold">${rule.codigo}</div>
-        <div class="text-muted small">${rule.descripcion || ''}</div>
-      </td>
-      <td>${rule.servicio ? `${rule.servicio.codigo} - ${rule.servicio.nombre}` : 'Todos'}</td>
-      <td>${rule.plan ? rule.plan.nombre : 'Todos'}</td>
-      <td>${formatRol(rule.rol_aplica)}</td>
-      <td>${rule.moneda || (state.catalogs.econconfig?.moneda_defecto || 'N/D')}</td>
-      <td>${rule.metodo_pago || 'Todos'}</td>
-      <td>${rule.ambito_region || 'Global'}</td>
-      <td>${formatTipoCalculo(rule.tipo_calculo)}</td>
-      <td>${formatVigencia(rule.vigencia_desde, rule.vigencia_hasta)}</td>
-      <td>${rule.prioridad ?? '-'}</td>
-   <td>
-        <span class="badge ${rule.activo ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}">
-          ${rule.activo ? 'Activo' : 'Inactivo'}
-        </span>
-      </td>
-      <td class="text-end">
-        <div class="btn-group btn-group-sm" role="group">
-          <button type="button" class="btn btn-outline-primary" data-action="edit" data-id="${rule.id}">Editar</button>
-          <button type="button" class="btn btn-outline-primary" data-action="clone" data-id="${rule.id}">Clonar</button>
-          <button type="button" class="btn btn-outline-secondary" data-action="toggle" data-id="${rule.id}">${rule.activo ? 'Desactivar' : 'Activar'}</button>
-          <button type="button" class="btn btn-outline-secondary" data-action="audit" data-id="${rule.id}">Auditoría</button>
-        </div>
-      </td>
-    `;
-    fragment.appendChild(row);
-  });
-  dom.table.body.appendChild(fragment);
-}
-
-function renderPagination() {
-    if (!dom.table.pagination) return;
-    const { page, perPage, total } = state.pagination;
-    const totalPages = Math.max(1, Math.ceil(total / perPage));
-    dom.table.pagination.innerHTML = '';
-    const info = document.createElement('span');
-    info.className = 'text-muted small';
-    info.textContent = `Página ${Math.min(page, totalPages)} de ${totalPages} (${total} registro${total === 1 ? '' : 's'})`;
-    const prev = document.createElement('button');
-    prev.type = 'button';
-    prev.className = 'btn btn-outline-secondary btn-sm';
-    prev.textContent = 'Anterior';
-    prev.disabled = page <= 1;
-    prev.addEventListener('click', () => {
-      state.pagination.page = Math.max(1, page - 1);
-      loadRules();
-    });
-    const next = document.createElement('button');
-    next.type = 'button';
-    next.className = 'btn btn-outline-secondary btn-sm';
-    next.textContent = 'Siguiente';
-    next.disabled = page >= totalPages;
-    next.addEventListener('click', () => {
-      state.pagination.page = Math.min(totalPages, page + 1);
-      loadRules();
-    });
-    dom.table.pagination.appendChild(prev);
-    dom.table.pagination.appendChild(info);
-    dom.table.pagination.appendChild(next);
+  if (tarifas.tableBody) {
+    tarifas.tableBody.addEventListener('click', handleTarifasTableClick);
+    tarifas.tableBody.addEventListener('change', handleTarifasTableChange);
   }
 
-function formatRol(value) {
-  switch (value) {
-    case 'cliente':
-      return 'Cliente';
-    case 'abogado':
-      return 'Abogado';
-    case 'ambos':
-      return 'Ambos';
-    default:
-      return value || '-';
+  if (tarifas.form) {
+    tarifas.form.addEventListener('submit', submitTarifaForm);
+    tarifas.form
+      .querySelectorAll('[name="tipo_calculo"],[name="incluye_impuesto"],[name="ambito"]')
+      .forEach((field) => field.addEventListener('change', updateTarifaFormUi));
+    const jsonField = tarifas.form.querySelector('[name="parametros"]');
+    jsonField?.addEventListener('input', () => validateJsonField(jsonField));
   }
+
+  state.dom.tarifas.conflictResolveButtons.forEach((btn) =>
+    btn.addEventListener('click', () => resolveTarifaConflict(btn.dataset.conflictAction))
+  );
 }
 
-function formatTipoCalculo(value) {
-  switch (value) {
-    case 'fijo':
-      return 'Fijo';
-    case 'minimo_mas_variable':
-      return 'Mínimo + Variable';
-    case 'paquete':
-      return 'Paquete';
-    case 'consumo_ia':
-      return 'Consumo IA';
-    case 'estacional':
-      return 'Estacional';
-    default:
-      return value || '-';
-  }
-}
+function renderTarifas() {
+  const { items } = state.tarifas;
+  const filtered = applyTarifaFilters(items);
+  const sorted = sortByDefaultOrder(filtered);
+  const paginated = paginate(sorted, state.tarifas.paginator);
+  state.tarifas.paginator.total = filtered.length;
 
-function formatVigencia(desde, hasta) {
-  if (!desde && !hasta) return 'Abierta';
-  const inicio = desde ? formatDate(desde) : 'Inicio';
-  const fin = hasta ? formatDate(hasta) : 'Sin fin';
-  return `${inicio} → ${fin}`;
-}
+  const body = state.dom.tarifas.tableBody;
+  const empty = state.dom.tarifas.empty;
 
-function formatDate(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('es-PE', { year: 'numeric', month: 'short', day: 'numeric' });
-}
+  if (!body) return;
+  body.innerHTML = '';
 
-function formatDateTime(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
-}
-
-function applyFilters() {
-  state.filters = {
-    rol_aplica: dom.filters.rol?.value || '',
-    activo: dom.filters.estado?.value || '',
-    metodo_pago: dom.filters.metodo?.value || '',
-    vigencia: dom.filters.vigencia?.value || '',
-  };
-  state.ui.filtersApplied = hasActiveFilters(state.filters);
-  state.pagination.page = 1;
-  loadRules();
-}
-
-
-function hasActiveFilters(filters) {
-  if (!filters) return false;
-  if (filters.rol_aplica) return true;
-  if (filters.activo) return true;
-  if (filters.metodo_pago) return true;
-  if (filters.vigencia && filters.vigencia !== 'vigentes') return true;
-  return false;
-}
-
-
-function handleTableAction(event) {
-  const button = event.target.closest('button[data-action]');
-  if (!button) return;
-  const action = button.dataset.action;
-  const id = Number(button.dataset.id);
-  if (!id && action !== 'audit') return;
-  switch (action) {
-    case 'edit':
-      openWizard('edit', id);
-      break;
-    case 'clone':
-      openWizard('clone', id);
-      break;
-    case 'toggle':
-      toggleRule(id);
-      break;
-    case 'audit':
-      window.alert('La auditoría de reglas estará disponible próximamente.');
-      break;
-    default:
-      break;
-  }
-}
-
-async function toggleRule(id) {
-  try {
-    await apiPost(`/tarifas/${id}/toggle`);
-    await loadRules();
-  } catch (error) {
-    console.error('Error alternando regla', error);
-    window.alert(error.message || 'No se pudo alternar el estado de la regla');
-  }
-}
-
-function toggleWizard(open) {
-  if (!dom.wizard.modal) return;
-
-  if (dom.wizard.modalInstance) {
-    if (open) {
-      state.wizard.open = true;
-      updateWizardUi();
-      dom.wizard.modalInstance.show();
-    } else {
-      dom.wizard.modalInstance.hide();
-    }
+  if (!paginated.length) {
+    empty?.classList.remove('d-none');
+    body.classList.add('d-none');
     return;
   }
 
-  if (open) {
-    state.wizard.open = true;
-    dom.wizard.modal.classList.remove('d-none');
-    dom.wizard.modal.classList.add('show');
-    dom.wizard.modal.style.display = 'block';
-    dom.wizard.modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
-    createWizardFallbackBackdrop();
-    updateWizardUi();
-  } else {
-    dom.wizard.modal.classList.remove('show');
-    dom.wizard.modal.style.display = 'none';
-    dom.wizard.modal.setAttribute('aria-hidden', 'true');
-    dom.wizard.modal.classList.add('d-none');
-    document.body.classList.remove('modal-open');
-    removeWizardFallbackBackdrop();
-    resetWizardFormState();
-  }
-}
+  empty?.classList.add('d-none');
+  body.classList.remove('d-none');
 
-function createWizardFallbackBackdrop() {
-  if (dom.wizard.manualBackdrop) return;
-  const backdrop = document.createElement('div');
-  backdrop.className = 'modal-backdrop fade show';
-  backdrop.dataset.tcWizardBackdrop = 'true';
-  document.body.appendChild(backdrop);
-  dom.wizard.manualBackdrop = backdrop;
-}
-
-function removeWizardFallbackBackdrop() {
-  if (!dom.wizard.manualBackdrop) return;
-  dom.wizard.manualBackdrop.remove();
-  dom.wizard.manualBackdrop = null;
-}
-
-function resetWizardFormState() {
-  state.wizard.open = false;
-  state.wizard.step = 1;
-  state.wizard.mode = 'create';
-  state.wizard.id = null;
-  state.wizard.sourceId = null;
-  state.wizard.data = createEmptyRule();
-  clearWizardAlert();
-  if (dom.wizard.form) dom.wizard.form.reset();
-  if (dom.wizard.step3Result) dom.wizard.step3Result.innerHTML = '';
-  updateCodigoReadonlyState();
-  updateImpuestoLabel(null);
-  updateWizardUi();
-}
-
-
-async function openWizard(mode, id) {
-  clearWizardAlert();
-  state.wizard.mode = mode;
-  state.wizard.id = mode === 'edit' ? id : null;
-  state.wizard.sourceId = mode === 'clone' ? id : null;
-  state.wizard.step = 1;
-  try {
-    if (mode === 'create') {
-      await loadCatalogs({ silent: true });
-      state.wizard.data = createEmptyRule();
-    } else {
-      const rule = await fetchRule(id);
-      if (!rule) throw new Error('No se encontró la regla solicitada');
-      state.wizard.data = mapRuleToWizard(rule, mode === 'clone');
-    }
-    populateWizardForm();
-    toggleWizard(true);
-  } catch (error) {
-    console.error('Error abriendo asistente', error);
-    window.alert(error.message || 'No se pudo abrir el asistente');
-  }
-}
-
-async function fetchRule(id) {
-  const existing = state.rules.find((rule) => rule.id === id);
-  if (existing && existing.parametros !== undefined) {
-    return existing;
-  }
-  try {
-    return await apiGet(`/tarifas/${id}`);
-  } catch (error) {
-    console.error('Error obteniendo regla', error);
-    throw error;
-  }
-}
-
-function mapRuleToWizard(rule, isClone) {
-  return {
-    id: isClone ? null : rule.id,
-    codigo: isClone ? `${rule.codigo}-COPY` : rule.codigo,
-    descripcion: rule.descripcion || '',
-    servicio_id: rule.servicio_id ?? '',
-    plan_id: rule.plan_id ?? '',
-    rol_aplica: rule.rol_aplica || 'cliente',
-    moneda: rule.moneda || state.catalogs.econconfig?.moneda_defecto || '',
-    metodo_pago: rule.metodo_pago || '',
-    ambito_region: rule.ambito_region || '',
-    prioridad: rule.prioridad ?? '',
-    vigencia_desde: toInputDateTime(rule.vigencia_desde),
-    vigencia_hasta: toInputDateTime(rule.vigencia_hasta),
-    tipo_calculo: rule.tipo_calculo || 'fijo',
-    valor: rule.valor ?? '',
-    parametros: rule.parametros || cloneTemplate(rule.tipo_calculo || 'fijo'),
-    incluye_impuesto: !!rule.incluye_impuesto,
-    activo: rule.activo !== false,
-  };
-}
-
-function populateWizardForm() {
-  const data = state.wizard.data;
-  const inputs = dom.wizard.inputs;
-  if (!inputs) return;
-  dom.wizard.title.textContent =
-    state.wizard.mode === 'edit'
-      ? `Editar regla ${data.codigo}`
-      : state.wizard.mode === 'clone'
-        ? 'Clonar regla'
-        : 'Nueva regla';
-  inputs.codigo.value = data.codigo || '';
-  ensureCodigoValue();
-  const planValue = data.plan_id || '';
-  inputs.plan.value = planValue;
-  refreshServicioOptionsForSelect(inputs.servicio, planValue, 'Todos');
-  inputs.servicio.value = data.servicio_id || '';
-
-
-  ensureSelectOption(
-    inputs.rol,
-    data.rol_aplica,
-    data.rol_aplica === 'ambos' ? 'Ambos (heredado)' : prettifyIdentifier(data.rol_aplica || 'cliente')
-  );
-  inputs.rol.value = data.rol_aplica || 'cliente';
-  const defaultMoneda = state.catalogs.econconfig?.moneda_defecto || '';
-  inputs.moneda.value = data.moneda || defaultMoneda;
-  state.wizard.data.moneda = inputs.moneda.value;
-  ensureSelectOption(
-    inputs.metodo,
-    data.metodo_pago,
-    PAYMENT_METHOD_LABELS.get(data.metodo_pago) || prettifyIdentifier(data.metodo_pago)
-  );
-  inputs.metodo.value = data.metodo_pago || '';
-  ensureSelectOption(
-    inputs.region,
-    data.ambito_region,
-    REGION_LABELS.get(data.ambito_region) || prettifyRegionCode(data.ambito_region)
-  );
-  inputs.region.value = data.ambito_region || '';
-  inputs.prioridad.value = data.prioridad !== '' && data.prioridad !== null ? data.prioridad : '';
-  inputs.vigenciaDesde.value = data.vigencia_desde || '';
-  inputs.vigenciaHasta.value = data.vigencia_hasta || '';
-  inputs.descripcion.value = data.descripcion || '';
-  inputs.activo.checked = data.activo !== false;
-  inputs.tipoCalculo.value = data.tipo_calculo || 'fijo';
-  inputs.valor.value = data.valor !== null && data.valor !== undefined ? data.valor : '';
-  inputs.incluyeImpuesto.checked = !!data.incluye_impuesto;
-  inputs.parametros.value = JSON.stringify(data.parametros ?? cloneTemplate(inputs.tipoCalculo.value), null, 2);
-  inputs.step3Plan.value = data.plan_id || '';
-  ensureSelectOption(
-    dom.wizard.inputs.step3Metodo,
-    data.metodo_pago,
-    PAYMENT_METHOD_LABELS.get(data.metodo_pago) || prettifyIdentifier(data.metodo_pago)
-  );
-  inputs.step3Metodo.value = data.metodo_pago || '';
-  inputs.step3Consumo.value = 0;
-  inputs.step3Fecha.value = new Date().toISOString().substring(0, 10);
-  handleTipoCalculoChange();
-  updateCodigoReadonlyState();
-  updateImpuestoLabel(inputs.vigenciaDesde.value || inputs.vigenciaHasta.value || null);
-  goToWizardStep(1, true);
-}
-
-
-function toInputDateTime(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (n) => `${n}`.padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function goToWizardStep(step, force = false) {
-  if (!force) {
-    if (step > state.wizard.step) {
-      if (!validateCurrentStep()) return;
-    }
-  }
-  const nextStep = Math.min(Math.max(step, 1), 3);
-  state.wizard.step = nextStep;
-  updateWizardUi();
-}
-
-function updateWizardUi() {
-  const { step } = state.wizard;
-  dom.wizard.steps.forEach((pane) => {
-    const paneStep = Number(pane.getAttribute('data-tc-step'));
-    pane.hidden = paneStep !== step;
+  paginated.forEach((tarifa) => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = tarifa.id;
+    tr.innerHTML = tarifaRowTemplate(tarifa);
+    body.appendChild(tr);
+    attachRelativeTooltip(tr.querySelector('[data-updated]'), tarifa.actualizado_el);
   });
-  dom.wizard.indicators.forEach((indicator) => {
-    const indicatorStep = Number(indicator.getAttribute('data-tc-step-indicator'));
-    const isCurrent = indicatorStep === step;
-    indicator.classList.toggle('active', isCurrent);
-    indicator.classList.toggle('btn-primary', isCurrent);
-    indicator.classList.toggle('btn-outline-primary', !isCurrent);
-    indicator.disabled = indicatorStep > step;
-  });
-  dom.wizard.prev.hidden = step === 1;
-  dom.wizard.next.hidden = step === 3;
-  dom.wizard.save.hidden = step !== 3;
-  if (dom.wizard.saveInactive) {
-    dom.wizard.saveInactive.hidden = step !== 3;
-  }
+
+  renderTarifaPagination();
+  renderTarifaMassActions();
 }
 
-function validateCurrentStep() {
-  switch (state.wizard.step) {
-    case 1:
-      return captureStep1();
-    case 2:
-      return captureStep2();
-    default:
-      return true;
-  }
+function tarifaRowTemplate(tarifa) {
+  const badge = tarifa.incluye_impuesto
+    ? '<span class="badge bg-success ms-2">Incluye IGV</span>'
+    : '';
+  const chip = statusChip(tarifa);
+  return `
+    <td class="text-muted">${checkboxCell(tarifa.id)}</td>
+    <td><div class="fw-semibold">${tarifa.codigo}</div><div class="small text-muted">${chip}</div></td>
+    <td>
+      <div class="fw-semibold">${ambitoLabel(tarifa)}</div>
+      <div class="small text-muted">${tarifa.ambito === 'plan' ? 'Plan' : 'Servicio'}</div>
+    </td>
+    <td>
+      <span>${formatCurrency(tarifa.valor, tarifa.moneda)}</span>
+      ${badge}
+    </td>
+    <td>${TARIFA_TIPO_CALCULO_LABEL[tarifa.tipo_calculo] || tarifa.tipo_calculo}</td>
+    <td>${vigenciaLabel(tarifa.vigencia_desde, tarifa.vigencia_hasta)}</td>
+    <td>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" data-toggle="tarifa" ${
+          tarifa.activo ? 'checked' : ''
+        }>
+      </div>
+    </td>
+    <td>
+      <span data-updated class="text-muted small" title="${formatExactDate(
+        tarifa.actualizado_el
+      )}">${formatRelative(tarifa.actualizado_el)}</span>
+    </td>
+    <td class="text-end">
+      <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn btn-outline-primary" data-action="edit">Editar</button>
+        <button type="button" class="btn btn-outline-secondary" data-action="audit">Ver cambios</button>
+      </div>
+    </td>
+  `;
 }
 
-function captureStep1() {
-  const inputs = dom.wizard.inputs;
-  ensureCodigoValue();
-  const codigo = inputs.codigo.value.trim();
-  if (!codigo) {
-    inputs.codigo.setCustomValidity('El código es obligatorio');
-    inputs.codigo.reportValidity();
-    return false;
-  }
-  inputs.codigo.setCustomValidity('');
-  if (inputs.descripcion.value.length > 160) {
-    inputs.descripcion.setCustomValidity('La descripción no puede exceder 160 caracteres');
-    inputs.descripcion.reportValidity();
-    return false;
-  }
-  inputs.descripcion.setCustomValidity('');
-  if (inputs.servicio) {
-    inputs.servicio.setCustomValidity('');
-  }
-  const desde = inputs.vigenciaDesde.value ? new Date(inputs.vigenciaDesde.value) : null;
-  const hasta = inputs.vigenciaHasta.value ? new Date(inputs.vigenciaHasta.value) : null;
-  if (desde && hasta && desde > hasta) {
-    inputs.vigenciaHasta.setCustomValidity('La vigencia hasta debe ser posterior a la vigencia desde');
-    inputs.vigenciaHasta.reportValidity();
-    return false;
-  }
-  inputs.vigenciaHasta.setCustomValidity('');
-  const requierePrioridad = needsPriority(
-    inputs.servicio.value,
-    inputs.plan.value,
-    inputs.rol.value,
-    inputs.moneda.value,
-    inputs.metodo.value,
-    inputs.region.value
-  );
-  if (requierePrioridad && !inputs.prioridad.value) {
-    inputs.prioridad.setCustomValidity('Debe asignar una prioridad para reglas con la misma combinación');
-    inputs.prioridad.reportValidity();
-    return false;
-  }
-  inputs.prioridad.setCustomValidity('');
-  const rawServicio = inputs.servicio.value || '';
-  const rawPlan = inputs.plan.value || '';
-  const servicioId = rawServicio ? Number(rawServicio) : null;
-  const planId = rawPlan ? Number(rawPlan) : null;
-  if (rawServicio && (Number.isNaN(servicioId) || !Number.isFinite(servicioId))) {
-    inputs.servicio.setCustomValidity('El servicio seleccionado no es válido.');
-    inputs.servicio.reportValidity();
-    return false;
-  }
-  if (rawPlan && (Number.isNaN(planId) || !Number.isFinite(planId))) {
-    inputs.plan.setCustomValidity('El plan seleccionado no es válido.');
-    inputs.plan.reportValidity();
-    return false;
-  }
-  const hasServicio = Number.isFinite(servicioId);
-  const hasPlan = Number.isFinite(planId);
-  if (!hasServicio && !hasPlan) {
-    const message = 'Debes seleccionar un plan, un servicio o ambos.';
-    if (inputs.plan) {
-      inputs.plan.setCustomValidity(message);
-      inputs.plan.reportValidity();
+function applyTarifaFilters(items) {
+  const { filters } = state.tarifas;
+  const today = new Date().toISOString().slice(0, 10);
+  return items.filter((item) => {
+    if (filters.ambito && item.ambito !== filters.ambito) return false;
+    if (filters.nombre && !matchesAutocomplete(item, filters.nombre)) return false;
+    if (filters.estado === 'activas' && !item.activo) return false;
+    if (filters.estado === 'inactivas' && item.activo) return false;
+    if (filters.search) {
+      const search = filters.search.toLowerCase();
+      if (!`${item.codigo} ${item.nombre_ambito}`.toLowerCase().includes(search)) return false;
     }
-    if (inputs.servicio) {
-      inputs.servicio.setCustomValidity(message);
+    if (filters.vigencia === 'hoy' && !isVigenteHoy(item, today)) return false;
+    if (filters.vigencia === 'rango') {
+      if (!overlapsRange(item, filters.vigenciaDesde, filters.vigenciaHasta)) return false;
     }
-    return false;
-  }
-  if (inputs.servicio) inputs.servicio.setCustomValidity('');
-  if (inputs.plan) inputs.plan.setCustomValidity('');
-
-  state.wizard.data = {
-    ...state.wizard.data,
-    codigo,
-    descripcion: inputs.descripcion.value.trim(),
-     servicio_id: hasServicio ? rawServicio : '',
-    plan_id: hasPlan ? rawPlan : '',
-    rol_aplica: inputs.rol.value,
-    moneda: inputs.moneda.value || state.catalogs.econconfig?.moneda_defecto || '',
-    metodo_pago: inputs.metodo.value || '',
-    ambito_region: inputs.region.value || '',
-    prioridad: inputs.prioridad.value === '' ? '' : Number(inputs.prioridad.value),
-    vigencia_desde: inputs.vigenciaDesde.value || '',
-    vigencia_hasta: inputs.vigenciaHasta.value || '',
-    incluye_impuesto: inputs.incluyeImpuesto?.checked || false,
-    activo: inputs.activo.checked,
-  };
-
-  const payload = buildRulePayload(state.wizard.data);
-   if (!evaluateScopeConflicts(payload)) {
-    return false;
-  }
-  return true;
-}
-
-
-function captureStep2() {
-  const inputs = dom.wizard.inputs;
-  const tipo = inputs.tipoCalculo.value;
-  let parametros;
-  try {
-    parametros = inputs.parametros.value ? JSON.parse(inputs.parametros.value) : {};
-  } catch (error) {
-    window.alert('El JSON de parámetros no es válido');
-    if (dom.wizard.inputs?.parametros) {
-      dom.wizard.inputs.parametros.classList.add('is-invalid');
-    }
-    return false;
-  }
-  if (dom.wizard.inputs?.parametros) {
-    dom.wizard.inputs.parametros.classList.remove('is-invalid');
-  }
-  if (inputs.descripcion.value.length > 160) {
-    inputs.descripcion.setCustomValidity('La descripción no puede exceder 160 caracteres');
-    inputs.descripcion.reportValidity();
-    return false;
-  }
-  inputs.descripcion.setCustomValidity('');
-  if (tipo === 'estacional' && (!inputs.valor.value || Number(inputs.valor.value) < 0)) {
-    inputs.valor.setCustomValidity('Debe establecer un valor base para reglas estacionales');
-    inputs.valor.reportValidity();
-    return false;
-  }
-  inputs.valor.setCustomValidity('');
-  const schemaValidation = validateParametrosSchema(tipo, parametros);
-  if (!schemaValidation.valid) {
-    window.alert(schemaValidation.message || 'Verifica los parámetros ingresados.');
-    return false;
-  }
-  if (tipo === 'estacional') {
-    const seasonalValidation = validateEstacionalRanges(parametros.multiplicadores);
-    if (!seasonalValidation.valid) {
-      window.alert(seasonalValidation.messages.join('\n'));
-      return false;
-    }
-  }
-  setParametrosState(parametros);
-  state.wizard.data = {
-    ...state.wizard.data,
-    tipo_calculo: tipo,
-    valor: inputs.valor.value === '' ? '' : Number(inputs.valor.value),
-    parametros,
-    incluye_impuesto: inputs.incluyeImpuesto.checked,
-  };
-  return true;
-}
-
-function needsPriority(servicioId, planId, rol, moneda, metodo, region) {
-  const comparable = state.rules.filter((rule) => {
-    if (!rule.activo) return false;
-    if (servicioId && rule.servicio_id !== Number(servicioId)) return false;
-    if (!servicioId && rule.servicio_id) return false;
-    if (planId && rule.plan_id !== Number(planId)) return false;
-    if (!planId && rule.plan_id) return false;
-    if (rol && rule.rol_aplica !== rol && rule.rol_aplica !== 'ambos') return false;
-    if (moneda && rule.moneda && rule.moneda !== moneda) return false;
-    if (metodo && rule.metodo_pago && rule.metodo_pago !== metodo) return false;
-    if (region && rule.ambito_region && rule.ambito_region !== region) return false;
     return true;
   });
-  return comparable.length > 0;
 }
 
-function handleTipoCalculoChange() {
-  const tipo = dom.wizard.inputs.tipoCalculo.value;
-  const previousTipo = state.wizard.data.tipo_calculo;
-  let parametros = cloneParametros(state.wizard.data.parametros);
-  if (!parametros || !Object.keys(parametros).length || previousTipo !== tipo) {
-    parametros = cloneTemplate(tipo);
+function resetTarifaFilters() {
+  state.tarifas.filters = {
+    ambito: 'servicio',
+    nombreAmbito: '',
+    estado: 'activas',
+    vigencia: 'hoy',
+    vigenciaDesde: '',
+    vigenciaHasta: '',
+    search: '',
+  };
+  const { filters } = state.dom.tarifas;
+  Object.entries(filters || {}).forEach(([key, input]) => {
+    if (!input || key === 'reset') return;
+    input.value = state.tarifas.filters[key] || '';
+  });
+}
+
+function updateTarifaFilter(key, value) {
+  state.tarifas.filters[key] = value;
+  if (key !== 'search') {
+    state.tarifas.paginator.page = 1;
   }
-  state.wizard.data = { ...state.wizard.data, tipo_calculo: tipo };
-  setParametrosState(parametros);
-  const showValor = tipo === 'estacional';
-  const valorGroup = dom.wizard.inputs.valor.closest('.form-group');
-  if (valorGroup) {
-    valorGroup.classList.toggle('d-none', !showValor);
+  renderTarifas();
+}
+
+function renderTarifaPagination() {
+  const container = state.dom.tarifas.paginator;
+  if (!container) return;
+  container.innerHTML = paginationTemplate(state.tarifas.paginator);
+  container.querySelectorAll('[data-page]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      const page = Number(btn.getAttribute('data-page'));
+      if (!Number.isNaN(page)) {
+        state.tarifas.paginator.page = page;
+        renderTarifas();
+      }
+    });
+  });
+}
+
+function renderTarifaMassActions() {
+  const select = state.dom.tarifas.actions;
+  if (!select) return;
+  select.disabled = state.tarifas.selection.size === 0;
+  select.value = '';
+}
+
+function handleTarifasTableClick(event) {
+  const tr = event.target.closest('tr');
+  if (!tr) return;
+  const id = Number(tr.dataset.id);
+  if (event.target.matches('button[data-action="edit"]')) {
+    openTarifaForm('edit', id);
+  } else if (event.target.matches('button[data-action="audit"]')) {
+    openAuditoria('tarifas', id);
+  } else if (event.target.matches('input[type="checkbox"][data-select]')) {
+    toggleTarifaSelection(id, event.target.checked);
   }
 }
 
-function handleWizardServicioChange() {
-  dom.wizard.inputs.step3Plan.value = dom.wizard.inputs.plan.value || '';
-}
-
-function handleWizardPlanChange() {
-  const planValue = dom.wizard.inputs.plan.value || '';
-  refreshServicioOptionsForSelect(dom.wizard.inputs.servicio, planValue, 'Todos');
-  dom.wizard.inputs.step3Plan.value = planValue;
-}
-
-function handleWizardMetodoChange() {
-  dom.wizard.inputs.step3Metodo.value = dom.wizard.inputs.metodo.value || '';
-}
-
-function handleCodigoRegenerar() {
-  const generated = generateCodigo();
-  if (dom.wizard.inputs.codigo) {
-    dom.wizard.inputs.codigo.value = generated;
-  }
-  state.wizard.data = { ...state.wizard.data, codigo: generated };
-}
-
-function handleSimulatorPlanChange() {
-  const planValue = dom.simulator.inputs.plan.value || '';
-  refreshServicioOptionsForSelect(dom.simulator.inputs.servicio, planValue, 'Todos');
-}
-
-function handleConflictAlertClick(event) {
-  const button = event.target.closest('[data-tc-action="view-rules"]');
-  if (!button) return;
-  toggleWizard(false);
-  if (dom.table?.body) {
-    dom.table.body.scrollIntoView({ behavior: 'smooth', block: 'start' });
+function handleTarifasTableChange(event) {
+  const tr = event.target.closest('tr');
+  if (!tr) return;
+  const id = Number(tr.dataset.id);
+  if (event.target.matches('input[data-toggle="tarifa"]')) {
+    event.preventDefault();
+    attemptToggleTarifa(id, event.target.checked);
   }
 }
 
-function updateCodigoReadonlyState() {
-  if (!dom.wizard.inputs.codigo) return;
-  const isActive = dom.wizard.inputs.activo?.checked;
-  dom.wizard.inputs.codigo.readOnly = !!isActive;
-  if (dom.wizard.inputs.codigoRegenerar) {
-    dom.wizard.inputs.codigoRegenerar.disabled = isActive && state.wizard.mode === 'edit';
+function toggleTarifaSelection(id, checked) {
+  if (checked) {
+    state.tarifas.selection.add(id);
+  } else {
+    state.tarifas.selection.delete(id);
+  }
+  renderTarifaMassActions();
+}
+
+function handleTarifaMassAction(event) {
+  const action = event.target.value;
+  if (!action) return;
+  const ids = Array.from(state.tarifas.selection);
+  switch (action) {
+    case 'activar':
+    case 'desactivar':
+      bulkToggleTarifas(ids, action === 'activar');
+      break;
+    case 'cerrar':
+      bulkCloseTarifas(ids);
+      break;
+    case 'exportar':
+      exportTarifas(true);
+      break;
+    default:
+      break;
+  }
+  event.target.value = '';
+}
+
+function openTarifaForm(mode, id) {
+  const form = state.dom.tarifas.form;
+  const modalElement = state.dom.tarifas.formModal;
+  if (!form || !modalElement) return;
+  const modal = getBootstrapModal(modalElement);
+
+  state.tarifas.form.mode = mode;
+  state.tarifas.form.data =
+    mode === 'edit' ? state.tarifas.items.find((item) => item.id === id) : null;
+
+  populateTarifaForm();
+  modal.show();
+}
+
+function populateTarifaForm() {
+  const { form, formModal } = state.dom.tarifas;
+  if (!form) return;
+  const data = state.tarifas.form.data || getDefaultTarifa();
+  form.querySelector('[name="codigo"]').value = data.codigo || '';
+  form.querySelector('[name="ambito"]').value = data.ambito || 'servicio';
+  form.querySelector('[name="referencia_id"]').value = data.referencia_id || '';
+  form.querySelector('[name="valor"]').value = (data.valor ?? '').toString();
+  form.querySelector('[name="moneda"]').value = data.moneda || state.monedaFallback;
+  form.querySelector('[name="incluye_impuesto"]').checked = !!data.incluye_impuesto;
+  form.querySelector('[name="tipo_calculo"]').value = data.tipo_calculo || 'fijo';
+  form.querySelector('[name="parametros"]').value = JSON.stringify(
+    data.parametros || {},
+    null,
+    2
+  );
+  form.querySelector('[name="vigencia_desde"]').value = data.vigencia_desde || '';
+  form.querySelector('[name="vigencia_hasta"]').value = data.vigencia_hasta || '';
+  form.querySelector('[name="activo"]').checked = data.activo !== false;
+  form.querySelector('[name="actualizado_el"]').value = data.actualizado_el || '';
+
+  updateTarifaFormUi();
+
+  const title = formModal?.querySelector('[data-modal-title]');
+  if (title) {
+    title.textContent =
+      state.tarifas.form.mode === 'edit' ? 'Editar tarifa' : 'Nueva tarifa';
   }
 }
 
-function cloneTemplate(tipo, catalogs) {
-  const sourceCatalogs = catalogs !== undefined ? catalogs : state.catalogs;
-  return cloneTemplateFromCatalogs(tipo, sourceCatalogs);
+function updateTarifaFormUi() {
+  const form = state.dom.tarifas.form;
+  if (!form) return;
+  const tipo = form.querySelector('[name="tipo_calculo"]').value;
+  const jsonGroup = form.querySelector('[data-json-group]');
+  if (jsonGroup) {
+    jsonGroup.classList.toggle('d-none', tipo !== 'consumo_ia');
+  }
 }
-async function saveWizard(forceInactive = false) {
-  if (forceInactive && dom.wizard.inputs?.activo) {
-    dom.wizard.inputs.activo.checked = false;
-    updateCodigoReadonlyState();
-  }
-  if (!captureStep1() || !captureStep2()) return;
-  if (forceInactive) {
-    state.wizard.data = { ...state.wizard.data, activo: false };
-  }
-  clearWizardAlert();
+
+function validateJsonField(field) {
+  if (!field) return true;
   try {
-    const payload = buildRulePayload(state.wizard.data);
-    if (forceInactive) {
-      payload.activo = false;
-    }
-    if (!validateRuleBusiness(payload)) {
-      return;
-    }
+    const value = field.value.trim();
+    if (!value) return true;
+    const parsed = JSON.parse(value);
+    const valid = typeof parsed === 'object' && parsed !== null;
+    field.classList.toggle('is-invalid', !valid);
+    return valid;
+  } catch (error) {
+    field.classList.add('is-invalid');
+    return false;
+  }
+}
+
+async function submitTarifaForm(event) {
+  event.preventDefault();
+  const form = event.target;
+  const jsonField = form.querySelector('[name="parametros"]');
+  if (!validateJsonField(jsonField)) return;
+
+  const payload = {
+    codigo: form.codigo.value.trim(),
+    ambito: form.ambito.value,
+    referencia_id: form.referencia_id.value || null,
+    valor: Number(form.valor.value),
+    moneda: form.moneda.value || state.monedaFallback,
+    incluye_impuesto: form.incluye_impuesto.checked,
+    tipo_calculo: form.tipo_calculo.value,
+    parametros: jsonField.value ? JSON.parse(jsonField.value) : {},
+    vigencia_desde: form.vigencia_desde.value || null,
+    vigencia_hasta: form.vigencia_hasta.value || null,
+    activo: form.activo.checked,
+    actualizado_el: form.actualizado_el.value || null,
+  };
+
+  if (!Number.isFinite(payload.valor) || payload.valor < 0) {
+    form.valor.classList.add('is-invalid');
+    return;
+  }
+  form.valor.classList.remove('is-invalid');
+
+  const conflict = findTarifaConflict(payload, state.tarifas.form.data?.id);
+  if (conflict) {
+    showTarifaConflictModal(conflict, payload);
+    return;
+  }
+
+  await persistTarifa(payload, state.tarifas.form);
+}
+
+
+async function persistTarifa(payload, formState) {
+  try {
+    const id = formState.data?.id;
     let response;
-    if (state.wizard.mode === 'edit' && state.wizard.id) {
-      response = await apiPut(`/tarifas/${state.wizard.id}`, payload);
-    } else if (state.wizard.mode === 'clone' && state.wizard.sourceId) {
-      response = await apiPost(`/tarifas/${state.wizard.sourceId}/clone`, payload);
+    if (id) {
+      response = await apiPut(`/tarifas/${id}`, payload, {
+        'If-Unmodified-Since': payload.actualizado_el || '',
+      });
     } else {
       response = await apiPost('/tarifas', payload);
     }
-    if (response?.success) {
-      window.alert('Regla guardada correctamente');
-      toggleWizard(false);
-      await loadRules();
-    }
+    const saved = await response.json();
+    upsertTarifa(saved);
+    state.dom.tarifas.form.reset();
+    getBootstrapModal(state.dom.tarifas.formModal).hide();
+    renderTarifas();
   } catch (error) {
-    if (error.status === 409 && error.response?.conflicts) {
-      showConflict(error.response.conflicts, error.response.message);
+    console.error('Error guardando tarifa', error);
+    window.alert(error.message || 'No se pudo guardar la tarifa.');
+  }
+}
+
+function upsertTarifa(tarifa) {
+  const index = state.tarifas.items.findIndex((item) => item.id === tarifa.id);
+  if (index >= 0) {
+    state.tarifas.items.splice(index, 1, tarifa);
+  } else {
+    state.tarifas.items.push(tarifa);
+  }
+}
+
+function findTarifaConflict(tarifa, ignoreId) {
+  return state.tarifas.items.find((item) => {
+    if (item.id === ignoreId) return false;
+    if (item.ambito !== tarifa.ambito) return false;
+    if (item.referencia_id !== tarifa.referencia_id) return false;
+    if (!item.activo || !tarifa.activo) return false;
+    return rangesOverlap(
+      item.vigencia_desde,
+      item.vigencia_hasta,
+      tarifa.vigencia_desde,
+      tarifa.vigencia_hasta
+    );
+  });
+}
+
+function showTarifaConflictModal(conflict, payload) {
+  const modal = getBootstrapModal(state.dom.tarifas.conflictModal);
+  if (!modal) return;
+  modal.relatedPayload = payload;
+  modal.relatedConflict = conflict;
+  modal.show();
+}
+
+async function resolveTarifaConflict(action) {
+  const modalElement = state.dom.tarifas.conflictModal;
+  const modal = getBootstrapModal(modalElement);
+  const payload = modal?.relatedPayload;
+  const conflict = modal?.relatedConflict;
+  if (!modal || !payload || !conflict) return;
+
+  modal.hide();
+
+  if (action === 'cancelar') return;
+
+  try {
+    if (action === 'desactivar') {
+      await apiPatch(`/tarifas/${conflict.id}`, { activo: false });
+      conflict.activo = false;
+    } else if (action === 'cerrar') {
+      const fecha = new Date(payload.vigencia_desde);
+      fecha.setDate(fecha.getDate() - 1);
+      const cierre = fecha.toISOString().slice(0, 10);
+      await apiPatch(`/tarifas/${conflict.id}`, { vigencia_hasta: cierre });
+      conflict.vigencia_hasta = cierre;
+    }
+    await persistTarifa(payload, state.tarifas.form);
+  } catch (error) {
+    console.error('Error resolviendo conflicto', error);
+    window.alert('No se pudo resolver el conflicto.');
+  }
+}
+
+async function attemptToggleTarifa(id, nextState) {
+  const tarifa = state.tarifas.items.find((item) => item.id === id);
+  if (!tarifa) return;
+  if (nextState) {
+    const conflict = findTarifaConflict({ ...tarifa, activo: true }, id);
+    if (conflict) {
+      showTarifaConflictModal(conflict, { ...tarifa, activo: true });
+      renderTarifas();
       return;
     }
-    console.error('Error guardando regla', error);
-    window.alert(error.message || 'No se pudo guardar la regla');
+  }
+  try {
+    await apiPatch(`/tarifas/${id}`, { activo: nextState });
+    tarifa.activo = nextState;
+    renderTarifas();
+  } catch (error) {
+    console.error('Error cambiando estado', error);
+    window.alert('No se pudo actualizar la tarifa.');
   }
 }
 
-function buildRulePayload(data) {
-  const vigenciaDesde = toLimaIso(data.vigencia_desde);
-  const vigenciaHasta = toLimaIso(data.vigencia_hasta);
-  return {
-    codigo: data.codigo,
-    descripcion: data.descripcion || null,
-    servicio_id: toNullableNumber(data.servicio_id),
-    plan_id: toNullableNumber(data.plan_id),
-    rol_aplica: data.rol_aplica,
-    moneda: data.moneda || null,
-    metodo_pago: data.metodo_pago || null,
-    ambito_region: data.ambito_region || null,
-    prioridad: toNullableNumber(data.prioridad),
-    vigencia_desde: vigenciaDesde,
-    vigencia_hasta: vigenciaHasta,
-    tipo_calculo: data.tipo_calculo,
-    valor: toNullableNumber(data.valor),
-    parametros: data.parametros || {},
-    incluye_impuesto: !!data.incluye_impuesto,
-    activo: data.activo !== false,
-  };
+async function bulkToggleTarifas(ids, nextState) {
+  await Promise.all(ids.map((id) => apiPatch(`/tarifas/${id}`, { activo: nextState })));
+  state.tarifas.items.forEach((item) => {
+    if (ids.includes(item.id)) item.activo = nextState;
+  });
+  state.tarifas.selection.clear();
+  renderTarifas();
 }
 
-function validateRuleBusiness(payload) {
-  if (!payload) return true;
-  if (!validateValueConstraints(payload)) {
-    return false;
-  }
-  return evaluateScopeConflicts(payload);
+async function bulkCloseTarifas(ids) {
+  const cierre = prompt('Cerrar vigencia al (YYYY-MM-DD):');
+  if (!cierre) return;
+  await Promise.all(ids.map((id) => apiPatch(`/tarifas/${id}`, { vigencia_hasta: cierre })));
+  state.tarifas.items.forEach((item) => {
+    if (ids.includes(item.id)) item.vigencia_hasta = cierre;
+  });
+  state.tarifas.selection.clear();
+  renderTarifas();
 }
 
-function validateValueConstraints(payload) {
-  const generalErrors = [];
-  const parametroErrors = [];
-  if (payload.servicio_id === null && payload.plan_id === null) {
-    generalErrors.push('Debes seleccionar al menos un plan o un servicio.');
+function exportTarifas(selectionOnly) {
+  const ids = selectionOnly ? Array.from(state.tarifas.selection) : [];
+  const params = new URLSearchParams({ ...state.tarifas.filters });
+  if (selectionOnly && ids.length) {
+    params.set('ids', ids.join(','));
   }
-  if (payload.valor !== null && payload.valor < 0) {
-    generalErrors.push('El valor base no puede ser negativo.');
-  }
-  const params = payload.parametros || {};
-  const toNumber = (value) => {
-    if (value === undefined || value === null || value === '') return 0;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : Number.NaN;
-  };
-  const ensureNonNegative = (value, message) => {
-    const numeric = toNumber(value);
-    if (Number.isNaN(numeric) || numeric < 0) {
-      parametroErrors.push(message);
-    }
-  };
-  switch (payload.tipo_calculo) {
-    case 'fijo':
-      ensureNonNegative(params.monto, 'El monto fijo no puede ser negativo.');
-      break;
-    case 'minimo_mas_variable':
-      ensureNonNegative(params.minimo, 'El mínimo no puede ser negativo.');
-      ensureNonNegative(params.porcentaje_variable, 'El porcentaje variable no puede ser negativo.');
-      break;
-    case 'paquete': {
-      ensureNonNegative(params.precio_bloque, 'El precio por bloque no puede ser negativo.');
-      const blockSize = toNumber(params.tamano_bloque);
-      if (Number.isNaN(blockSize) || blockSize <= 0) {
-        parametroErrors.push('El tamaño de bloque debe ser mayor a 0.');
-      }
-      break;
-    }
-    case 'consumo_ia':
-      ensureNonNegative(params.rate, 'La tarifa por consumo debe ser mayor o igual a 0.');
-      ensureNonNegative(params.minimo, 'El mínimo de consumo debe ser mayor o igual a 0.');
-      break;
-    case 'estacional': {
-      const multiplicadores = Array.isArray(params.multiplicadores) ? params.multiplicadores : [];
-      multiplicadores.forEach((item, index) => {
-        const factor = toNumber(item?.factor);
-        if (Number.isNaN(factor) || factor < 0) {
-          parametroErrors.push(`El factor en la fila ${index + 1} debe ser mayor o igual a 0.`);
-        }
+  const url = `${API_BASE_URL}/tarifas/export?${params.toString()}`;
+  window.open(url, '_blank');
+}
+
+
+/**
+ * ------------------------------
+ * Comisiones helpers y renderizado
+ * ------------------------------
+ */
+
+function bindComisionesEvents() {
+  const { comisiones } = state.dom;
+  if (!comisiones) return;
+
+  Object.entries(comisiones.filters).forEach(([key, input]) => {
+    if (!input) return;
+    if (key === 'reset') {
+      input.addEventListener('click', () => {
+        resetComisionFilters();
+        renderComisiones();
       });
-      break;
+    } else {
+      const handler = key === 'nombre' || key === 'search' ? 'input' : 'change';
+      input.addEventListener(handler, () => updateComisionFilter(key, input.value));
     }
+  });
+
+  comisiones.rowsPerPage?.addEventListener('change', () => {
+    state.comisiones.paginator.perPage = Number(comisiones.rowsPerPage.value) || 10;
+    state.comisiones.paginator.page = 1;
+    renderComisiones();
+  });
+
+  comisiones.newButton?.addEventListener('click', () => openComisionForm('create'));
+  comisiones.exportBtn?.addEventListener('click', () => exportComisiones(false));
+  comisiones.exportSelectionBtn?.addEventListener('click', () => exportComisiones(true));
+  comisiones.actions?.addEventListener('change', handleComisionMassAction);
+
+  if (comisiones.tableBody) {
+    comisiones.tableBody.addEventListener('click', handleComisionesTableClick);
+    comisiones.tableBody.addEventListener('change', handleComisionesTableChange);
+  }
+
+  if (comisiones.form) {
+    comisiones.form.addEventListener('submit', submitComisionForm);
+  }
+
+  state.dom.comisiones.conflictResolveButtons.forEach((btn) =>
+    btn.addEventListener('click', () => resolveComisionConflict(btn.dataset.conflictAction))
+  );
+}
+
+function renderComisiones() {
+  const filtered = applyComisionFilters(state.comisiones.items);
+  const sorted = sortByDefaultOrder(filtered);
+  const paginated = paginate(sorted, state.comisiones.paginator);
+  state.comisiones.paginator.total = filtered.length;
+
+  const body = state.dom.comisiones.tableBody;
+  const empty = state.dom.comisiones.empty;
+  if (!body) return;
+  body.innerHTML = '';
+
+  if (!paginated.length) {
+    empty?.classList.remove('d-none');
+    body.classList.add('d-none');
+    return;
+  }
+
+  empty?.classList.add('d-none');
+  body.classList.remove('d-none');
+
+  paginated.forEach((comision) => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = comision.id;
+    tr.innerHTML = comisionRowTemplate(comision);
+    body.appendChild(tr);
+    attachRelativeTooltip(tr.querySelector('[data-updated]'), comision.actualizado_el);
+  });
+
+  renderComisionPagination();
+  renderComisionMassActions();
+}
+
+function comisionRowTemplate(comision) {
+  const chip = statusChip(comision);
+  const rolBadge = `<span class="badge bg-primary">${
+    comision.rol_aplica === 'abogado' ? 'Abogado' : 'Cliente'
+  }</span>`;
+  return `
+    <td class="text-muted">${checkboxCell(comision.id)}</td>
+    <td><div class="fw-semibold">${comision.codigo}</div><div class="small text-muted">${chip}</div></td>
+    <td>
+      <div class="fw-semibold">${ambitoLabel(comision)}</div>
+      <div class="small text-muted">${comision.ambito === 'plan' ? 'Plan' : 'Servicio'}</div>
+    </td>
+    <td>${rolBadge}</td>
+    <td>${formatPercentage(comision.porcentaje)}</td>
+    <td>${vigenciaLabel(comision.vigencia_desde, comision.vigencia_hasta)}</td>
+    <td>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" data-toggle="comision" ${
+          comision.activo ? 'checked' : ''
+        }>
+      </div>
+    </td>
+    <td>
+      <span data-updated class="text-muted small" title="${formatExactDate(
+        comision.actualizado_el
+      )}">${formatRelative(comision.actualizado_el)}</span>
+    </td>
+    <td class="text-end">
+      <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn btn-outline-primary" data-action="edit">Editar</button>
+        <button type="button" class="btn btn-outline-secondary" data-action="audit">Ver cambios</button>
+      </div>
+    </td>
+  `;
+}
+
+function applyComisionFilters(items) {
+  const { filters } = state.comisiones;
+  const today = new Date().toISOString().slice(0, 10);
+  return items.filter((item) => {
+    if (filters.ambito && item.ambito !== filters.ambito) return false;
+    if (filters.rol && item.rol_aplica !== filters.rol) return false;
+    if (filters.nombre && !matchesAutocomplete(item, filters.nombre)) return false;
+    if (filters.estado === 'activas' && !item.activo) return false;
+    if (filters.estado === 'inactivas' && item.activo) return false;
+    if (filters.search) {
+      const search = filters.search.toLowerCase();
+      if (!`${item.codigo} ${item.nombre_ambito}`.toLowerCase().includes(search)) return false;
+    }
+    if (filters.vigencia === 'hoy' && !isVigenteHoy(item, today)) return false;
+    if (filters.vigencia === 'rango') {
+      if (!overlapsRange(item, filters.vigenciaDesde, filters.vigenciaHasta)) return false;
+    }
+    return true;
+  });
+}
+
+function resetComisionFilters() {
+  state.comisiones.filters = {
+    ambito: 'servicio',
+    nombreAmbito: '',
+    rol: '',
+    estado: 'activas',
+    vigencia: 'hoy',
+    vigenciaDesde: '',
+    vigenciaHasta: '',
+    search: '',
+  };
+  const { filters } = state.dom.comisiones;
+  Object.entries(filters || {}).forEach(([key, input]) => {
+    if (!input || key === 'reset') return;
+    input.value = state.comisiones.filters[key] || '';
+  });
+}
+
+function updateComisionFilter(key, value) {
+  state.comisiones.filters[key] = value;
+  if (key !== 'search') {
+    state.comisiones.paginator.page = 1;
+  }
+  renderComisiones();
+}
+
+function renderComisionPagination() {
+  const container = state.dom.comisiones.paginator;
+  if (!container) return;
+  container.innerHTML = paginationTemplate(state.comisiones.paginator);
+  container.querySelectorAll('[data-page]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      const page = Number(btn.getAttribute('data-page'));
+      if (!Number.isNaN(page)) {
+        state.comisiones.paginator.page = page;
+        renderComisiones();
+      }
+    });
+  });
+}
+
+function renderComisionMassActions() {
+  const select = state.dom.comisiones.actions;
+  if (!select) return;
+  select.disabled = state.comisiones.selection.size === 0;
+  select.value = '';
+}
+
+function handleComisionesTableClick(event) {
+  const tr = event.target.closest('tr');
+  if (!tr) return;
+  const id = Number(tr.dataset.id);
+  if (event.target.matches('button[data-action="edit"]')) {
+    openComisionForm('edit', id);
+  } else if (event.target.matches('button[data-action="audit"]')) {
+    openAuditoria('comisiones', id);
+  } else if (event.target.matches('input[type="checkbox"][data-select]')) {
+    toggleComisionSelection(id, event.target.checked);
+  }
+}
+
+function handleComisionesTableChange(event) {
+  const tr = event.target.closest('tr');
+  if (!tr) return;
+  const id = Number(tr.dataset.id);
+  if (event.target.matches('input[data-toggle="comision"]')) {
+    event.preventDefault();
+    attemptToggleComision(id, event.target.checked);
+  }
+}
+
+function toggleComisionSelection(id, checked) {
+  if (checked) {
+    state.comisiones.selection.add(id);
+  } else {
+    state.comisiones.selection.delete(id);
+  }
+  renderComisionMassActions();
+}
+
+function handleComisionMassAction(event) {
+  const action = event.target.value;
+  if (!action) return;
+  const ids = Array.from(state.comisiones.selection);
+  switch (action) {
+    case 'activar':
+    case 'desactivar':
+      bulkToggleComisiones(ids, action === 'activar');
+      break;
+    case 'cerrar':
+      bulkCloseComisiones(ids);
+      break;
+    case 'exportar':
+      exportComisiones(true);
+      break;
     default:
       break;
   }
-  const messages = [...generalErrors, ...parametroErrors];
-  if (dom.wizard.inputs?.parametros) {
-    dom.wizard.inputs.parametros.classList.toggle('is-invalid', parametroErrors.length > 0);
-  }
-  if (messages.length) {
-    window.alert(messages.join('\n'));
-    return false;
-  }
-  return true;
+  event.target.value = '';
 }
 
-function evaluateScopeConflicts(payload, { includeOverride = true } = {}) {
-  clearWizardAlert();
+function openComisionForm(mode, id) {
+  const form = state.dom.comisiones.form;
+  const modalElement = state.dom.comisiones.formModal;
+  if (!form || !modalElement) return;
+  const modal = getBootstrapModal(modalElement);
 
+  state.comisiones.form.mode = mode;
+  state.comisiones.form.data =
+    mode === 'edit' ? state.comisiones.items.find((item) => item.id === id) : null;
 
-  if (!validateUniqueCombination(payload)) {
-    return false;
-  }
-  if (payload.activo && !validateOverlap(payload)) {
-    return false;
-  }
-   if (includeOverride) {
-    showOverrideImpact(payload);
-  }
-  return true;
+  populateComisionForm();
+  modal.show();
 }
 
-function showOverrideImpact(payload) {
-  const planId = payload.plan_id;
-  const servicioId = payload.servicio_id;
-  if (!Number.isFinite(planId) || !Number.isFinite(servicioId)) {
+function populateComisionForm() {
+  const { form, formModal } = state.dom.comisiones;
+  if (!form) return;
+  const data = state.comisiones.form.data || getDefaultComision();
+  form.querySelector('[name="codigo"]').value = data.codigo || '';
+  form.querySelector('[name="ambito"]').value = data.ambito || 'servicio';
+  form.querySelector('[name="referencia_id"]').value = data.referencia_id || '';
+  form.querySelector('[name="rol_aplica"]').value = data.rol_aplica || 'cliente';
+  form.querySelector('[name="porcentaje"]').value = (data.porcentaje ?? '').toString();
+  form.querySelector('[name="vigencia_desde"]').value = data.vigencia_desde || '';
+  form.querySelector('[name="vigencia_hasta"]').value = data.vigencia_hasta || '';
+  form.querySelector('[name="activo"]').checked = data.activo !== false;
+  form.querySelector('[name="actualizado_el"]').value = data.actualizado_el || '';
+
+  const title = formModal?.querySelector('[data-modal-title]');
+  if (title) {
+    title.textContent =
+      state.comisiones.form.mode === 'edit' ? 'Editar comisión' : 'Nueva comisión';
+  }
+}
+
+async function submitComisionForm(event) {
+  event.preventDefault();
+  const form = event.target;
+  const porcentaje = Number(form.porcentaje.value);
+  if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) {
+    form.porcentaje.classList.add('is-invalid');
     return;
   }
-  const candidate = findOverrideCandidate(payload, planId, servicioId);
-  if (!candidate) {
+  form.porcentaje.classList.remove('is-invalid');
+
+  const payload = {
+    codigo: form.codigo.value.trim(),
+    ambito: form.ambito.value,
+    referencia_id: form.referencia_id.value || null,
+    rol_aplica: form.rol_aplica.value,
+    porcentaje,
+    vigencia_desde: form.vigencia_desde.value || null,
+    vigencia_hasta: form.vigencia_hasta.value || null,
+    activo: form.activo.checked,
+    actualizado_el: form.actualizado_el.value || null,
+  };
+
+  const conflict = findComisionConflict(payload, state.comisiones.form.data?.id);
+  if (conflict) {
+    showComisionConflictModal(conflict, payload);
     return;
   }
-  const desde = candidate.vigencia_desde ? formatDate(candidate.vigencia_desde) : 'Inicio';
-  const hasta = candidate.vigencia_hasta ? formatDate(candidate.vigencia_hasta) : 'Sin fin';
-  const message = `Esta regla overrideará a ${escapeHtml(candidate.codigo)} del ${desde} al ${hasta}.`;
-  renderWizardAlert({ message, reason: 'override' });
+
+  await persistComision(payload, state.comisiones.form);
 }
 
-function findOverrideCandidate(payload, planId, servicioId) {
-  const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
-  const candidates = state.rules.filter((rule) => {
-    if (!rule.activo) return false;
-    if (currentId && rule.id === currentId) return false;
-    const rulePlanId = toNullableNumber(rule.plan_id);
-    const ruleServicioId = toNullableNumber(rule.servicio_id);
-    const isPlanGeneral = Number.isFinite(rulePlanId) && rulePlanId === planId && !Number.isFinite(ruleServicioId);
-    const isServicioGeneral = Number.isFinite(ruleServicioId) && ruleServicioId === servicioId && !Number.isFinite(rulePlanId);
-    if (!isPlanGeneral && !isServicioGeneral) return false;
-    if (!matchesOverrideFilters(rule, payload)) return false;
-    if (!rangesOverlap(rule.vigencia_desde, rule.vigencia_hasta, payload.vigencia_desde, payload.vigencia_hasta)) return false;
-    return true;
+
+function findComisionConflict(comision, ignoreId) {
+  return state.comisiones.items.find((item) => {
+    if (item.id === ignoreId) return false;
+    if (item.ambito !== comision.ambito) return false;
+    if (item.referencia_id !== comision.referencia_id) return false;
+    if (item.rol_aplica !== comision.rol_aplica) return false;
+    if (!item.activo || !comision.activo) return false;
+    return rangesOverlap(
+      item.vigencia_desde,
+      item.vigencia_hasta,
+      comision.vigencia_desde,
+      comision.vigencia_hasta
+    );
   });
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => {
-    const aSpecificity = Number.isFinite(toNullableNumber(a.servicio_id)) ? 1 : 0;
-    const bSpecificity = Number.isFinite(toNullableNumber(b.servicio_id)) ? 1 : 0;
-    if (aSpecificity !== bSpecificity) return bSpecificity - aSpecificity;
-    const aTime = new Date(a.vigencia_desde || 0).getTime();
-    const bTime = new Date(b.vigencia_desde || 0).getTime();
-    return aTime - bTime;
-  });
-  return candidates[0];
 }
 
-function matchesOverrideFilters(rule, payload) {
-  const ruleRol = rule.rol_aplica || null;
-  const payloadRol = payload.rol_aplica || null;
-  if (payloadRol && ruleRol && ruleRol !== 'ambos' && payloadRol !== 'ambos' && ruleRol !== payloadRol) {
-    return false;
-  }
-  const ruleMoneda = normalizeNullableValue(rule.moneda);
-  const payloadMoneda = normalizeNullableValue(payload.moneda);
-  if (ruleMoneda && payloadMoneda && ruleMoneda !== payloadMoneda) {
-    return false;
-  }
-  if (!payloadMoneda && ruleMoneda) {
-    return false;
-  }
-  const ruleMetodo = normalizeNullableValue(rule.metodo_pago);
-  const payloadMetodo = normalizeNullableValue(payload.metodo_pago);
-  if (ruleMetodo && ruleMetodo !== '*' && payloadMetodo && ruleMetodo !== payloadMetodo) {
-    return false;
-  }
-  if (ruleMetodo && ruleMetodo !== '*' && !payloadMetodo) {
-    return false;
-  }
-  const ruleRegion = normalizeNullableValue(rule.ambito_region);
-  const payloadRegion = normalizeNullableValue(payload.ambito_region);
-  if (ruleRegion && ruleRegion !== '*' && payloadRegion && ruleRegion !== payloadRegion) {
-    return false;
-  }
-  if (ruleRegion && ruleRegion !== '*' && !payloadRegion) {
-    return false;
-  }
-  return true;
+function showComisionConflictModal(conflict, payload) {
+  const modal = getBootstrapModal(state.dom.comisiones.conflictModal);
+  if (!modal) return;
+  modal.relatedPayload = payload;
+  modal.relatedConflict = conflict;
+  modal.show();
 }
 
-function sameScopeValue(ruleValue, payloadValue) {
-  return normalizeNullableValue(ruleValue) === normalizeNullableValue(payloadValue);
-}
+async function resolveComisionConflict(action) {
+  const modalElement = state.dom.comisiones.conflictModal;
+  const modal = getBootstrapModal(modalElement);
+  const payload = modal?.relatedPayload;
+  const conflict = modal?.relatedConflict;
+  if (!modal || !payload || !conflict) return;
 
-function validateUniqueCombination(payload, { silent = false } = {}) {
-  const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
-  const duplicates = state.rules.filter((rule) => {
-    if (currentId && rule.id === currentId) return false;
-    if (!!rule.activo !== !!payload.activo) return false;
-    if (!sameScopeValue(rule.servicio_id, payload.servicio_id)) return false;
-    if (!sameScopeValue(rule.plan_id, payload.plan_id)) return false;
-    if (!sameScopeValue(rule.rol_aplica, payload.rol_aplica)) return false;
-    if (!sameScopeValue(rule.ambito_region, payload.ambito_region)) return false;
-    if (!sameScopeValue(rule.metodo_pago, payload.metodo_pago)) return false;
-    if (!sameScopeValue(rule.moneda, payload.moneda)) return false;
-    if (normalizeDateValue(rule.vigencia_desde) !== normalizeDateValue(payload.vigencia_desde)) return false;
-    if (normalizeDateValue(rule.vigencia_hasta) !== normalizeDateValue(payload.vigencia_hasta)) return false;
-    return true;
-  });
-  if (duplicates.length) {
-    if (!silent) {
-      showConflict(duplicates, 'Ya existe una regla con la misma combinación de ámbito y vigencia.', { reason: 'duplicate' });
-    }
-    return false;
-  }
-  return true;
-}
-function validateOverlap(payload, { silent = false } = {}) {
-  const currentId = state.wizard.mode === 'edit' ? state.wizard.id : null;
-  const allowPriorityOverride = Number.isFinite(payload.prioridad);
-  const conflicts = state.rules.filter((rule) => {
-    if (!rule.activo) return false;
-    if (currentId && rule.id === currentId) return false;
-    if (!sameScopeValue(rule.servicio_id, payload.servicio_id)) return false;
-    if (!sameScopeValue(rule.plan_id, payload.plan_id)) return false;
-    if (!sameScopeValue(rule.rol_aplica, payload.rol_aplica)) return false;
-    if (!sameScopeValue(rule.ambito_region, payload.ambito_region)) return false;
-    if (!sameScopeValue(rule.metodo_pago, payload.metodo_pago)) return false;
-    if (!sameScopeValue(rule.moneda, payload.moneda)) return false;
-    return rangesOverlap(rule.vigencia_desde, rule.vigencia_hasta, payload.vigencia_desde, payload.vigencia_hasta);
-  });
-  if (conflicts.length) {
-    if (allowPriorityOverride) {
-      return true;
-    }
-    if (!silent) {
-      showConflict(conflicts, 'La vigencia se solapa con otra regla activa del mismo ámbito.', { reason: 'overlap' });
-    }
-    return false;
-  }
-  return true;
-}
+  modal.hide();
+  if (action === 'cancelar') return;
 
-function showConflict(conflicts, message, { reason = 'conflict' } = {}) {
-  const safeMessage = escapeHtml(message || 'Existen reglas en conflicto con la combinación seleccionada.');
-  const listItems = (conflicts || [])
-    .map((rule) => `<li><strong>${escapeHtml(rule.codigo)}</strong> — ${formatVigencia(rule.vigencia_desde, rule.vigencia_hasta)}</li>`)
-    .join('');
-  const details = listItems ? `<ul class="mb-2">${listItems}</ul>` : '';
-  const actions = '<button type="button" class="btn btn-outline-primary btn-sm" data-tc-action="view-rules">Ver reglas</button>';
-  renderWizardAlert({ message: safeMessage, details, actions, reason });
-}
-
-function renderWizardAlert({ message, details = '', actions = '', reason = 'info' }) {
-  if (!dom.wizard.alert) return;
-  const safeMessage = message || '';
-  const actionsMarkup = actions ? `<div class="d-flex gap-2">${actions}</div>` : '';
-  dom.wizard.alert.classList.remove('d-none');
-  dom.wizard.alert.dataset.tcConflictReason = reason;
-  dom.wizard.alert.innerHTML = `
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-      <div>
-        <div class="fw-semibold">${safeMessage}</div>
-        ${details}
-      </div>
-      ${actionsMarkup}
-    </div>
-  `;
-}
-
-function clearWizardAlert() {
-  if (!dom.wizard.alert) return;
-  dom.wizard.alert.classList.add('d-none');
-  dom.wizard.alert.innerHTML = '';
-  delete dom.wizard.alert.dataset.tcConflictReason;
-}
-
-async function runPanelSimulation() {
-  const body = collectSimulatorInputs();
   try {
-    dom.simulator.result.innerHTML = '<p class="text-muted">Calculando...</p>';
-    const response = await apiPost('/tarifas/simular', body);
-    renderSimulationResult(dom.simulator.result, response);
+    if (action === 'desactivar') {
+      await apiPatch(`/comisiones/${conflict.id}`, { activo: false });
+      conflict.activo = false;
+    } else if (action === 'cerrar') {
+      const fecha = new Date(payload.vigencia_desde);
+      fecha.setDate(fecha.getDate() - 1);
+      const cierre = fecha.toISOString().slice(0, 10);
+      await apiPatch(`/comisiones/${conflict.id}`, { vigencia_hasta: cierre });
+      conflict.vigencia_hasta = cierre;
+    }
+    await persistComision(payload, state.comisiones.form);
   } catch (error) {
-    if (error.status === 404) {
-      dom.simulator.result.innerHTML = '<div class="alert alert-warning">No se encontró una regla aplicable.</div>';
+    console.error('Error resolviendo conflicto', error);
+    window.alert('No se pudo resolver el conflicto.');
+  }
+}
+
+async function persistComision(payload, formState) {
+  try {
+    const id = formState.data?.id;
+    let response;
+    if (id) {
+      response = await apiPut(`/comisiones/${id}`, payload, {
+        'If-Unmodified-Since': payload.actualizado_el || '',
+      });
+    } else {
+      response = await apiPost('/comisiones', payload);
+    }
+    const saved = await response.json();
+    upsertComision(saved);
+    state.dom.comisiones.form.reset();
+    getBootstrapModal(state.dom.comisiones.formModal).hide();
+    renderComisiones();
+  } catch (error) {
+    console.error('Error guardando comisión', error);
+    window.alert(error.message || 'No se pudo guardar la comisión.');
+  }
+}
+
+function upsertComision(comision) {
+  const index = state.comisiones.items.findIndex((item) => item.id === comision.id);
+  if (index >= 0) {
+    state.comisiones.items.splice(index, 1, comision);
+  } else {
+    state.comisiones.items.push(comision);
+  }
+}
+
+async function attemptToggleComision(id, nextState) {
+  const comision = state.comisiones.items.find((item) => item.id === id);
+  if (!comision) return;
+  if (nextState) {
+    const conflict = findComisionConflict({ ...comision, activo: true }, id);
+    if (conflict) {
+      showComisionConflictModal(conflict, { ...comision, activo: true });
+      renderComisiones();
       return;
     }
-    console.error('Error simulando', error);
-    dom.simulator.result.innerHTML = `<div class="alert alert-danger">${error.message || 'No se pudo simular.'}</div>`;
   }
-}
-
-function collectSimulatorInputs() {
-  const inputs = dom.simulator.inputs;
-  const servicioId = inputs.servicio.value ? Number(inputs.servicio.value) : null;
-  const planId = inputs.plan.value ? Number(inputs.plan.value) : null;
-  return {
-    servicio_id: Number.isFinite(servicioId) ? servicioId : null,
-    plan_id: Number.isFinite(planId) ? planId : null,
-    rol_aplica: inputs.rol.value,
-    moneda: inputs.moneda.value || state.catalogs.econconfig?.moneda_defecto || null,
-    metodo_pago: inputs.metodo.value || null,
-    ambito_region: inputs.region.value || null,
-    fecha: inputs.fecha.value || new Date().toISOString().substring(0, 10),
-    consumo: Number(inputs.consumo.value || 0),
-  };
-}
-
-async function simulateFromWizard() {
-  if (!captureStep1() || !captureStep2()) return;
-  const payload = buildRulePayload(state.wizard.data);
-  const overrides = {
-    servicio_id: payload.servicio_id,
-    plan_id: dom.wizard.inputs.step3Plan.value ? Number(dom.wizard.inputs.step3Plan.value) : payload.plan_id,
-    rol_aplica: payload.rol_aplica,
-    moneda: payload.moneda,
-    metodo_pago: dom.wizard.inputs.step3Metodo.value || payload.metodo_pago,
-    ambito_region: payload.ambito_region,
-    fecha: dom.wizard.inputs.step3Fecha.value || new Date().toISOString().substring(0, 10),
-    consumo: Number(dom.wizard.inputs.step3Consumo.value || 0),
-    regla_preview: {
-      ...payload,
-      parametros: payload.parametros,
-      codigo: payload.codigo,
-      servicio_id: payload.servicio_id,
-      plan_id: payload.plan_id,
-      activo: payload.activo,
-    },
-  };
   try {
-    dom.wizard.step3Result.innerHTML = '<p class="text-muted">Calculando...</p>';
-    const response = await apiPost('/tarifas/simular', overrides);
-    renderSimulationResult(dom.wizard.step3Result, response);
+    await apiPatch(`/comisiones/${id}`, { activo: nextState });
+    comision.activo = nextState;
+    renderComisiones();
   } catch (error) {
-    if (error.status === 404) {
-      dom.wizard.step3Result.innerHTML = '<div class="alert alert-warning">No se encontró una regla aplicable.</div>';
-      return;
-    }
-    console.error('Error simulando regla', error);
-    dom.wizard.step3Result.innerHTML = `<div class="alert alert-danger">${error.message || 'No se pudo simular la regla.'}</div>`;
+    console.error('Error cambiando estado', error);
+    window.alert('No se pudo actualizar la comisión.');
   }
 }
 
-function renderSimulationResult(container, response) {
-  if (!response?.success || !response.desglose) {
-    container.innerHTML = '<div class="alert alert-warning">No se pudo calcular el desglose.</div>';
-    return;
-  }
-  const { regla, desglose } = response;
-  const formatter = new Intl.NumberFormat('es-PE', {
-    style: 'currency',
-    currency: desglose.moneda || state.catalogs.econconfig?.moneda_defecto || 'PEN',
-    minimumFractionDigits: state.catalogs.econconfig?.decimales ?? 2,
+async function bulkToggleComisiones(ids, nextState) {
+  await Promise.all(ids.map((id) => apiPatch(`/comisiones/${id}`, { activo: nextState })));
+  state.comisiones.items.forEach((item) => {
+    if (ids.includes(item.id)) item.activo = nextState;
   });
-  container.innerHTML = `
-    <div class="card border-0 shadow-sm">
-      <div class="card-body">
-        <h6 class="fw-semibold mb-1">Regla aplicada: ${escapeHtml(regla.codigo)} — ${escapeHtml(regla.descripcion || 'Sin descripción')}</h6>
-        <dl class="row gy-2 mb-0">
-          <dt class="col-6 col-sm-5">Subtotal</dt>
-          <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.subtotal || 0)}</dd>
-          <dt class="col-6 col-sm-5">Impuestos</dt>
-          <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.impuestos || 0)}</dd>
-          <dt class="col-6 col-sm-5">Total cliente</dt>
-          <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.totalCliente || 0)}</dd>
-          <dt class="col-6 col-sm-5">Neto abogado</dt>
-          <dd class="col-6 col-sm-7 text-end mb-0">${formatter.format(desglose.netoAbogado || 0)}</dd>
-        </dl>
-        <p class="text-muted small fst-italic mb-0 mt-3">Nota: Redondeo según econconfig.${state.catalogs.econconfig?.regla_redondeo || 'dos_decimales'}.</p>
-      </div>
-    </div>
-  `;
+  state.comisiones.selection.clear();
+  renderComisiones();
 }
 
-function hydrateSimulatorInputs() {
-  const econ = state.catalogs.econconfig;
-  if (econ && dom.simulator.inputs.moneda) {
-    dom.simulator.inputs.moneda.value = econ.moneda_defecto || '';
+async function bulkCloseComisiones(ids) {
+  const cierre = prompt('Cerrar vigencia al (YYYY-MM-DD):');
+  if (!cierre) return;
+  await Promise.all(ids.map((id) => apiPatch(`/comisiones/${id}`, { vigencia_hasta: cierre })));
+  state.comisiones.items.forEach((item) => {
+    if (ids.includes(item.id)) item.vigencia_hasta = cierre;
+  });
+  state.comisiones.selection.clear();
+  renderComisiones();
+}
+
+function exportComisiones(selectionOnly) {
+  const ids = selectionOnly ? Array.from(state.comisiones.selection) : [];
+  const params = new URLSearchParams({ ...state.comisiones.filters });
+  if (selectionOnly && ids.length) {
+    params.set('ids', ids.join(','));
   }
+  const url = `${API_BASE_URL}/comisiones/export?${params.toString()}`;
+  window.open(url, '_blank');
+}
+
+
+/**
+ * ------------------------------
+ * Simulador
+ * ------------------------------
+ */
+
+function bindSimulatorEvents() {
+  const { simulator } = state.dom;
+  if (!simulator) return;
+
+  simulator.toggle?.addEventListener('click', () => toggleSimulator(true));
+  simulator.close?.addEventListener('click', () => toggleSimulator(false));
+  simulator.form?.addEventListener('submit', submitSimulator);
 }
 
 function toggleSimulator(open) {
-    if (!dom.simulator.panel) return;
-    state.simulator.open = !!open;
-    if (dom.simulator.offcanvasInstance) {
-      if (open) {
-        dom.simulator.offcanvasInstance.show();
-      } else {
-        dom.simulator.offcanvasInstance.hide();
-      }
-    } else {
-      dom.simulator.panel.classList.toggle('show', open);
-      dom.simulator.panel.setAttribute('aria-hidden', open ? 'false' : 'true');
-    }
-  }
-
-  function createEmptyRule(catalogs) {
-    const sourceCatalogs = catalogs !== undefined ? catalogs : state.catalogs;
-    const econconfig = sourceCatalogs?.econconfig;
-    return {
-    codigo: '',
-    descripcion: '',
-    servicio_id: '',
-    plan_id: '',
-    rol_aplica: 'cliente',
-    moneda: econconfig?.moneda_defecto || '',
-    metodo_pago: '',
-    ambito_region: '',
-    prioridad: '',
-    vigencia_desde: '',
-    vigencia_hasta: '',
-    tipo_calculo: 'fijo',
-    valor: '',
-    parametros: cloneTemplateFromCatalogs('fijo', sourceCatalogs),
-    incluye_impuesto: false,
-    activo: true,
-  };
+  state.simulator.panelOpen = open;
+  renderSimulator();
 }
-function debounce(fn, delay = 300) {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        fn.apply(null, args);
-      }, delay);
+
+function renderSimulator() {
+  const { simulator } = state.dom;
+  if (!simulator?.panel) return;
+  simulator.panel.classList.toggle('d-none', !state.simulator.panelOpen);
+  if (!state.simulator.panelOpen) return;
+
+  if (state.simulator.loading) {
+    simulator.loading?.classList.remove('d-none');
+    simulator.result?.classList.add('d-none');
+  } else {
+    simulator.loading?.classList.add('d-none');
+    simulator.result?.classList.remove('d-none');
+    simulator.result.innerHTML = simulatorResultTemplate(state.simulator.result);
+  }
+}
+
+async function submitSimulator(event) {
+  event.preventDefault();
+  const form = event.target;
+  state.simulator.loading = true;
+  renderSimulator();
+
+  const payload = {
+    ambito: form.ambito.value,
+    referencia: form.referencia.value,
+    usuario_id: form.usuario_id.value,
+    fecha: form.fecha.value || new Date().toISOString().slice(0, 10),
+    consumo: Number(form.consumo.value) || 0,
+  };
+
+  try {
+    const response = await apiPost('/simulaciones/tarifas', payload);
+    const data = await response.json();
+    state.simulator.result = data;
+  } catch (error) {
+    console.error('Error simulando', error);
+    state.simulator.result = {
+      subtotal: 0,
+      impuestos: 0,
+      comision: 0,
+      total_cliente: 0,
+      neto_abogado: 0,
+      reglas_aplicadas: [],
+      reglas_ignoradas: [],
+      moneda: state.quick.econconfig?.moneda_defecto || state.monedaFallback,
     };
+  } finally {
+    state.simulator.loading = false;
+    renderSimulator();
   }
-  function getBootstrapModal(element) {
-    if (!element || !bootstrapLib?.Modal) return null;
-    return bootstrapLib.Modal.getOrCreateInstance(element);
-  }
-  
-  function switchView(view) {
-    const allowed = ['reglas', 'impuestos', 'econconfig'];
-    const normalized = allowed.includes(view) ? view : 'reglas';
-    if (state.ui.view !== normalized) {
-      state.ui.view = normalized;
-    }
-    updateViewVisibility();
-    if (normalized === 'impuestos') {
-      refreshImpuestosList();
-    } else if (normalized === 'econconfig') {
-      loadEconfig();
-    }
-  }
-  
-  function updateViewVisibility() {
-    if (dom.views?.containers) {
-      dom.views.containers.forEach((container) => {
-        const id = container.getAttribute('data-tc-view');
-        const isActive = id === state.ui.view;
-        container.classList.toggle('d-none', !isActive);
-      });
-    }
-    if (dom.views?.buttons) {
-      dom.views.buttons.forEach((button) => {
-        const id = button.getAttribute('data-tc-view-button');
-        const isActive = id === state.ui.view;
-        button.classList.toggle('btn-primary', isActive);
-        button.classList.toggle('btn-outline-primary', !isActive);
-      });
-    }
-  }
-  
-  async function refreshImpuestosList() {
-    if (!dom.impuestos?.tableBody) return;
-    const estado = dom.impuestos.estado?.value || '';
-    try {
-      const params = {};
-      if (estado) params.estado = estado;
-      const response = await apiGet('/impuestos', params);
-      const items = Array.isArray(response) ? response : response.items || [];
-      state.quick.impuestos = items;
-      state.quick.impuestosLoaded = true;
-      renderImpuestosTable();
-    } catch (error) {
-      console.error('Error cargando impuestos:', error);
-      window.alert(error.message || 'No se pudieron cargar los impuestos.');
-    }
-  }
-  
-  function renderImpuestosTable() {
-    const body = dom.impuestos?.tableBody;
-    if (!body) return;
-    body.innerHTML = '';
-    if (!state.quick.impuestos.length) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 7;
-      cell.className = 'text-center text-muted py-3';
-      cell.textContent = 'No se registran impuestos con los criterios seleccionados.';
-      row.appendChild(cell);
-      body.appendChild(row);
-      return;
-    }
-    const fragment = document.createDocumentFragment();
-    state.quick.impuestos.forEach((imp) => {
-      const row = document.createElement('tr');
-      row.dataset.id = imp.id;
-      if (imp.id === state.quick.currentImpuestoId) {
-        row.classList.add('table-active');
-      }
-      const porcentaje = Number(imp.porcentaje ?? 0);
-      row.innerHTML = `
-        <td class="fw-semibold">${escapeHtml(imp.codigo)}</td>
-        <td>${escapeHtml(imp.nombre)}</td>
-        <td>${porcentaje.toFixed(2)}%</td>
-        <td>${imp.incluido_en_precio ? 'Sí' : 'No'}</td>
-        <td>${formatVigencia(imp.vigencia_desde, imp.vigencia_hasta)}</td>
-        <td><span class="badge ${imp.activo ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}">${imp.activo ? 'Activo' : 'Inactivo'}</span></td>
-        <td class="text-end">
-          <div class="btn-group btn-group-sm" role="group">
-            <button type="button" class="btn btn-outline-primary" data-action="edit" data-id="${imp.id}">Editar</button>
-            <button type="button" class="btn btn-outline-secondary" data-action="toggle" data-id="${imp.id}">${imp.activo ? 'Desactivar' : 'Activar'}</button>
-            <button type="button" class="btn btn-outline-secondary" data-action="history" data-id="${imp.id}">Historial</button>
-          </div>
-        </td>
-      `;
-      fragment.appendChild(row);
-    });
-    body.appendChild(fragment);
-  }
-  
-  function handleImpuestoTableClick(event) {
-    const button = event.target.closest('button[data-action]');
-    if (!button) return;
-    const id = Number(button.dataset.id);
-    if (!id) return;
-    const action = button.dataset.action;
-    const impuesto = state.quick.impuestos.find((item) => item.id === id);
-    if (!impuesto) return;
-    if (action === 'edit') {
-      populateImpuestoForm(impuesto);
-    } else if (action === 'toggle') {
-      toggleImpuestoState(impuesto);
-    } else if (action === 'history') {
-      showImpuestoHistory(impuesto);
-    }
-  }
-  
-  function populateImpuestoForm(impuesto) {
-    if (!dom.impuestos?.form) return;
-    state.quick.currentImpuestoId = impuesto.id;
-    dom.impuestos.id.value = impuesto.id;
-    dom.impuestos.codigo.value = impuesto.codigo || '';
-    dom.impuestos.nombre.value = impuesto.nombre || '';
-    dom.impuestos.porcentaje.value = Number(impuesto.porcentaje ?? 0);
-    dom.impuestos.vigenciaDesde.value = impuesto.vigencia_desde ? impuesto.vigencia_desde.substring(0, 10) : '';
-    dom.impuestos.vigenciaHasta.value = impuesto.vigencia_hasta ? impuesto.vigencia_hasta.substring(0, 10) : '';
-    dom.impuestos.incluido.checked = !!impuesto.incluido_en_precio;
-    dom.impuestos.activo.checked = impuesto.activo !== false;
-    Array.from(dom.impuestos.tableBody.querySelectorAll('tr')).forEach((row) => {
-      row.classList.toggle('table-active', Number(row.dataset.id) === impuesto.id);
-    });
-  }
-  
-  function resetImpuestoForm() {
-    if (!dom.impuestos?.form) return;
-    dom.impuestos.form.reset();
-    dom.impuestos.id.value = '';
-    dom.impuestos.incluido.checked = false;
-    dom.impuestos.activo.checked = true;
-    state.quick.currentImpuestoId = null;
-    Array.from(dom.impuestos.tableBody?.querySelectorAll('tr') || []).forEach((row) => row.classList.remove('table-active'));
-  }
-  
-  function parseDateInput(value) {
-    if (!value) return null;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return date;
-  }
-  
-  function validateImpuestoPayload(payload, excludeId) {
-    const start = parseDateInput(payload.vigencia_desde);
-    const end = parseDateInput(payload.vigencia_hasta);
-    if (start && end && start > end) {
-      return 'La vigencia hasta debe ser posterior a la vigencia desde.';
-    }
-    if (!payload.activo) {
-      return null;
-    }
-    const overlaps = state.quick.impuestos.some((item) => {
-      if (!item.activo) return false;
-      if (excludeId && item.id === excludeId) return false;
-      const itemStart = parseDateInput(item.vigencia_desde);
-      const itemEnd = parseDateInput(item.vigencia_hasta);
-      const startTime = start ? start.getTime() : Number.NEGATIVE_INFINITY;
-      const endTime = end ? end.getTime() : Number.POSITIVE_INFINITY;
-      const itemStartTime = itemStart ? itemStart.getTime() : Number.NEGATIVE_INFINITY;
-      const itemEndTime = itemEnd ? itemEnd.getTime() : Number.POSITIVE_INFINITY;
-      return startTime <= itemEndTime && itemStartTime <= endTime;
-    });
-    if (overlaps) {
-      return 'Existe un impuesto activo con vigencia traslapada. Ajusta las fechas o desactiva el existente.';
-    }
-    return null;
-  }
-  
-  async function submitImpuestoForm(event) {
-    event.preventDefault();
-    if (!dom.impuestos?.form) return;
-    const id = dom.impuestos.id.value ? Number(dom.impuestos.id.value) : null;
-    const codigo = dom.impuestos.codigo.value.trim();
-    const nombre = dom.impuestos.nombre.value.trim();
-    const porcentajeValue = dom.impuestos.porcentaje.value;
-    if (!codigo || !nombre) {
-      window.alert('Código y nombre son obligatorios.');
-      return;
-    }
-    if (porcentajeValue === '' || Number(porcentajeValue) < 0) {
-      window.alert('El porcentaje debe ser mayor o igual a 0.');
-      return;
-    }
-    const payload = {
-      codigo,
-      nombre,
-      porcentaje: Number(porcentajeValue),
-      incluido_en_precio: dom.impuestos.incluido.checked,
-      activo: dom.impuestos.activo.checked,
-      vigencia_desde: dom.impuestos.vigenciaDesde.value || null,
-      vigencia_hasta: dom.impuestos.vigenciaHasta.value || null,
-    };
-    const validationMessage = validateImpuestoPayload(payload, id);
-    if (validationMessage) {
-      window.alert(validationMessage);
-      return;
-    }
-    try {
-      if (id) {
-        await apiPut(`/impuestos/${id}`, payload);
-      } else {
-        await apiPost('/impuestos', payload);
-      }
-      await Promise.all([refreshImpuestosList(), loadCatalogs()]);
-      window.alert('Impuesto guardado correctamente');
-      if (id) {
-        const updated = state.quick.impuestos.find((item) => item.id === id);
-        if (updated) {
-          populateImpuestoForm(updated);
-        }
-      } else {
-        resetImpuestoForm();
-      }
-    } catch (error) {
-      console.error('Error guardando impuesto:', error);
-      window.alert(error.message || 'No se pudo guardar el impuesto.');
-    }
-  }
-  
-  async function toggleImpuestoState(impuesto) {
-    const nextState = !impuesto.activo;
-    const confirmed = window.confirm(`¿Desea ${nextState ? 'activar' : 'desactivar'} el impuesto ${impuesto.codigo}?`);
-    if (!confirmed) return;
-    try {
-      await apiPut(`/impuestos/${impuesto.id}`, { activo: nextState });
-      await Promise.all([refreshImpuestosList(), loadCatalogs()]);
-      window.alert(`Impuesto ${nextState ? 'activado' : 'desactivado'} correctamente`);
-      if (state.quick.currentImpuestoId === impuesto.id) {
-        const updated = state.quick.impuestos.find((item) => item.id === impuesto.id);
-        if (updated) {
-          populateImpuestoForm(updated);
-        }
-      }
-    } catch (error) {
-      console.error('Error actualizando impuesto:', error);
-      window.alert(error.message || 'No se pudo actualizar el impuesto.');
-    }
-  }
-  
-  function showImpuestoHistory(impuesto) {
-    if (!dom.impuestos?.historyContent) return;
-    const creado = impuesto.creado_el ? formatDateTime(impuesto.creado_el) : 'Sin registro';
-    dom.impuestos.historyContent.innerHTML = `
-      <dl class="row mb-0">
-        <dt class="col-5">Código</dt><dd class="col-7">${escapeHtml(impuesto.codigo)}</dd>
-        <dt class="col-5">Nombre</dt><dd class="col-7">${escapeHtml(impuesto.nombre)}</dd>
-        <dt class="col-5">Porcentaje</dt><dd class="col-7">${Number(impuesto.porcentaje ?? 0).toFixed(2)}%</dd>
-        <dt class="col-5">Incluido en precio</dt><dd class="col-7">${impuesto.incluido_en_precio ? 'Sí' : 'No'}</dd>
-        <dt class="col-5">Vigencia</dt><dd class="col-7">${formatVigencia(impuesto.vigencia_desde, impuesto.vigencia_hasta)}</dd>
-        <dt class="col-5">Estado</dt><dd class="col-7">${impuesto.activo ? 'Activo' : 'Inactivo'}</dd>
-        <dt class="col-5">Creado el</dt><dd class="col-7">${creado}</dd>
-      </dl>
+}
+
+function simulatorResultTemplate(result) {
+  if (!result) {
+    return `
+      <div class="card card-body text-center text-muted">
+        Complete los datos y presione "Simular".
+      </div>
     `;
-    const modal = getBootstrapModal(dom.impuestos.historyModal);
-    modal?.show();
   }
-  
-  async function loadEconfig() {
-    try {
-      const response = await apiGet('/econconfig');
-      const config = response?.config || response || null;
-      state.quick.econconfig = config;
-      populateEconfigForm(config);
-    } catch (error) {
-      console.error('Error obteniendo econconfig:', error);
-      window.alert(error.message || 'No se pudo cargar la configuración económica.');
-    }
+  return `
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Desglose del pago</h5>
+        <dl class="row mb-0">
+          <dt class="col-sm-6">Subtotal</dt>
+          <dd class="col-sm-6 text-end">${formatCurrency(result.subtotal, result.moneda)}</dd>
+          <dt class="col-sm-6">Impuestos</dt>
+          <dd class="col-sm-6 text-end">${formatCurrency(result.impuestos, result.moneda)}</dd>
+          <dt class="col-sm-6">Comisión</dt>
+          <dd class="col-sm-6 text-end">${formatCurrency(result.comision, result.moneda)}</dd>
+          <dt class="col-sm-6">Total cliente</dt>
+          <dd class="col-sm-6 text-end">${formatCurrency(result.total_cliente, result.moneda)}</dd>
+          <dt class="col-sm-6">Neto abogado</dt>
+          <dd class="col-sm-6 text-end">${formatCurrency(result.neto_abogado, result.moneda)}</dd>
+        </dl>
+        <hr>
+        <h6>Reglas aplicadas</h6>
+        <ul class="mb-3">
+          ${
+            result.reglas_aplicadas?.length
+              ? result.reglas_aplicadas.map((rule) => `<li>${rule}</li>`).join('')
+              : '<li class="text-muted">Ninguna</li>'
+          }
+        </ul>
+        <h6>Reglas ignoradas</h6>
+        <ul class="mb-0">
+          ${
+            result.reglas_ignoradas?.length
+              ? result.reglas_ignoradas.map((rule) => `<li>${rule}</li>`).join('')
+              : '<li class="text-muted">Ninguna</li>'
+          }
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+
+/**
+ * ------------------------------
+ * Impuestos (sección conservada)
+ * ------------------------------
+ */
+
+function bindImpuestosEvents() {
+  const { impuestos } = state.dom;
+  if (!impuestos) return;
+
+  impuestos.estado?.addEventListener('change', () => refreshImpuestosList());
+  impuestos.tableBody?.addEventListener('click', handleImpuestoTableClick);
+  impuestos.form?.addEventListener('submit', submitImpuestoForm);
+  impuestos.reset?.addEventListener('click', resetImpuestoForm);
+}
+
+async function loadImpuestos() {
+  try {
+    const response = await apiGet('/impuestos');
+    const { items } = await response.json();
+    state.quick.impuestos = items || [];
+  } catch (error) {
+    console.error('Error cargando impuestos', error);
+    state.quick.impuestos = [];
   }
-  
-  function populateEconfigForm(config) {
-    if (!dom.econconfig?.form) return;
-    const fallback = state.catalogs.econconfig || {};
-    const current = config || state.quick.econconfig || fallback || {};
-    dom.econconfig.moneda.value = current.moneda_defecto || '';
-    dom.econconfig.decimales.value = current.decimales ?? 2;
-    dom.econconfig.regla.value = current.regla_redondeo || 'dos_decimales';
-    dom.econconfig.activo.checked = current.activo !== false;
-    if (dom.econconfig.updatedLabel) {
-      dom.econconfig.updatedLabel.textContent = current.actualizado_el
-        ? `Actualizado el ${formatDateTime(current.actualizado_el)}`
-        : 'Sin actualizaciones registradas';
-    }
-    updateEconfigPreview();
-  }
-  
-  function updateEconfigPreview() {
-    if (!dom.econconfig?.previewResult) return;
-    const rawValue = dom.econconfig.previewInput?.value;
-    if (!rawValue) {
-      dom.econconfig.previewResult.textContent = '—';
-      return;
-    }
-    const number = Number(rawValue);
-    if (Number.isNaN(number)) {
-      dom.econconfig.previewResult.textContent = 'Valor inválido';
-      return;
-    }
-    const config = {
-      decimales: Number(dom.econconfig.decimales?.value ?? 2),
-      regla_redondeo: dom.econconfig.regla?.value || 'dos_decimales',
-    };
-    const rounded = applyPreviewRounding(number, config);
-    dom.econconfig.previewResult.textContent = Number.isFinite(rounded)
-      ? rounded.toFixed(config.decimales ?? 2)
-      : '—';
-  }
-  
-  function applyPreviewRounding(value, config) {
-    if (!config) return Number((value ?? 0).toFixed(2));
-    const decimales = Number.isInteger(config.decimales) ? config.decimales : 2;
-    const regla = config.regla_redondeo || 'dos_decimales';
-    const factor = 10 ** decimales;
-    const raw = Number(value ?? 0);
-    if (Number.isNaN(raw)) return 0;
-    switch (regla) {
-      case 'a_0_05':
-        return Math.ceil(raw * 20) / 20;
-      case 'entero_superior':
-        return Math.ceil(raw);
-      case 'dos_decimales':
-      default:
-        return Math.round(raw * factor) / factor;
-    }
-  }
-  
-  async function submitEconfigForm(event) {
-    event.preventDefault();
-    if (!dom.econconfig?.form) return;
-    const moneda = dom.econconfig.moneda.value.trim().toUpperCase();
-    const decimalesValue = dom.econconfig.decimales.value;
-    const regla = dom.econconfig.regla.value;
-    const activo = dom.econconfig.activo.checked;
-    if (!moneda || moneda.length !== 3) {
-      window.alert('La moneda debe tener 3 caracteres.');
-      return;
-    }
-    const decimales = Number(decimalesValue);
-    if (!Number.isInteger(decimales) || decimales < 0 || decimales > 6) {
-      window.alert('Los decimales deben ser un número entre 0 y 6.');
-      return;
-    }
-    const payload = {
-      moneda_defecto: moneda,
-      decimales,
-      regla_redondeo: regla,
-      activo,
-    };
-    try {
-      const response = await apiPut('/econconfig', payload);
-      const config = response?.config || payload;
-      state.catalogs.econconfig = config;
-      state.quick.econconfig = config;
-      populateCatalogSelects();
-      hydrateSimulatorInputs();
-      populateEconfigForm(config);
-      window.alert('Configuración guardada correctamente');
-    } catch (error) {
-      console.error('Error guardando econconfig:', error);
-      window.alert(error.message || 'No se pudo guardar la configuración.');
-    }
-  }
-  
-  
-  
-function exportCsv() {
-  if (!state.rules.length) {
-    window.alert('No hay reglas para exportar.');
+}
+
+function renderImpuestosTable() {
+  const body = state.dom.impuestos.tableBody;
+  if (!body) return;
+  body.innerHTML = '';
+
+  if (!state.quick.impuestos.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td colspan="6" class="text-center py-4 text-muted">
+        No se registran impuestos. <a href="#" data-impuestos-new>Crear primero</a>
+      </td>`;
+    body.appendChild(tr);
     return;
   }
-  const headers = ['Codigo', 'Descripcion', 'Servicio', 'Plan', 'Rol', 'Moneda', 'MetodoPago', 'Region', 'TipoCalculo', 'VigenciaDesde', 'VigenciaHasta', 'Prioridad', 'Activo'];
-  const rows = state.rules.map((rule) => [
-    rule.codigo,
-    (rule.descripcion || '').replace(/"/g, '""'),
-    rule.servicio ? rule.servicio.nombre : 'Todos',
-    rule.plan ? rule.plan.nombre : 'Todos',
-    rule.rol_aplica,
-    rule.moneda || state.catalogs.econconfig?.moneda_defecto || '',
-    rule.metodo_pago || '*',
-    rule.ambito_region || '*',
-    rule.tipo_calculo,
-    rule.vigencia_desde || '',
-    rule.vigencia_hasta || '',
-    rule.prioridad ?? '',
-    rule.activo ? '1' : '0',
-  ]);
-  const csv = [headers.join(','), ...rows.map((row) => row.map((value) => `"${value}"`).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `tarifas_${new Date().toISOString().substring(0, 10)}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+
+  state.quick.impuestos.forEach((impuesto) => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = impuesto.id;
+    tr.innerHTML = `
+      <td>${impuesto.codigo}</td>
+      <td>${impuesto.nombre}</td>
+      <td>${formatPercentage(impuesto.porcentaje)}</td>
+      <td>${vigenciaLabel(impuesto.vigencia_desde, impuesto.vigencia_hasta)}</td>
+      <td>${impuesto.incluido_en_precio ? 'Incluido' : 'No incluido'}</td>
+      <td>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" data-impuesto-toggle ${
+            impuesto.activo ? 'checked' : ''
+          }>
+        </div>
+      </td>
+    `;
+    body.appendChild(tr);
+  });
 }
 
-function exportExcel() {
-    if (!state.rules.length) {
-      window.alert('No hay reglas para exportar.');
-      return;
-    }
-    const headers = ['Código', 'Descripción', 'Servicio', 'Plan', 'Rol', 'Moneda', 'Método de pago', 'Región', 'Tipo de cálculo', 'Vigencia desde', 'Vigencia hasta', 'Prioridad', 'Activo'];
-    const rows = state.rules.map((rule) => [
-      rule.codigo,
-      rule.descripcion || '',
-      rule.servicio ? rule.servicio.nombre : 'Todos',
-      rule.plan ? rule.plan.nombre : 'Todos',
-      rule.rol_aplica,
-      rule.moneda || state.catalogs.econconfig?.moneda_defecto || '',
-      rule.metodo_pago || '*',
-      rule.ambito_region || '*',
-      rule.tipo_calculo,
-      rule.vigencia_desde || '',
-      rule.vigencia_hasta || '',
-      rule.prioridad ?? '',
-      rule.activo ? 'Sí' : 'No',
-    ]);
-    const headerRow = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>`;
-    const bodyRows = rows
-      .map((row) => `<tr>${row.map((value) => `<td>${escapeHtml(value)}</td>`).join('')}</tr>`)
-      .join('');
-    const tableHtml = `<table><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table>`;
-    const blob = new Blob(['\ufeff' + tableHtml], {
-      type: 'application/vnd.ms-excel;charset=utf-8;',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `tarifas_${new Date().toISOString().substring(0, 10)}.xls`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+function handleImpuestoTableClick(event) {
+  const tr = event.target.closest('tr');
+  if (!tr) return;
+  const id = Number(tr.dataset.id);
+  if (event.target.matches('[data-impuesto-toggle]')) {
+    toggleImpuesto(id, event.target.checked);
+  } else {
+    fillImpuestoForm(id);
   }
+}
+
+function fillImpuestoForm(id) {
+  const impuesto = state.quick.impuestos.find((item) => item.id === id);
+  if (!impuesto) return;
+  const { form } = state.dom.impuestos;
+  form.id.value = impuesto.id;
+  form.codigo.value = impuesto.codigo || '';
+  form.nombre.value = impuesto.nombre || '';
+  form.porcentaje.value = Number(impuesto.porcentaje ?? 0);
+  form.vigencia_desde.value = impuesto.vigencia_desde?.slice(0, 10) || '';
+  form.vigencia_hasta.value = impuesto.vigencia_hasta?.slice(0, 10) || '';
+  form.incluido.checked = !!impuesto.incluido_en_precio;
+  form.activo.checked = impuesto.activo !== false;
+  highlightImpuestoRow(id);
+}
+
+function highlightImpuestoRow(id) {
+  const rows = state.dom.impuestos.tableBody?.querySelectorAll('tr') || [];
+  rows.forEach((row) => {
+    row.classList.toggle('table-active', Number(row.dataset.id) === id);
+  });
+}
+
+function resetImpuestoForm() {
+  const { form } = state.dom.impuestos;
+  form.reset();
+  form.id.value = '';
+  highlightImpuestoRow(null);
+}
+
+async function submitImpuestoForm(event) {
+  event.preventDefault();
+  const form = event.target;
+  const payload = {
+    codigo: form.codigo.value.trim(),
+    nombre: form.nombre.value.trim(),
+    porcentaje: Number(form.porcentaje.value),
+    incluido_en_precio: form.incluido.checked,
+    activo: form.activo.checked,
+    vigencia_desde: form.vigencia_desde.value || null,
+    vigencia_hasta: form.vigencia_hasta.value || null,
+  };
+  const id = form.id.value ? Number(form.id.value) : null;
+
+  try {
+    let response;
+    if (id) {
+      response = await apiPut(`/impuestos/${id}`, payload);
+    } else {
+      response = await apiPost('/impuestos', payload);
+    }
+    const saved = await response.json();
+    const index = state.quick.impuestos.findIndex((item) => item.id === saved.id);
+    if (index >= 0) {
+      state.quick.impuestos.splice(index, 1, saved);
+    } else {
+      state.quick.impuestos.push(saved);
+    }
+    resetImpuestoForm();
+    renderImpuestosTable();
+  } catch (error) {
+    console.error('Error guardando impuesto', error);
+    window.alert('No se pudo guardar el impuesto.');
+  }
+}
+
+async function toggleImpuesto(id, nextState) {
+  try {
+    await apiPatch(`/impuestos/${id}`, { activo: nextState });
+    const impuesto = state.quick.impuestos.find((item) => item.id === id);
+    if (impuesto) impuesto.activo = nextState;
+  } catch (error) {
+    console.error('Error actualizando impuesto', error);
+    window.alert('No se pudo actualizar el impuesto.');
+  } finally {
+    renderImpuestosTable();
+  }
+}
+
+async function refreshImpuestosList() {
+  await loadImpuestos();
+  renderImpuestosTable();
+}
+
+function renderImpuestoForm() {
+  // La vista se actualiza cuando se selecciona un impuesto desde la tabla
+}
+
+/**
+ * ------------------------------
+ * Configuración económica (conservada)
+ * ------------------------------
+ */
+
+function bindEconconfigEvents() {
+  const { econconfig } = state.dom;
+  if (!econconfig) return;
+
+  econconfig.form?.addEventListener('submit', submitEconfigForm);
+  econconfig.previewInput?.addEventListener('input', updateEconfigPreview);
+  ['moneda', 'decimales', 'regla'].forEach((key) => {
+    econconfig[key]?.addEventListener('change', updateEconfigPreview);
+  });
+}
+
+async function loadEconconfig() {
+  try {
+    const response = await apiGet('/econconfig');
+    const config = await response.json();
+    state.quick.econconfig = config;
+    state.monedaFallback = config?.moneda_defecto || state.monedaFallback;
+  } catch (error) {
+    console.error('Error obteniendo econconfig', error);
+    state.quick.econconfig = null;
+  }
+}
+
+function renderEconconfig() {
+  const config = state.quick.econconfig || {};
+  const { econconfig } = state.dom;
+  if (!econconfig?.form) return;
+
+  econconfig.moneda.value = config.moneda_defecto || state.monedaFallback;
+  econconfig.decimales.value = config.decimales ?? 2;
+  econconfig.regla.value = config.regla_redondeo || 'dos_decimales';
+  econconfig.activo.checked = config.activo !== false;
+  econconfig.updatedLabel.textContent = config.actualizado_el
+    ? `Actualizado el ${formatExactDate(config.actualizado_el)}`
+    : 'Sin actualizar';
+  updateEconfigPreview();
+}
+
+function updateEconfigPreview() {
+  const { econconfig } = state.dom;
+  if (!econconfig?.previewResult) return;
+  const raw = econconfig.previewInput.value;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    econconfig.previewResult.textContent = '—';
+    return;
+  }
+  const moneda = econconfig.moneda.value || state.monedaFallback;
+  const decimales = Number(econconfig.decimales.value) || 2;
+  econconfig.previewResult.textContent = formatCurrency(value, moneda, decimales);
+}
+
+async function submitEconfigForm(event) {
+  event.preventDefault();
+  const form = event.target;
+  const payload = {
+    moneda_defecto: form.moneda.value.trim().toUpperCase(),
+    decimales: Number(form.decimales.value) || 2,
+    regla_redondeo: form.regla.value,
+    activo: form.activo.checked,
+  };
+
+  try {
+    const response = await apiPut('/econconfig', payload);
+    const saved = await response.json();
+    state.quick.econconfig = saved;
+    state.monedaFallback = saved.moneda_defecto || state.monedaFallback;
+    renderEconconfig();
+  } catch (error) {
+    console.error('Error guardando econconfig', error);
+    window.alert('No se pudo guardar la configuración económica.');
+  }
+}
+
+
+/**
+ * ------------------------------
+ * Utilidades compartidas
+ * ------------------------------
+ */
+
+async function loadTarifas() {
+  try {
+    const response = await apiGet('/tarifas');
+    const { items } = await response.json();
+    state.tarifas.items = items || [];
+  } catch (error) {
+    console.error('Error cargando tarifas', error);
+    state.tarifas.items = [];
+  }
+}
+
+async function loadComisiones() {
+  try {
+    const response = await apiGet('/comisiones');
+    const { items } = await response.json();
+    state.comisiones.items = items || [];
+  } catch (error) {
+    console.error('Error cargando comisiones', error);
+    state.comisiones.items = [];
+  }
+}
+
+function getDefaultTarifa() {
+  return {
+    codigo: '',
+    ambito: state.tarifas.filters.ambito || 'servicio',
+    referencia_id: '',
+    valor: 0,
+    moneda: state.quick.econconfig?.moneda_defecto || state.monedaFallback,
+    incluye_impuesto: true,
+    tipo_calculo: 'fijo',
+    parametros: {},
+    vigencia_desde: new Date().toISOString().slice(0, 10),
+    vigencia_hasta: '',
+    activo: true,
+    actualizado_el: '',
+  };
+}
+
+function getDefaultComision() {
+  return {
+    codigo: '',
+    ambito: state.comisiones.filters.ambito || 'servicio',
+    referencia_id: '',
+    rol_aplica: 'cliente',
+    porcentaje: 0,
+    vigencia_desde: new Date().toISOString().slice(0, 10),
+    vigencia_hasta: '',
+    activo: true,
+    actualizado_el: '',
+  };
+}
+
+function matchesAutocomplete(item, needle) {
+  if (!needle) return true;
+  return item.nombre_ambito?.toLowerCase().includes(needle.toLowerCase());
+}
+
+function vigenciaLabel(desde, hasta) {
+  if (!desde && !hasta) return 'Sin vigencia definida';
+  const hoy = new Date().toISOString().slice(0, 10);
+  const status = statusFromDates(desde, hasta, hoy);
+  const label =
+    status === 'aplicable'
+      ? `Vigente: ${formatDate(desde)} – ${hasta ? formatDate(hasta) : '…'}`
+      : status === 'programada'
+      ? 'Programada'
+      : status === 'expirada'
+      ? 'Expirada'
+      : 'Pausada';
+  return label;
+}
+
+function statusFromDates(desde, hasta, today) {
+  if (hasta && hasta < today) return 'expirada';
+  if (desde && desde > today) return 'programada';
+  return 'aplicable';
+}
+
+function statusChip(item) {
+  const today = new Date().toISOString().slice(0, 10);
+  let status = 'aplicable';
+  if (!item.activo) {
+    status = isVigenteHoy(item, today) ? 'pausada' : item.vigencia_hasta && item.vigencia_hasta < today ? 'expirada' : 'programada';
+  } else if (item.vigencia_hasta && item.vigencia_hasta < today) {
+    status = 'expirada';
+  } else if (item.vigencia_desde && item.vigencia_desde > today) {
+    status = 'programada';
+  }
+  const cls =
+    status === 'aplicable'
+      ? 'bg-success'
+      : status === 'programada'
+      ? 'bg-info'
+      : status === 'expirada'
+      ? 'bg-secondary'
+      : 'bg-warning text-dark';
+  return `<span class="badge ${cls}">${CHIP_LABELS[status]}</span>`;
+}
+
+function formatCurrency(value, currency = state.monedaFallback, minimumFractionDigits) {
+  const options = {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: minimumFractionDigits ?? state.quick.econconfig?.decimales ?? 2,
+  };
+  try {
+    return new Intl.NumberFormat('es-PE', options).format(Number(value) || 0);
+  } catch (error) {
+    return `${currency} ${(Number(value) || 0).toFixed(options.minimumFractionDigits)}`;
+  }
+}
+
+function formatPercentage(value) {
+  return `${Number(value || 0).toFixed(2)} %`;
+}
+
+function formatDate(date) {
+  if (!date) return '—';
+  const safeDate = new Date(date);
+  if (Number.isNaN(safeDate.getTime())) return date;
+  return DATE_FORMATTER.format(safeDate);
+}
+
+function formatExactDate(date) {
+  if (!date) return '—';
+  const safe = new Date(date);
+  if (Number.isNaN(safe.getTime())) return date;
+  return `${DATE_FORMATTER.format(safe)} ${safe.toLocaleTimeString('es-PE', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
+function formatRelative(date) {
+  if (!date) return '—';
+  const target = new Date(date);
+  if (Number.isNaN(target.getTime())) return date;
+  const diff = (Date.now() - target.getTime()) / 1000;
+  if (diff < 0) return 'en el futuro';
+  for (const unit of RELATIVE_UNITS) {
+    if (diff < unit.limit) {
+      const value = Math.floor(diff / unit.divisor);
+      return `hace ${value} ${unit.suffix}`;
+    }
+  }
+  const years = Math.floor(diff / 31557600);
+  return `hace ${years} ${years === 1 ? 'año' : 'años'}`;
+}
+
+function checkboxCell(id) {
+  return `<input type="checkbox" class="form-check-input" data-select value="${id}">`;
+}
+
+function ambitoLabel(item) {
+  return item.nombre_ambito || '—';
+}
+
+function isVigenteHoy(item, today) {
+  const desde = item.vigencia_desde || today;
+  const hasta = item.vigencia_hasta || today;
+  return desde <= today && hasta >= today;
+}
+
+function overlapsRange(item, desde, hasta) {
+  if (!desde && !hasta) return true;
+  const startA = item.vigencia_desde || '0000-00-00';
+  const endA = item.vigencia_hasta || '9999-12-31';
+  const startB = desde || '0000-00-00';
+  const endB = hasta || '9999-12-31';
+  return startA <= endB && startB <= endA;
+}
+
+function rangesOverlap(desdeA, hastaA, desdeB, hastaB) {
+  const startA = desdeA || '0000-00-00';
+  const endA = hastaA || '9999-12-31';
+  const startB = desdeB || '0000-00-00';
+  const endB = hastaB || '9999-12-31';
+  return startA <= endB && startB <= endA;
+}
+
+function paginate(items, paginator) {
+  const start = (paginator.page - 1) * paginator.perPage;
+  return items.slice(start, start + paginator.perPage);
+}
+
+function paginationTemplate({ page, perPage, total }) {
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  let html = '<nav><ul class="pagination pagination-sm mb-0">';
+  for (let p = 1; p <= totalPages; p += 1) {
+    html += `<li class="page-item ${p === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${p}">${p}</a></li>`;
+  }
+  html += '</ul></nav>';
+  return html;
+}
+
+function sortByDefaultOrder(items) {
+  const today = new Date().toISOString().slice(0, 10);
+  return [...items].sort((a, b) => {
+    const score = (item) => {
+      if (isVigenteHoy(item, today)) return 0;
+      if (item.vigencia_desde && item.vigencia_desde > today) return 1;
+      return 2;
+    };
+    const diffScore = score(a) - score(b);
+    if (diffScore !== 0) return diffScore;
+    const dateA = a.vigencia_desde || '9999-12-31';
+    const dateB = b.vigencia_desde || '9999-12-31';
+    return dateA.localeCompare(dateB);
+  });
+}
+
+function attachRelativeTooltip(node, date) {
+  if (!node || !window.bootstrap?.Tooltip) return;
+  const tooltip = window.bootstrap.Tooltip.getOrCreateInstance(node);
+  tooltip.setContent({ '.tooltip-inner': formatExactDate(date) });
+}
+
+function openAuditoria(tipo, id) {
+  window.open(`${API_BASE_URL}/${tipo}/${id}/auditoria`, '_blank');
+}
+
+function setupShortcuts() {
+  document.addEventListener('keydown', (event) => {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+    if (event.key === 'N' || event.key === 'n') {
+      event.preventDefault();
+      if (state.tabs === 'tarifas') {
+        openTarifaForm('create');
+      } else if (state.tabs === 'comisiones') {
+        openComisionForm('create');
+      }
+    }
+    if (event.key === 'E' || event.key === 'e') {
+      event.preventDefault();
+      if (state.tabs === 'tarifas') {
+        exportTarifas(false);
+      } else if (state.tabs === 'comisiones') {
+        exportComisiones(false);
+      }
+    }
+    if (event.key === '/' || event.key === '?') {
+      event.preventDefault();
+      const filters = state.tabs === 'tarifas' ? state.dom.tarifas.filters : state.dom.comisiones.filters;
+      filters?.search?.focus();
+    }
+  });
+}
+
+function getBootstrapModal(element) {
+  if (!element || !window.bootstrap?.Modal) return null;
+  return window.bootstrap.Modal.getOrCreateInstance(element);
+}
+
+async function apiGet(path, params) {
+  const query = params ? `?${new URLSearchParams(params)}` : '';
+  const response = await fetch(`${API_BASE_URL}${path}${query}`, {
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Error de red');
+  return response;
+}
+
+async function apiPost(path, body) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Error de red');
+  return response;
+}
+
+async function apiPut(path, body, extraHeaders = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+    body: JSON.stringify(body),
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Error de red');
+  return response;
+}
+
+async function apiPatch(path, body) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Error de red');
+  return response;
+}
