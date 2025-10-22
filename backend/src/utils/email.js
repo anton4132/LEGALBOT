@@ -111,6 +111,44 @@ const sendPasswordRecoveryCodeEmail = async ({ to, code, nombre, minutosExpiraci
   await sendMail({ to, subject, text, html });
 };
 
+
+const sendEmailVerificationCodeEmail = async ({ to, code, minutosExpiracion }) => {
+  const subject = 'Verifica tu correo electrónico';
+  const expirationText = minutesLabel(minutosExpiracion);
+
+  const textLines = [
+    'Hola,',
+    '',
+    'Estamos verificando que este correo electrónico te pertenece.',
+    `Tu código de verificación es: ${code}`,
+  ];
+
+  if (expirationText) {
+    textLines.push(`Este código vence en ${expirationText}.`);
+  }
+
+  textLines.push('', 'Si no solicitaste este código, puedes ignorar este mensaje.');
+
+  const text = textLines.join('\n');
+
+  const html = `
+    <p>Hola,</p>
+    <p>Estamos verificando que este correo electrónico te pertenece.</p>
+    <p>Tu código de verificación es:</p>
+    <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px;">${code}</p>
+    ${
+      expirationText
+        ? `<p>Este código vence en <strong>${expirationText}</strong>.</p>`
+        : ''
+    }
+    <p>Si no solicitaste este código, puedes ignorar este mensaje.</p>
+  `;
+
+  await sendMail({ to, subject, text, html });
+};
+
 module.exports = {
   sendPasswordRecoveryCodeEmail,
+    sendEmailVerificationCodeEmail,
+
 };

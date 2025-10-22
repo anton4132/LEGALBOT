@@ -240,6 +240,89 @@ class ApiClient {
     throw ApiException(message, statusCode: response.statusCode);
   }
 
+  static Future<void> validateEmailDeliverability({
+    required String correo,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/email/validate');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'correo': correo.trim().toLowerCase()}),
+    );
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      return;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo verificar el correo proporcionado.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<DateTime?> requestEmailVerificationCode({
+    required String correo,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/email/request-code');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'correo': correo.trim().toLowerCase()}),
+    );
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      final expirationRaw = _mapValue(data, 'expiracion');
+      if (expirationRaw is String) {
+        return DateTime.tryParse(expirationRaw);
+      }
+      return null;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo enviar el código de verificación.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
+  static Future<void> verifyEmailVerificationCode({
+    required String correo,
+    required String codigo,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/auth/email/verify-code');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'correo': correo.trim().toLowerCase(),
+        'codigo': codigo.trim(),
+      }),
+    );
+
+    final decoded = _tryDecodeJson(response.body);
+    final data = _asJsonMap(decoded);
+
+    final success = _mapValue(data, 'success') == true;
+    if (response.statusCode == 200 && success) {
+      return;
+    }
+
+    final message =
+        data != null && data['message'] is String
+            ? data['message'] as String
+            : 'No se pudo verificar el código proporcionado.';
+    throw ApiException(message, statusCode: response.statusCode);
+  }
+
   static Future<void> validatePasswordRecoveryIdentity({
     required String dni,
     required String correo,

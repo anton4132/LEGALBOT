@@ -4,6 +4,8 @@ const authController = require('../controllers/authController');
 const mobileAuthController = require('../controllers/mobileAuthController');
 
 const passwordRecoveryController = require('../controllers/passwordRecoveryController');
+const emailVerificationController = require('../controllers/emailVerificationController');
+
 const { authenticate } = require('../middleware/auth');
 
 /**
@@ -155,6 +157,10 @@ router.post('/login', authController.login);
  *               $ref: '#/components/schemas/MobileErrorResponse'
  */
 router.post('/mobile-login', mobileAuthController.loginFlutter);
+
+router.post('/email/validate', emailVerificationController.validateDeliverability);
+router.post('/email/request-code', emailVerificationController.requestCode);
+router.post('/email/verify-code', emailVerificationController.verifyCode);
 /**
  * @swagger
  * /auth/password/validate-identity:
