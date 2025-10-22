@@ -9,10 +9,10 @@
   <link rel="stylesheet" href="../assets/css/styles.css">
   
 </head>
-<body>
-  <div class="d-flex">
+<body class="app-shell">
+  <div class="app">
     <!-- Sidebar -->
-    <nav id="sidebar" class="bg-light border-end vh-100 p-3">
+    <nav id="sidebar" class="sidebar bg-light border-end p-3">
       <h4 class="mb-4">LegalBot</h4>
       <ul class="nav nav-pills flex-column">
         <li class="nav-item mb-2"><a class="nav-link" href="/dashboard" id="menu-home">Home</a></li>
@@ -24,13 +24,22 @@
       </ul>
     </nav>
     <!-- Main content -->
-    <div class="flex-grow-1" id="main-content">
-      <header class="d-flex align-items-center bg-white p-2 border-bottom sticky-top">
-        <button class="btn btn-outline-secondary me-3 d-md-none" id="toggle-btn">☰</button>
-        <div class="ms-auto"><div class="dropdown"><a class="btn btn-light dropdown-toggle fw-bold" href="#" data-bs-toggle="dropdown">Admin</a><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item text-danger" href="#">Cerrar sesión</a></li></ul></div></div>
+    <div class="main" id="main-content">
+      <header class="topbar">
+        <div class="d-flex align-items-center bg-white p-2 border-bottom flex-grow-1">
+          <button class="btn btn-outline-secondary me-3 d-md-none" id="toggle-btn">☰</button>
+          <div class="ms-auto">
+            <div class="dropdown">
+              <a class="btn btn-light dropdown-toggle fw-bold" href="#" data-bs-toggle="dropdown">Admin</a>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item text-danger" href="#">Cerrar sesión</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </header>
-      
-      <main class="p-4">
+
+      <main class="contenido p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h3 class="fw-bold">Gestión de Usuarios</h3>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#userModal" onclick="openUserModal()"><i class="bi bi-plus-circle"></i> Nuevo Usuario</button>

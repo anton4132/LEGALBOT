@@ -1,4 +1,3 @@
-
 const API_BASE_URL =
   (typeof window !== 'undefined' && window.LEGALBOT_ADMIN_API_BASE_URL) || '/api';
 
@@ -44,7 +43,6 @@ const state = {
       vigenciaHasta: '',
       search: '',
     },
-    selection: new Set(),
     sort: { field: 'vigencia', direction: 'asc' },
     paginator: { page: 1, perPage: 10, total: 0 },
     form: { mode: 'create', data: null },
@@ -61,13 +59,11 @@ const state = {
       vigenciaHasta: '',
       search: '',
     },
-    selection: new Set(),
     sort: { field: 'vigencia', direction: 'asc' },
     paginator: { page: 1, perPage: 10, total: 0 },
     form: { mode: 'create', data: null },
   },
   simulator: {
-    panelOpen: false,
     loading: false,
     result: null,
     inputs: {
@@ -91,7 +87,644 @@ const state = {
  * ------------------------------
  */
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  setupLayout();
+  init();
+});
+
+function setupLayout() {
+  const main = document.querySelector('main');
+  if (!main || document.getElementById('tarifas-layout')) return;
+
+  const layout = `
+    <div class="d-flex flex-column gap-4" id="tarifas-layout">
+      <section class="card shadow-sm border-0">
+        <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+          <div>
+            <h1 class="fw-bold mb-1">Tarifas &amp; Comisiones</h1>
+            <p class="text-muted mb-0">Administra las reglas económicas, comisiones e impuestos de LegalBot.</p>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-outline-primary" id="tarifas-simulator-btn">Simulador de reglas</button>
+            <button type="button" class="btn btn-outline-secondary" id="tarifas-export-btn">Exportar tarifas</button>
+            <button type="button" class="btn btn-primary" id="tarifas-new-btn">Nueva tarifa</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card shadow-sm border-0">
+        <div class="card-body d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-primary" data-lb-tab="tarifas">Tarifas</button>
+          <button type="button" class="btn btn-outline-primary" data-lb-tab="comisiones">Comisiones</button>
+          <button type="button" class="btn btn-outline-primary" data-lb-tab="impuestos">Impuestos</button>
+          <button type="button" class="btn btn-outline-primary" data-lb-tab="econconfig">Config. económica</button>
+        </div>
+      </section>
+
+      <div id="tarifas-help-banner"></div>
+
+      <div data-lb-view="tarifas" class="d-flex flex-column gap-4">
+        <section class="card shadow-sm border-0">
+          <div class="card-body">
+            <h5 class="card-title mb-3">Filtros de tarifas</h5>
+            <div class="row g-3 align-items-end">
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="tarifas-filter-ambito" class="form-label">Ámbito</label>
+                <select id="tarifas-filter-ambito" class="form-select">
+                  <option value="servicio">Servicio</option>
+                  <option value="plan">Plan</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="tarifas-filter-nombre" class="form-label">Servicio / plan</label>
+                <input type="text" class="form-control" id="tarifas-filter-nombre" placeholder="Nombre o ID" />
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="tarifas-filter-estado" class="form-label">Estado</label>
+                <select id="tarifas-filter-estado" class="form-select">
+                  <option value="activas">Activas</option>
+                  <option value="inactivas">Inactivas</option>
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="tarifas-filter-vigencia" class="form-label">Vigencia</label>
+                <select id="tarifas-filter-vigencia" class="form-select">
+                  <option value="hoy">Vigentes hoy</option>
+                  <option value="rango">Por rango</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="tarifas-filter-desde" class="form-label">Desde</label>
+                <input type="date" class="form-control" id="tarifas-filter-desde" />
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="tarifas-filter-hasta" class="form-label">Hasta</label>
+                <input type="date" class="form-control" id="tarifas-filter-hasta" />
+              </div>
+              <div class="col-12 col-md-6 col-xl-4">
+                <label for="tarifas-filter-search" class="form-label">Búsqueda rápida</label>
+                <input type="text" class="form-control" id="tarifas-filter-search" placeholder="Código o descripción" />
+              </div>
+              <div class="col-12 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary" id="tarifas-filter-reset">Limpiar</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card shadow-sm border-0">
+          <div class="card-header bg-white border-0">
+            <div>
+              <h5 class="card-title mb-0">Listado de tarifas</h5>
+              <p class="text-muted small mb-0">Gestiona reglas por servicio o plan.</p>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Código</th>
+                    <th>Ámbito</th>
+                    <th>Importe</th>
+                    <th>Tipo cálculo</th>
+                    <th>Vigencia</th>
+                    <th>Estado</th>
+                    <th>Actualizado</th>
+                    <th class="text-end">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tarifas-table-body">
+                  <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">Cargando tarifas...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="tarifas-empty-state" class="alert alert-info text-center m-3 d-none">
+              No se encontraron tarifas con los filtros aplicados.
+            </div>
+          </div>
+          <div class="card-footer bg-white border-0">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+              <div class="d-flex align-items-center gap-2">
+                <label for="tarifas-rows-per-page" class="form-label mb-0">Filas por página</label>
+                <select id="tarifas-rows-per-page" class="form-select form-select-sm" style="max-width: 120px;">
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div id="tarifas-pagination" class="d-flex flex-wrap gap-2 justify-content-md-end"></div>
+            </div>
+          </div>
+        </section>
+
+        
+      </div>
+
+      <div data-lb-view="comisiones" class="d-none d-flex flex-column gap-4">
+        <section class="card shadow-sm border-0">
+          <div class="card-body">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+              <div>
+                <h5 class="card-title mb-0">Gestión de comisiones</h5>
+                <p class="text-muted small mb-0">Define porcentajes por servicio, plan y rol.</p>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" id="comisiones-export-btn">Exportar comisiones</button>
+                <button type="button" class="btn btn-primary" id="comisiones-new-btn">Nueva comisión</button>
+              </div>
+            </div>
+            <div class="row g-3 align-items-end">
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="comisiones-filter-ambito" class="form-label">Ámbito</label>
+                <select id="comisiones-filter-ambito" class="form-select">
+                  <option value="servicio">Servicio</option>
+                  <option value="plan">Plan</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="comisiones-filter-nombre" class="form-label">Servicio / plan</label>
+                <input type="text" id="comisiones-filter-nombre" class="form-control" placeholder="Nombre o ID" />
+              </div>
+              <div class="col-12 col-md-4 col-xl-2">
+                <label for="comisiones-filter-rol" class="form-label">Rol</label>
+                <select id="comisiones-filter-rol" class="form-select">
+                  <option value="">Todos</option>
+                  <option value="cliente">Cliente</option>
+                  <option value="abogado">Abogado</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-2">
+                <label for="comisiones-filter-estado" class="form-label">Estado</label>
+                <select id="comisiones-filter-estado" class="form-select">
+                  <option value="activas">Activas</option>
+                  <option value="inactivas">Inactivas</option>
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-2">
+                <label for="comisiones-filter-vigencia" class="form-label">Vigencia</label>
+                <select id="comisiones-filter-vigencia" class="form-select">
+                  <option value="hoy">Vigentes hoy</option>
+                  <option value="rango">Por rango</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="comisiones-filter-desde" class="form-label">Desde</label>
+                <input type="date" id="comisiones-filter-desde" class="form-control" />
+              </div>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="comisiones-filter-hasta" class="form-label">Hasta</label>
+                <input type="date" id="comisiones-filter-hasta" class="form-control" />
+              </div>
+              <div class="col-12 col-md-6 col-xl-4">
+                <label for="comisiones-filter-search" class="form-label">Búsqueda rápida</label>
+                <input type="text" id="comisiones-filter-search" class="form-control" placeholder="Código o descripción" />
+              </div>
+              <div class="col-12 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary" id="comisiones-filter-reset">Limpiar</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card shadow-sm border-0">
+          <div class="card-header bg-white border-0">
+            <div>
+              <h5 class="card-title mb-0">Listado de comisiones</h5>
+              <p class="text-muted small mb-0">Controla las comisiones aplicadas a cada rol.</p>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Código</th>
+                    <th>Ámbito</th>
+                    <th>Rol</th>
+                    <th>Porcentaje</th>
+                    <th>Vigencia</th>
+                    <th>Estado</th>
+                    <th>Actualizado</th>
+                    <th class="text-end">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="comisiones-table-body">
+                  <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">Cargando comisiones...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="comisiones-empty-state" class="alert alert-info text-center m-3 d-none">
+              No se encontraron comisiones con los filtros aplicados.
+            </div>
+          </div>
+          <div class="card-footer bg-white border-0">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+              <div class="d-flex align-items-center gap-2">
+                <label for="comisiones-rows-per-page" class="form-label mb-0">Filas por página</label>
+                <select id="comisiones-rows-per-page" class="form-select form-select-sm" style="max-width: 120px;">
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div id="comisiones-pagination" class="d-flex flex-wrap gap-2 justify-content-md-end"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div data-lb-view="impuestos" class="d-none">
+        <div class="row g-4">
+          <div class="col-12 col-xl-7">
+            <section class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-white border-0 d-flex flex-column flex-md-row gap-3 justify-content-between align-items-md-center">
+                <div>
+                  <h5 class="card-title mb-0">Lista de impuestos</h5>
+                  <small class="text-muted">Vigencias, porcentajes y estado actual.</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <label for="tc-impuestos-estado" class="form-label mb-0">Estado</label>
+                  <select id="tc-impuestos-estado" class="form-select form-select-sm" style="min-width: 160px;">
+                    <option value="">Todos</option>
+                    <option value="true">Activos</option>
+                    <option value="false">Inactivos</option>
+                  </select>
+                </div>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="tc-impuestos-table">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>%</th>
+                        <th>Incluido</th>
+                        <th>Vigencia</th>
+                        <th>Activo</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tc-impuestos-table-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div class="col-12 col-xl-5">
+            <section class="card shadow-sm border-0 h-100">
+              <div class="card-body">
+                <h5 class="card-title">Registrar / editar impuesto</h5>
+                <p class="text-muted small">Validamos automáticamente solapes de vigencia para impuestos activos.</p>
+                <form id="tc-impuestos-form" class="row g-3" autocomplete="off">
+                  <input type="hidden" id="tc-impuestos-id" />
+                  <div class="col-12">
+                    <label for="tc-impuestos-codigo" class="form-label">Código <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="tc-impuestos-codigo" required />
+                  </div>
+                  <div class="col-12">
+                    <label for="tc-impuestos-nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="tc-impuestos-nombre" required />
+                  </div>
+                  <div class="col-12 col-sm-6">
+                    <label for="tc-impuestos-porcentaje" class="form-label">Porcentaje (%) <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="tc-impuestos-porcentaje" min="0" step="0.01" required />
+                  </div>
+                  <div class="col-12 col-sm-6">
+                    <div class="form-check form-switch mt-4">
+                      <input class="form-check-input" type="checkbox" role="switch" id="tc-impuestos-incluido" />
+                      <label class="form-check-label" for="tc-impuestos-incluido">Incluido en precio</label>
+                    </div>
+                  </div>
+                  <div class="col-12 col-sm-6">
+                    <label for="tc-impuestos-vigencia-desde" class="form-label">Vigencia desde</label>
+                    <input type="date" class="form-control" id="tc-impuestos-vigencia-desde" />
+                  </div>
+                  <div class="col-12 col-sm-6">
+                    <label for="tc-impuestos-vigencia-hasta" class="form-label">Vigencia hasta</label>
+                    <input type="date" class="form-control" id="tc-impuestos-vigencia-hasta" />
+                  </div>
+                  <div class="col-12">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" role="switch" id="tc-impuestos-activo" checked />
+                      <label class="form-check-label" for="tc-impuestos-activo">Activo</label>
+                    </div>
+                  </div>
+                  <div class="col-12 d-flex justify-content-between gap-2">
+                    <button type="button" class="btn btn-outline-secondary" id="tc-impuestos-reset">Limpiar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <div data-lb-view="econconfig" class="d-none">
+        <section class="card shadow-sm border-0">
+          <div class="card-body">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+              <div>
+                <h5 class="card-title mb-0">Configuración económica</h5>
+                <p class="text-muted small mb-0">Define moneda por defecto, decimales y reglas de redondeo.</p>
+              </div>
+              <div class="text-muted small" id="tc-econfig-actualizado">&nbsp;</div>
+            </div>
+            <form id="tc-econfig-form" class="row g-3" autocomplete="off">
+              <div class="col-12 col-md-4">
+                <label for="tc-econfig-moneda" class="form-label">Moneda por defecto <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="tc-econfig-moneda" maxlength="3" required />
+              </div>
+              <div class="col-12 col-md-4">
+                <label for="tc-econfig-decimales" class="form-label">Decimales <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="tc-econfig-decimales" min="0" max="6" required />
+              </div>
+              <div class="col-12 col-md-4">
+                <label for="tc-econfig-regla" class="form-label">Regla de redondeo</label>
+                <select id="tc-econfig-regla" class="form-select">
+                  <option value="dos_decimales">Dos decimales</option>
+                  <option value="a_0_05">Múltiplo 0.05</option>
+                  <option value="entero_superior">Entero superior</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" role="switch" id="tc-econfig-activo" checked />
+                  <label class="form-check-label" for="tc-econfig-activo">Configuración activa</label>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <label for="tc-econfig-preview" class="form-label">Previsualización de redondeo</label>
+                <div class="input-group">
+                  <input type="number" class="form-control" id="tc-econfig-preview" step="0.01" placeholder="Importe base" />
+                  <span class="input-group-text" id="tc-econfig-preview-result">—</span>
+                </div>
+                <small class="text-muted">Introduce un importe para ver cómo se aplica la regla actual.</small>
+              </div>
+              <div class="col-12 d-flex justify-content-end gap-2">
+                <button type="submit" class="btn btn-primary">Guardar cambios</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  main.innerHTML = layout;
+
+  if (!document.getElementById('tarifas-form-modal')) {
+    const modals = `
+      <div class="modal fade" id="tarifas-form-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" data-modal-title>Nueva tarifa</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form id="tarifas-form">
+              <div class="modal-body">
+                <div class="row g-3">
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-codigo" class="form-label">Código <span class="text-danger">*</span></label>
+                    <input type="text" id="tarifas-form-codigo" name="codigo" class="form-control" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-ambito" class="form-label">Ámbito</label>
+                    <select id="tarifas-form-ambito" name="ambito" class="form-select">
+                      <option value="servicio">Servicio</option>
+                      <option value="plan">Plan</option>
+                    </select>
+                  </div>
+                  <div class="col-12">
+                    <label for="tarifas-form-referencia" class="form-label">Referencia (ID)</label>
+                    <input type="text" id="tarifas-form-referencia" name="referencia_id" class="form-control" placeholder="ID del servicio o plan" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-valor" class="form-label">Valor</label>
+                    <input type="number" id="tarifas-form-valor" name="valor" class="form-control" min="0" step="0.01" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-moneda" class="form-label">Moneda</label>
+                    <input type="text" id="tarifas-form-moneda" name="moneda" class="form-control" maxlength="3" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-tipo" class="form-label">Tipo de cálculo</label>
+                    <select id="tarifas-form-tipo" name="tipo_calculo" class="form-select">
+                      <option value="fijo">Fijo</option>
+                      <option value="consumo_ia">Consumo IA</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch mt-md-4 pt-md-2">
+                      <input class="form-check-input" type="checkbox" id="tarifas-form-incluye-impuesto" name="incluye_impuesto" checked />
+                      <label class="form-check-label" for="tarifas-form-incluye-impuesto">Incluye impuesto</label>
+                    </div>
+                  </div>
+                  <div class="col-12" data-json-group>
+                    <label for="tarifas-form-parametros" class="form-label">Parámetros (JSON)</label>
+                    <textarea id="tarifas-form-parametros" name="parametros" class="form-control" rows="5" spellcheck="false" placeholder="{ }"></textarea>
+                    <div class="form-text">Solo requerido para reglas basadas en consumo.</div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-desde" class="form-label">Vigencia desde</label>
+                    <input type="date" id="tarifas-form-desde" name="vigencia_desde" class="form-control" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-hasta" class="form-label">Vigencia hasta</label>
+                    <input type="date" id="tarifas-form-hasta" name="vigencia_hasta" class="form-control" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch mt-md-4 pt-md-2">
+                      <input class="form-check-input" type="checkbox" id="tarifas-form-activo" name="activo" checked />
+                      <label class="form-check-label" for="tarifas-form-activo">Activo</label>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tarifas-form-actualizado" class="form-label">Última actualización</label>
+                    <input type="text" id="tarifas-form-actualizado" class="form-control" name="actualizado_el" readonly />
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar tarifa</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="tarifas-conflict-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Conflicto de vigencia</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              La nueva tarifa se solapa con otra activa. ¿Cómo deseas continuar?
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-conflict-action="cancelar">Cancelar</button>
+              <button type="button" class="btn btn-outline-danger" data-conflict-action="desactivar">Desactivar existente</button>
+              <button type="button" class="btn btn-primary" data-conflict-action="cerrar">Cerrar vigencia anterior</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="simulator-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Simulador de reglas</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              <p class="text-muted">Completa los datos para estimar montos para cliente y abogado.</p>
+              <form id="simulator-form" class="row g-3" autocomplete="off">
+                <div class="col-12 col-md-4">
+                  <label for="simulator-ambito" class="form-label">Ámbito</label>
+                  <select id="simulator-ambito" name="ambito" class="form-select">
+                    <option value="servicio">Servicio</option>
+                    <option value="plan">Plan</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="simulator-referencia" class="form-label">Referencia (ID)</label>
+                  <input type="text" id="simulator-referencia" name="referencia" class="form-control" placeholder="ID del servicio/plan" />
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="simulator-usuario" class="form-label">Usuario ID</label>
+                  <input type="text" id="simulator-usuario" name="usuario_id" class="form-control" placeholder="Opcional" />
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="simulator-fecha" class="form-label">Fecha</label>
+                  <input type="date" id="simulator-fecha" name="fecha" class="form-control" />
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="simulator-consumo" class="form-label">Consumo</label>
+                  <input type="number" id="simulator-consumo" name="consumo" class="form-control" min="0" step="0.01" />
+                </div>
+                <div class="col-12 d-flex justify-content-end">
+                  <button type="submit" class="btn btn-primary">Simular</button>
+                </div>
+              </form>
+              <div id="simulator-loading" class="text-center py-4 d-none">Generando simulación...</div>
+              <div id="simulator-result" class="mt-3"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="comisiones-form-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" data-modal-title>Nueva comisión</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form id="comisiones-form">
+              <div class="modal-body">
+                <div class="row g-3">
+                  <div class="col-12 col-md-6">
+                    <label for="comisiones-form-codigo" class="form-label">Código <span class="text-danger">*</span></label>
+                    <input type="text" id="comisiones-form-codigo" name="codigo" class="form-control" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="comisiones-form-ambito" class="form-label">Ámbito</label>
+                    <select id="comisiones-form-ambito" name="ambito" class="form-select">
+                      <option value="servicio">Servicio</option>
+                      <option value="plan">Plan</option>
+                    </select>
+                  </div>
+                  <div class="col-12">
+                    <label for="comisiones-form-referencia" class="form-label">Referencia (ID)</label>
+                    <input type="text" id="comisiones-form-referencia" name="referencia_id" class="form-control" placeholder="ID del servicio o plan" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="comisiones-form-rol" class="form-label">Rol aplica</label>
+                    <select id="comisiones-form-rol" name="rol_aplica" class="form-select">
+                      <option value="cliente">Cliente</option>
+                      <option value="abogado">Abogado</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="comisiones-form-porcentaje" class="form-label">Porcentaje</label>
+                    <input type="number" id="comisiones-form-porcentaje" name="porcentaje" class="form-control" min="0" step="0.01" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="comisiones-form-desde" class="form-label">Vigencia desde</label>
+                    <input type="date" id="comisiones-form-desde" name="vigencia_desde" class="form-control" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="comisiones-form-hasta" class="form-label">Vigencia hasta</label>
+                    <input type="date" id="comisiones-form-hasta" name="vigencia_hasta" class="form-control" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch mt-md-4 pt-md-2">
+                      <input class="form-check-input" type="checkbox" id="comisiones-form-activo" name="activo" checked />
+                      <label class="form-check-label" for="comisiones-form-activo">Activo</label>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="comisiones-form-actualizado" class="form-label">Última actualización</label>
+                    <input type="text" id="comisiones-form-actualizado" class="form-control" name="actualizado_el" readonly />
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar comisión</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="comisiones-conflict-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Conflicto de comisión</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              La nueva comisión se superpone con otra activa. Elige cómo proceder.
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-conflict-action="cancelar">Cancelar</button>
+              <button type="button" class="btn btn-outline-danger" data-conflict-action="desactivar">Desactivar existente</button>
+              <button type="button" class="btn btn-primary" data-conflict-action="cerrar">Cerrar vigencia anterior</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="tc-impuestos-history-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Historial del impuesto</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="tc-impuestos-history-content"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modals);
+  }
+}
 
 async function init() {
   cacheDom();
@@ -130,8 +763,6 @@ function cacheDom() {
     rowsPerPage: document.getElementById('tarifas-rows-per-page'),
     newButton: document.getElementById('tarifas-new-btn'),
     exportBtn: document.getElementById('tarifas-export-btn'),
-    exportSelectionBtn: document.getElementById('tarifas-export-selection-btn'),
-    actions: document.getElementById('tarifas-mass-actions'),
     conflictModal: document.getElementById('tarifas-conflict-modal'),
     conflictResolveButtons: document.querySelectorAll(
       '#tarifas-conflict-modal [data-conflict-action]'
@@ -158,8 +789,6 @@ function cacheDom() {
     rowsPerPage: document.getElementById('comisiones-rows-per-page'),
     newButton: document.getElementById('comisiones-new-btn'),
     exportBtn: document.getElementById('comisiones-export-btn'),
-    exportSelectionBtn: document.getElementById('comisiones-export-selection-btn'),
-    actions: document.getElementById('comisiones-mass-actions'),
     conflictModal: document.getElementById('comisiones-conflict-modal'),
     conflictResolveButtons: document.querySelectorAll(
       '#comisiones-conflict-modal [data-conflict-action]'
@@ -169,13 +798,23 @@ function cacheDom() {
   };
 
   dom.simulator = {
-    toggle: document.getElementById('simulator-toggle'),
-    close: document.getElementById('simulator-close'),
-    panel: document.getElementById('simulator-panel'),
+    open: document.getElementById('tarifas-simulator-btn'),
+    modal: document.getElementById('simulator-modal'),
     form: document.getElementById('simulator-form'),
     result: document.getElementById('simulator-result'),
     loading: document.getElementById('simulator-loading'),
   };
+
+  if (dom.simulator.modal && window.bootstrap?.Modal) {
+    dom.simulator.modalInstance = window.bootstrap.Modal.getOrCreateInstance(
+      dom.simulator.modal
+    );
+  }
+
+  if (dom.simulator.form?.fecha) {
+    dom.simulator.form.fecha.value =
+      state.simulator.inputs.fecha || new Date().toISOString().slice(0, 10);
+  }
 
   dom.helpBanner = document.getElementById('tarifas-help-banner');
 
@@ -314,10 +953,7 @@ function bindTarifasEvents() {
     openTarifaForm('create');
   });
 
-  tarifas.exportBtn?.addEventListener('click', () => exportTarifas(false));
-  tarifas.exportSelectionBtn?.addEventListener('click', () => exportTarifas(true));
-
-  tarifas.actions?.addEventListener('change', handleTarifaMassAction);
+  tarifas.exportBtn?.addEventListener('click', () => exportTarifas());
 
   if (tarifas.tableBody) {
     tarifas.tableBody.addEventListener('click', handleTarifasTableClick);
@@ -369,7 +1005,6 @@ function renderTarifas() {
   });
 
   renderTarifaPagination();
-  renderTarifaMassActions();
 }
 
 function tarifaRowTemplate(tarifa) {
@@ -378,7 +1013,6 @@ function tarifaRowTemplate(tarifa) {
     : '';
   const chip = statusChip(tarifa);
   return `
-    <td class="text-muted">${checkboxCell(tarifa.id)}</td>
     <td><div class="fw-semibold">${tarifa.codigo}</div><div class="small text-muted">${chip}</div></td>
     <td>
       <div class="fw-semibold">${ambitoLabel(tarifa)}</div>
@@ -472,13 +1106,6 @@ function renderTarifaPagination() {
   });
 }
 
-function renderTarifaMassActions() {
-  const select = state.dom.tarifas.actions;
-  if (!select) return;
-  select.disabled = state.tarifas.selection.size === 0;
-  select.value = '';
-}
-
 function handleTarifasTableClick(event) {
   const tr = event.target.closest('tr');
   if (!tr) return;
@@ -487,8 +1114,6 @@ function handleTarifasTableClick(event) {
     openTarifaForm('edit', id);
   } else if (event.target.matches('button[data-action="audit"]')) {
     openAuditoria('tarifas', id);
-  } else if (event.target.matches('input[type="checkbox"][data-select]')) {
-    toggleTarifaSelection(id, event.target.checked);
   }
 }
 
@@ -500,36 +1125,6 @@ function handleTarifasTableChange(event) {
     event.preventDefault();
     attemptToggleTarifa(id, event.target.checked);
   }
-}
-
-function toggleTarifaSelection(id, checked) {
-  if (checked) {
-    state.tarifas.selection.add(id);
-  } else {
-    state.tarifas.selection.delete(id);
-  }
-  renderTarifaMassActions();
-}
-
-function handleTarifaMassAction(event) {
-  const action = event.target.value;
-  if (!action) return;
-  const ids = Array.from(state.tarifas.selection);
-  switch (action) {
-    case 'activar':
-    case 'desactivar':
-      bulkToggleTarifas(ids, action === 'activar');
-      break;
-    case 'cerrar':
-      bulkCloseTarifas(ids);
-      break;
-    case 'exportar':
-      exportTarifas(true);
-      break;
-    default:
-      break;
-  }
-  event.target.value = '';
 }
 
 function openTarifaForm(mode, id) {
@@ -742,32 +1337,8 @@ async function attemptToggleTarifa(id, nextState) {
   }
 }
 
-async function bulkToggleTarifas(ids, nextState) {
-  await Promise.all(ids.map((id) => apiPatch(`/tarifas/${id}`, { activo: nextState })));
-  state.tarifas.items.forEach((item) => {
-    if (ids.includes(item.id)) item.activo = nextState;
-  });
-  state.tarifas.selection.clear();
-  renderTarifas();
-}
-
-async function bulkCloseTarifas(ids) {
-  const cierre = prompt('Cerrar vigencia al (YYYY-MM-DD):');
-  if (!cierre) return;
-  await Promise.all(ids.map((id) => apiPatch(`/tarifas/${id}`, { vigencia_hasta: cierre })));
-  state.tarifas.items.forEach((item) => {
-    if (ids.includes(item.id)) item.vigencia_hasta = cierre;
-  });
-  state.tarifas.selection.clear();
-  renderTarifas();
-}
-
-function exportTarifas(selectionOnly) {
-  const ids = selectionOnly ? Array.from(state.tarifas.selection) : [];
+function exportTarifas() {
   const params = new URLSearchParams({ ...state.tarifas.filters });
-  if (selectionOnly && ids.length) {
-    params.set('ids', ids.join(','));
-  }
   const url = `${API_BASE_URL}/tarifas/export?${params.toString()}`;
   window.open(url, '_blank');
 }
@@ -803,9 +1374,7 @@ function bindComisionesEvents() {
   });
 
   comisiones.newButton?.addEventListener('click', () => openComisionForm('create'));
-  comisiones.exportBtn?.addEventListener('click', () => exportComisiones(false));
-  comisiones.exportSelectionBtn?.addEventListener('click', () => exportComisiones(true));
-  comisiones.actions?.addEventListener('change', handleComisionMassAction);
+  comisiones.exportBtn?.addEventListener('click', () => exportComisiones());
 
   if (comisiones.tableBody) {
     comisiones.tableBody.addEventListener('click', handleComisionesTableClick);
@@ -850,7 +1419,6 @@ function renderComisiones() {
   });
 
   renderComisionPagination();
-  renderComisionMassActions();
 }
 
 function comisionRowTemplate(comision) {
@@ -859,7 +1427,6 @@ function comisionRowTemplate(comision) {
     comision.rol_aplica === 'abogado' ? 'Abogado' : 'Cliente'
   }</span>`;
   return `
-    <td class="text-muted">${checkboxCell(comision.id)}</td>
     <td><div class="fw-semibold">${comision.codigo}</div><div class="small text-muted">${chip}</div></td>
     <td>
       <div class="fw-semibold">${ambitoLabel(comision)}</div>
@@ -952,13 +1519,6 @@ function renderComisionPagination() {
   });
 }
 
-function renderComisionMassActions() {
-  const select = state.dom.comisiones.actions;
-  if (!select) return;
-  select.disabled = state.comisiones.selection.size === 0;
-  select.value = '';
-}
-
 function handleComisionesTableClick(event) {
   const tr = event.target.closest('tr');
   if (!tr) return;
@@ -967,8 +1527,6 @@ function handleComisionesTableClick(event) {
     openComisionForm('edit', id);
   } else if (event.target.matches('button[data-action="audit"]')) {
     openAuditoria('comisiones', id);
-  } else if (event.target.matches('input[type="checkbox"][data-select]')) {
-    toggleComisionSelection(id, event.target.checked);
   }
 }
 
@@ -980,36 +1538,6 @@ function handleComisionesTableChange(event) {
     event.preventDefault();
     attemptToggleComision(id, event.target.checked);
   }
-}
-
-function toggleComisionSelection(id, checked) {
-  if (checked) {
-    state.comisiones.selection.add(id);
-  } else {
-    state.comisiones.selection.delete(id);
-  }
-  renderComisionMassActions();
-}
-
-function handleComisionMassAction(event) {
-  const action = event.target.value;
-  if (!action) return;
-  const ids = Array.from(state.comisiones.selection);
-  switch (action) {
-    case 'activar':
-    case 'desactivar':
-      bulkToggleComisiones(ids, action === 'activar');
-      break;
-    case 'cerrar':
-      bulkCloseComisiones(ids);
-      break;
-    case 'exportar':
-      exportComisiones(true);
-      break;
-    default:
-      break;
-  }
-  event.target.value = '';
 }
 
 function openComisionForm(mode, id) {
@@ -1183,32 +1711,8 @@ async function attemptToggleComision(id, nextState) {
   }
 }
 
-async function bulkToggleComisiones(ids, nextState) {
-  await Promise.all(ids.map((id) => apiPatch(`/comisiones/${id}`, { activo: nextState })));
-  state.comisiones.items.forEach((item) => {
-    if (ids.includes(item.id)) item.activo = nextState;
-  });
-  state.comisiones.selection.clear();
-  renderComisiones();
-}
-
-async function bulkCloseComisiones(ids) {
-  const cierre = prompt('Cerrar vigencia al (YYYY-MM-DD):');
-  if (!cierre) return;
-  await Promise.all(ids.map((id) => apiPatch(`/comisiones/${id}`, { vigencia_hasta: cierre })));
-  state.comisiones.items.forEach((item) => {
-    if (ids.includes(item.id)) item.vigencia_hasta = cierre;
-  });
-  state.comisiones.selection.clear();
-  renderComisiones();
-}
-
-function exportComisiones(selectionOnly) {
-  const ids = selectionOnly ? Array.from(state.comisiones.selection) : [];
+function exportComisiones() {
   const params = new URLSearchParams({ ...state.comisiones.filters });
-  if (selectionOnly && ids.length) {
-    params.set('ids', ids.join(','));
-  }
   const url = `${API_BASE_URL}/comisiones/export?${params.toString()}`;
   window.open(url, '_blank');
 }
@@ -1224,21 +1728,38 @@ function bindSimulatorEvents() {
   const { simulator } = state.dom;
   if (!simulator) return;
 
-  simulator.toggle?.addEventListener('click', () => toggleSimulator(true));
-  simulator.close?.addEventListener('click', () => toggleSimulator(false));
-  simulator.form?.addEventListener('submit', submitSimulator);
-}
+  simulator.open?.addEventListener('click', () => {
+    simulator.modalInstance?.show();
+    renderSimulator();
+  });
 
-function toggleSimulator(open) {
-  state.simulator.panelOpen = open;
-  renderSimulator();
+  simulator.modal?.addEventListener('shown.bs.modal', () => {
+    if (simulator.form) {
+      const inputs = state.simulator.inputs || {};
+      simulator.form.ambito.value = inputs.ambito || 'servicio';
+      simulator.form.referencia.value = inputs.referencia || '';
+      simulator.form.usuario_id.value = inputs.usuarioId || '';
+      simulator.form.fecha.value =
+        inputs.fecha || new Date().toISOString().slice(0, 10);
+      simulator.form.consumo.value =
+        typeof inputs.consumo === 'number' ? inputs.consumo : '';
+    }
+    renderSimulator();
+    simulator.form?.referencia?.focus();
+  });
+
+  simulator.modal?.addEventListener('hidden.bs.modal', () => {
+    state.simulator.loading = false;
+    state.simulator.result = null;
+    renderSimulator();
+  });
+
+  simulator.form?.addEventListener('submit', submitSimulator);
 }
 
 function renderSimulator() {
   const { simulator } = state.dom;
-  if (!simulator?.panel) return;
-  simulator.panel.classList.toggle('d-none', !state.simulator.panelOpen);
-  if (!state.simulator.panelOpen) return;
+  if (!simulator?.result) return;
 
   if (state.simulator.loading) {
     simulator.loading?.classList.remove('d-none');
@@ -1262,6 +1783,14 @@ async function submitSimulator(event) {
     usuario_id: form.usuario_id.value,
     fecha: form.fecha.value || new Date().toISOString().slice(0, 10),
     consumo: Number(form.consumo.value) || 0,
+  };
+
+  state.simulator.inputs = {
+    ambito: payload.ambito,
+    referencia: payload.referencia,
+    usuarioId: payload.usuario_id,
+    fecha: payload.fecha,
+    consumo: payload.consumo,
   };
 
   try {
@@ -1729,10 +2258,6 @@ function formatRelative(date) {
   }
   const years = Math.floor(diff / 31557600);
   return `hace ${years} ${years === 1 ? 'año' : 'años'}`;
-}
-
-function checkboxCell(id) {
-  return `<input type="checkbox" class="form-check-input" data-select value="${id}">`;
 }
 
 function ambitoLabel(item) {

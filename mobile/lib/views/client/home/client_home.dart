@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 import '../../../constants/colors.dart';
 import '../../../models/lawyer_application.dart';
@@ -29,17 +33,26 @@ class ClientHome extends StatefulWidget {
 enum _ClientHomeView { dashboard, settings }
 
 class _ClientHomeState extends State<ClientHome> {
+  static const String _apiBaseUrl = 'http://localhost:3000/api';
   final TextEditingController _consultationController = TextEditingController();
   bool _isRecording = false;
   bool _isSwitchingAccount = false;
   _ClientHomeView _activeView = _ClientHomeView.dashboard;
   ClientSettingsSubsection _activeSettingsSubsection =
       ClientSettingsSubsection.overview;
+  bool _isLoadingCatalog = false;
+  String? _catalogError;
+  List<_ServicePlanCatalogItem> _catalogItems = const [];
+
+  final DateFormat _dateFormatter = DateFormat('dd/MM/yyyy');
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _refreshApplicationStatus(),
+      (_) {
+        _refreshApplicationStatus();
+        _loadServicePlanCatalog();
+      },
     );
   }
 
@@ -72,6 +85,173 @@ class _ClientHomeState extends State<ClientHome> {
     } catch (_) {
       // Ignorar fallos silenciosamente; el usuario puede actualizar manualmente en la pantalla de postulación
     }
+  }
+
+  Future<void> _loadServicePlanCatalog() async {
+    setState(() {
+      _isLoadingCatalog = true;
+      _catalogError = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        _fetchServices(),
+        _fetchPlans(),
+        _fetchTariffRules(),
+      ]);
+
+      final services = results[0] as List<Map<String, dynamic>>;
+      final plans = results[1] as List<Map<String, dynamic>>;
+      final tariffs = results[2] as List<_TariffRule>;
+
+      final items = <_ServicePlanCatalogItem>[];
+      for (final service in services) {
+        final item =
+            _ServicePlanCatalogItem.fromService(service, tariffs: tariffs);
+        if (item.isActive) {
+          items.add(item);
+        }
+      }
+      for (final plan in plans) {
+        final item = _ServicePlanCatalogItem.fromPlan(plan, tariffs: tariffs);
+        if (item.isActive) {
+          items.add(item);
+        }
+      }
+
+      items.sort((a, b) {
+        final typeComparison = a.type.index.compareTo(b.type.index);
+        if (typeComparison != 0) {
+          return typeComparison;
+        }
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _catalogItems = items;
+      });
+    } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _catalogError = error.message;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _catalogError = 'No se pudieron cargar los servicios y planes.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingCatalog = false;
+        });
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchServices() async {
+    final json = await _getJson('/services?estado=true');
+    if (json is List) {
+      return json.whereType<Map<String, dynamic>>().toList();
+    }
+    if (json is Map<String, dynamic>) {
+      final services = json['services'];
+      if (services is List) {
+        return services.whereType<Map<String, dynamic>>().toList();
+      }
+    }
+    return const [];
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchPlans() async {
+    final json = await _getJson('/plans');
+    if (json is List) {
+      return json.whereType<Map<String, dynamic>>().toList();
+    }
+    if (json is Map<String, dynamic>) {
+      final plans = json['plans'];
+      if (plans is List) {
+        return plans.whereType<Map<String, dynamic>>().toList();
+      }
+    }
+    return const [];
+  }
+
+  Future<List<_TariffRule>> _fetchTariffRules() async {
+    final json = await _getJson('/tarifas?per_page=200&activo=true&vigencia=vigentes');
+    final List<_TariffRule> rules = [];
+    if (json is Map<String, dynamic>) {
+      final items = json['items'];
+      if (items is List) {
+        for (final item in items) {
+          if (item is Map<String, dynamic>) {
+            final rule = _TariffRule.fromJson(item);
+            if (rule.isActive) {
+              rules.add(rule);
+            }
+          }
+        }
+      }
+    } else if (json is List) {
+      for (final item in json) {
+        if (item is Map<String, dynamic>) {
+          final rule = _TariffRule.fromJson(item);
+          if (rule.isActive) {
+            rules.add(rule);
+          }
+        }
+      }
+    }
+    return rules;
+  }
+
+  Future<Object?> _getJson(String path) async {
+    final session = SessionService.instance.session;
+    final headers = <String, String>{'Accept': 'application/json'};
+    if (session != null) {
+      headers['Authorization'] = 'Bearer ${session.token}';
+    }
+
+    final uri = Uri.parse('$_apiBaseUrl$path');
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 401) {
+      final message = _extractMessage(response.body);
+      throw UnauthorizedException(message);
+    }
+    if (response.statusCode >= 400) {
+      throw ApiException(
+        _extractMessage(response.body) ??
+            'Error ${response.statusCode} al consultar $path',
+        statusCode: response.statusCode,
+      );
+    }
+    if (response.body.isEmpty) {
+      return null;
+    }
+    try {
+      return jsonDecode(response.body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _extractMessage(String body) {
+    if (body.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final message = decoded['message'];
+        if (message is String && message.trim().isNotEmpty) {
+          return message.trim();
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 
   void _handleSendConsultation() {
@@ -246,6 +426,317 @@ class _ClientHomeState extends State<ClientHome> {
         return null;
     }
   }
+
+  Widget _buildServicePlanSection() {
+    if (_isLoadingCatalog) {
+      return ShadowCard(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            SizedBox(
+              height: 22,
+              width: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Cargando servicios y planes...',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.text2Color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_catalogError != null) {
+      return ShadowCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(
+                  Icons.error_outline,
+                  color: AppColors.text3Color,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'No se pudo cargar el catálogo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: AppColors.buttonColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _catalogError!,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.text2Color,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _loadServicePlanCatalog,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reintentar'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_catalogItems.isEmpty) {
+      return ShadowCard(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: const [
+            Icon(
+              Icons.info_outline,
+              color: AppColors.button2Color,
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'No hay servicios ni planes activos registrados por el momento.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.text2Color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (int i = 0; i < _catalogItems.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i == _catalogItems.length - 1 ? 0 : 12),
+            child: _buildCatalogCard(_catalogItems[i]),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCatalogCard(_ServicePlanCatalogItem item) {
+    final icon = item.type == _CatalogItemType.service
+        ? Icons.miscellaneous_services
+        : Icons.workspace_premium;
+    final typeLabel = item.type == _CatalogItemType.service ? 'Servicio' : 'Plan';
+    final accentColor =
+        item.type == _CatalogItemType.service ? AppColors.button2Color : AppColors.tabColor;
+
+    return ShadowCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                icon,
+                color: accentColor,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.buttonColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _buildInfoBadge(typeLabel, color: accentColor),
+                        if (item.identifierLabel != null) ...[
+                          const SizedBox(width: 8),
+                          _buildInfoBadge(item.identifierLabel!),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if ((item.description ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              item.description!.trim(),
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: AppColors.text2Color,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Reglas de tarifa',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: accentColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildTariffRulesList(item.tariffs),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTariffRulesList(List<_TariffRule> rules) {
+    if (rules.isEmpty) {
+      return const Text(
+        'Sin reglas de tarifa registradas.',
+        style: TextStyle(
+          fontSize: 13,
+          color: AppColors.text2Color,
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (int i = 0; i < rules.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i == rules.length - 1 ? 0 : 10),
+            child: _buildTariffRuleTile(rules[i]),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTariffRuleTile(_TariffRule rule) {
+    final chips = <Widget>[];
+
+    void addChip(String field, String? value) {
+      final text = value?.trim();
+      if (text == null || text.isEmpty) return;
+      chips.add(_buildInfoBadge('$field: $text'));
+    }
+
+    addChip('codigo', rule.codigo);
+    addChip('tipo_calculo', rule.tipoCalculo);
+    if (rule.valor != null) {
+      addChip('valor', rule.valor!.toStringAsFixed(2));
+    }
+    addChip('moneda', rule.moneda);
+    addChip('rol_aplica', rule.rolAplica);
+    addChip('metodo_pago', rule.metodoPago);
+    addChip('ambito_region', rule.ambitoRegion);
+    addChip('incluye_impuesto', rule.incluyeImpuesto.toString());
+    if (rule.prioridad != null) {
+      addChip('prioridad', rule.prioridad.toString());
+    }
+    addChip('vigencia_desde', _formatDate(rule.vigenciaDesde));
+    addChip('vigencia_hasta', _formatDate(rule.vigenciaHasta));
+
+    final parametrosText = _formatParametros(rule.parametros);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.strokeColor),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            rule.descripcion?.trim().isNotEmpty == true
+                ? rule.descripcion!.trim()
+                : 'Regla ${rule.codigo ?? rule.id?.toString() ?? ''}'.trim(),
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.buttonColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (chips.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: chips,
+            ),
+          if (parametrosText != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'parametros: $parametrosText',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text2Color,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBadge(String text, {Color color = AppColors.button2Color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  String? _formatParametros(Map<String, dynamic>? parametros) {
+    if (parametros == null || parametros.isEmpty) {
+      return null;
+    }
+    try {
+      return const JsonEncoder.withIndent('  ').convert(parametros);
+    } catch (_) {
+      return parametros.toString();
+    }
+  }
+
+  String? _formatDate(DateTime? date) {
+    if (date == null) return null;
+    return _dateFormatter.format(date);
+  }
   Widget _buildDashboardContent(
     UserSession? session,
     LawyerApplicationStatus application,
@@ -379,6 +870,10 @@ class _ClientHomeState extends State<ClientHome> {
         ),
         const SizedBox(height: 20),
         const SectionHeader(title: 'Servicios'),
+        const SizedBox(height: 15),
+        _buildServicePlanSection(),
+        const SizedBox(height: 20),
+        const SectionHeader(title: 'Accesos rápidos'),
         const SizedBox(height: 15),
         GridView.count(
           shrinkWrap: true,
@@ -874,3 +1369,206 @@ class _StatusDisplay {
     required this.icon,
   });
 }
+
+enum _CatalogItemType { service, plan }
+
+class _ServicePlanCatalogItem {
+  final int id;
+  final String name;
+  final String? description;
+  final _CatalogItemType type;
+  final bool isActive;
+  final List<_TariffRule> tariffs;
+  final String? identifierLabel;
+
+  const _ServicePlanCatalogItem({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.tariffs,
+    this.description,
+    this.isActive = true,
+    this.identifierLabel,
+  });
+
+  factory _ServicePlanCatalogItem.fromService(
+    Map<String, dynamic> json, {
+    required List<_TariffRule> tariffs,
+  }) {
+    final id = _asInt(json['id']) ?? 0;
+    final codigoRaw = json['codigo'];
+    final codigo = codigoRaw is String && codigoRaw.trim().isNotEmpty
+        ? 'Código: ${codigoRaw.trim()}'
+        : null;
+    final filteredTariffs = tariffs
+        .where((rule) => rule.servicioId == id)
+        .toList()
+      ..sort(_TariffRule.compareByPriority);
+    return _ServicePlanCatalogItem(
+      id: id,
+      name: (json['nombre'] as String?)?.trim() ?? 'Servicio $id',
+      description: json['descripcion'] as String?,
+      type: _CatalogItemType.service,
+      isActive: json['activo'] != false,
+      identifierLabel: codigo,
+      tariffs: List.unmodifiable(filteredTariffs),
+    );
+  }
+
+  factory _ServicePlanCatalogItem.fromPlan(
+    Map<String, dynamic> json, {
+    required List<_TariffRule> tariffs,
+  }) {
+    final id = _asInt(json['id']) ?? 0;
+    final filteredTariffs = tariffs
+        .where((rule) => rule.planId == id)
+        .toList()
+      ..sort(_TariffRule.compareByPriority);
+    return _ServicePlanCatalogItem(
+      id: id,
+      name: (json['nombre'] as String?)?.trim() ?? 'Plan $id',
+      description: json['descripcion'] as String?,
+      type: _CatalogItemType.plan,
+      isActive: json['activo'] != false,
+      identifierLabel: 'ID $id',
+      tariffs: List.unmodifiable(filteredTariffs),
+    );
+  }
+}
+
+class _TariffRule {
+  final int? id;
+  final int? servicioId;
+  final int? planId;
+  final String? codigo;
+  final String? descripcion;
+  final String? rolAplica;
+  final String? moneda;
+  final String? metodoPago;
+  final String? ambitoRegion;
+  final String? tipoCalculo;
+  final double? valor;
+  final Map<String, dynamic>? parametros;
+  final bool incluyeImpuesto;
+  final bool isActive;
+  final DateTime? vigenciaDesde;
+  final DateTime? vigenciaHasta;
+  final int? prioridad;
+
+  const _TariffRule({
+    this.id,
+    this.servicioId,
+    this.planId,
+    this.codigo,
+    this.descripcion,
+    this.rolAplica,
+    this.moneda,
+    this.metodoPago,
+    this.ambitoRegion,
+    this.tipoCalculo,
+    this.valor,
+    this.parametros,
+    this.incluyeImpuesto = false,
+    this.isActive = true,
+    this.vigenciaDesde,
+    this.vigenciaHasta,
+    this.prioridad,
+  });
+
+  factory _TariffRule.fromJson(Map<String, dynamic> json) {
+    return _TariffRule(
+      id: _asInt(json['id']),
+      servicioId: _asInt(json['servicio_id']),
+      planId: _asInt(json['plan_id']),
+      codigo: _asString(json['codigo']),
+      descripcion: _asString(json['descripcion']),
+      rolAplica: _asString(json['rol_aplica']),
+      moneda: _asString(json['moneda']),
+      metodoPago: _asString(json['metodo_pago']),
+      ambitoRegion: _asString(json['ambito_region']),
+      tipoCalculo: _asString(json['tipo_calculo']),
+      valor: _asDouble(json['valor']),
+      parametros: _asMap(json['parametros']),
+      incluyeImpuesto: json['incluye_impuesto'] == true,
+      isActive: json['activo'] != false,
+      vigenciaDesde: _parseDate(json['vigencia_desde']),
+      vigenciaHasta: _parseDate(json['vigencia_hasta']),
+      prioridad: _asInt(json['prioridad']),
+    );
+  }
+
+  static int compareByPriority(_TariffRule a, _TariffRule b) {
+    final priorityA = a.prioridad ?? -1;
+    final priorityB = b.prioridad ?? -1;
+    if (priorityA != priorityB) {
+      return priorityB.compareTo(priorityA);
+    }
+    final codigoA = a.codigo ?? '';
+    final codigoB = b.codigo ?? '';
+    return codigoA.toLowerCase().compareTo(codigoB.toLowerCase());
+  }
+
+  static int? _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return null;
+  }
+
+  static String? _asString(Object? value) {
+    if (value == null) return null;
+    if (value is String) {
+      return value;
+    }
+    return value.toString();
+  }
+
+  static double? _asDouble(Object? value) {
+    if (value == null) return null;
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value);
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _asMap(Object? value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    if (value is Map) {
+      return value.map((key, dynamic val) => MapEntry('$key', val));
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+        if (decoded is Map) {
+          return decoded.map((key, dynamic val) => MapEntry('$key', val));
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  static DateTime? _parseDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String && value.trim().isNotEmpty) {
+      return DateTime.tryParse(value.trim());
+    }
+    return null;
+  }
+}
+
+int? _asInt(Object? value) => _TariffRule._asInt(value);
