@@ -219,8 +219,14 @@ class _ClientHomeState extends State<ClientHome> {
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 401) {
       final message = _extractMessage(response.body);
-      throw UnauthorizedException(message);
-    }
+final resolvedMessage = (() {
+        final trimmed = message?.trim();
+        if (trimmed != null && trimmed.isNotEmpty) {
+          return trimmed;
+        }
+        return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      })();
+      throw UnauthorizedException(resolvedMessage);    }
     if (response.statusCode >= 400) {
       throw ApiException(
         _extractMessage(response.body) ??

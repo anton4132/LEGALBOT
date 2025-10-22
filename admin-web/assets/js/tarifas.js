@@ -50,14 +50,9 @@ const state = {
   comisiones: {
     items: [],
     filters: {
-      ambito: 'servicio',
-      nombreAmbito: '',
-      rol: '',
       estado: 'activas',
-      vigencia: 'hoy',
-      vigenciaDesde: '',
-      vigenciaHasta: '',
-      search: '',
+      servicio: '',
+      plan: '',
     },
     sort: { field: 'vigencia', direction: 'asc' },
     paginator: { page: 1, perPage: 10, total: 0 },
@@ -104,10 +99,40 @@ function setupLayout() {
             <h1 class="fw-bold mb-1">Tarifas &amp; Comisiones</h1>
             <p class="text-muted mb-0">Administra las reglas económicas, comisiones e impuestos de LegalBot.</p>
           </div>
-          <div class="d-flex flex-wrap gap-2">
+          <div class="d-flex flex-wrap gap-2" id="tarifas-header-actions">
             <button type="button" class="btn btn-outline-primary" id="tarifas-simulator-btn">Simulador de reglas</button>
-            <button type="button" class="btn btn-outline-secondary" id="tarifas-export-btn">Exportar tarifas</button>
-            <button type="button" class="btn btn-primary" id="tarifas-new-btn">Nueva tarifa</button>
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              id="tarifas-export-btn"
+              data-scope="tarifas"
+            >
+              Exportar tarifas
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="tarifas-new-btn"
+              data-scope="tarifas"
+            >
+              Nueva tarifa
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-secondary d-none"
+              id="comisiones-export-btn"
+              data-scope="comisiones"
+            >
+              Exportar servicios
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary d-none"
+              id="comisiones-new-btn"
+              data-scope="comisiones"
+            >
+              Nuevo servicio
+            </button>
           </div>
         </div>
       </section>
@@ -227,37 +252,10 @@ function setupLayout() {
       <div data-lb-view="comisiones" class="d-none d-flex flex-column gap-4">
         <section class="card shadow-sm border-0">
           <div class="card-body">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-              <div>
-                <h5 class="card-title mb-0">Gestión de comisiones</h5>
-                <p class="text-muted small mb-0">Define porcentajes por servicio, plan y rol.</p>
-              </div>
-              <div class="d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-outline-secondary" id="comisiones-export-btn">Exportar comisiones</button>
-                <button type="button" class="btn btn-primary" id="comisiones-new-btn">Nueva comisión</button>
-              </div>
-            </div>
+            <h5 class="card-title mb-3">Gestión de comisiones</h5>
+            <p class="text-muted small">Define porcentajes por servicio o plan y consulta su estado.</p>
             <div class="row g-3 align-items-end">
               <div class="col-12 col-md-4 col-xl-3">
-                <label for="comisiones-filter-ambito" class="form-label">Ámbito</label>
-                <select id="comisiones-filter-ambito" class="form-select">
-                  <option value="servicio">Servicio</option>
-                  <option value="plan">Plan</option>
-                </select>
-              </div>
-              <div class="col-12 col-md-4 col-xl-3">
-                <label for="comisiones-filter-nombre" class="form-label">Servicio / plan</label>
-                <input type="text" id="comisiones-filter-nombre" class="form-control" placeholder="Nombre o ID" />
-              </div>
-              <div class="col-12 col-md-4 col-xl-2">
-                <label for="comisiones-filter-rol" class="form-label">Rol</label>
-                <select id="comisiones-filter-rol" class="form-select">
-                  <option value="">Todos</option>
-                  <option value="cliente">Cliente</option>
-                  <option value="abogado">Abogado</option>
-                </select>
-              </div>
-              <div class="col-12 col-md-4 col-xl-2">
                 <label for="comisiones-filter-estado" class="form-label">Estado</label>
                 <select id="comisiones-filter-estado" class="form-select">
                   <option value="activas">Activas</option>
@@ -265,24 +263,23 @@ function setupLayout() {
                   <option value="">Todas</option>
                 </select>
               </div>
-              <div class="col-12 col-md-4 col-xl-2">
-                <label for="comisiones-filter-vigencia" class="form-label">Vigencia</label>
-                <select id="comisiones-filter-vigencia" class="form-select">
-                  <option value="hoy">Vigentes hoy</option>
-                  <option value="rango">Por rango</option>
-                </select>
+              <div class="col-12 col-md-4 col-xl-3">
+                <label for="comisiones-filter-servicio" class="form-label">Servicio</label>
+                <input
+                  type="text"
+                  id="comisiones-filter-servicio"
+                  class="form-control"
+                  placeholder="Nombre o ID"
+                />
               </div>
               <div class="col-12 col-md-4 col-xl-3">
-                <label for="comisiones-filter-desde" class="form-label">Desde</label>
-                <input type="date" id="comisiones-filter-desde" class="form-control" />
-              </div>
-              <div class="col-12 col-md-4 col-xl-3">
-                <label for="comisiones-filter-hasta" class="form-label">Hasta</label>
-                <input type="date" id="comisiones-filter-hasta" class="form-control" />
-              </div>
-              <div class="col-12 col-md-6 col-xl-4">
-                <label for="comisiones-filter-search" class="form-label">Búsqueda rápida</label>
-                <input type="text" id="comisiones-filter-search" class="form-control" placeholder="Código o descripción" />
+                <label for="comisiones-filter-plan" class="form-label">Plan</label>
+                <input
+                  type="text"
+                  id="comisiones-filter-plan"
+                  class="form-control"
+                  placeholder="Nombre o ID"
+                />
               </div>
               <div class="col-12 d-flex justify-content-end gap-2">
                 <button type="button" class="btn btn-outline-secondary" id="comisiones-filter-reset">Limpiar</button>
@@ -382,6 +379,9 @@ function setupLayout() {
               <div class="card-body">
                 <h5 class="card-title">Registrar / editar impuesto</h5>
                 <p class="text-muted small">Validamos automáticamente solapes de vigencia para impuestos activos.</p>
+                <div class="alert alert-warning" role="alert">
+                  La gestión de impuestos está deshabilitada temporalmente. Solo puedes consultar la información existente.
+                </div>
                 <form id="tc-impuestos-form" class="row g-3" autocomplete="off">
                   <input type="hidden" id="tc-impuestos-id" />
                   <div class="col-12">
@@ -436,6 +436,9 @@ function setupLayout() {
                 <p class="text-muted small mb-0">Define moneda por defecto, decimales y reglas de redondeo.</p>
               </div>
               <div class="text-muted small" id="tc-econfig-actualizado">&nbsp;</div>
+            </div>
+            <div class="alert alert-info" role="alert">
+              Esta configuración es de solo lectura. Los valores actuales se muestran para referencia.
             </div>
             <form id="tc-econfig-form" class="row g-3" autocomplete="off">
               <div class="col-12 col-md-4">
@@ -728,6 +731,7 @@ function setupLayout() {
 
 async function init() {
   cacheDom();
+  enforceReadOnlyModules();
   bindGlobalEvents();
   await Promise.all([
     loadTarifas(),
@@ -745,6 +749,12 @@ function cacheDom() {
 
   dom.navTabs = document.querySelectorAll('[data-lb-tab]');
   dom.views = document.querySelectorAll('[data-lb-view]');
+
+  dom.header = {
+    actions: document.getElementById('tarifas-header-actions'),
+    tarifasButtons: document.querySelectorAll('#tarifas-header-actions [data-scope="tarifas"]'),
+    comisionesButtons: document.querySelectorAll('#tarifas-header-actions [data-scope="comisiones"]'),
+  };
 
   dom.tarifas = {
     tableBody: document.getElementById('tarifas-table-body'),
@@ -775,14 +785,9 @@ function cacheDom() {
     tableBody: document.getElementById('comisiones-table-body'),
     empty: document.getElementById('comisiones-empty-state'),
     filters: {
-      ambito: document.getElementById('comisiones-filter-ambito'),
-      nombre: document.getElementById('comisiones-filter-nombre'),
-      rol: document.getElementById('comisiones-filter-rol'),
       estado: document.getElementById('comisiones-filter-estado'),
-      vigencia: document.getElementById('comisiones-filter-vigencia'),
-      vigenciaDesde: document.getElementById('comisiones-filter-desde'),
-      vigenciaHasta: document.getElementById('comisiones-filter-hasta'),
-      search: document.getElementById('comisiones-filter-search'),
+      servicio: document.getElementById('comisiones-filter-servicio'),
+      plan: document.getElementById('comisiones-filter-plan'),
       reset: document.getElementById('comisiones-filter-reset'),
     },
     paginator: document.getElementById('comisiones-pagination'),
@@ -849,6 +854,34 @@ function cacheDom() {
   state.dom = dom;
 }
 
+function enforceReadOnlyModules() {
+  disableImpuestosEditing();
+  disableEconfigEditing();
+}
+
+function disableFormControls(form, exceptIds = []) {
+  if (!form) return;
+  const exceptions = new Set(exceptIds);
+  const elements = form.querySelectorAll('input, select, textarea, button');
+  elements.forEach((element) => {
+    if (element.type === 'hidden') return;
+    if (exceptions.has(element.id)) return;
+    element.disabled = true;
+  });
+}
+
+function disableImpuestosEditing() {
+  const form = state.dom.impuestos?.form;
+  if (!form) return;
+  disableFormControls(form);
+}
+
+function disableEconfigEditing() {
+  const form = state.dom.econconfig?.form;
+  if (!form) return;
+  disableFormControls(form, ['tc-econfig-preview']);
+}
+
 function bindGlobalEvents() {
   const { dom } = state;
 
@@ -893,6 +926,8 @@ function renderTabs() {
     const name = view.getAttribute('data-lb-view');
     view.classList.toggle('d-none', name !== state.tabs);
   });
+
+  renderHeaderActions();
 }
 
 function renderHelpBanner() {
@@ -913,6 +948,18 @@ function renderHelpBanner() {
       </div>
     </div>
   `;
+}
+
+function renderHeaderActions() {
+  const header = state.dom.header;
+  if (!header) return;
+  const isComisiones = state.tabs === 'comisiones';
+  header.tarifasButtons?.forEach((btn) => {
+    btn.classList.toggle('d-none', isComisiones);
+  });
+  header.comisionesButtons?.forEach((btn) => {
+    btn.classList.toggle('d-none', !isComisiones);
+  });
 }
 
 
@@ -1362,7 +1409,7 @@ function bindComisionesEvents() {
         renderComisiones();
       });
     } else {
-      const handler = key === 'nombre' || key === 'search' ? 'input' : 'change';
+      const handler = key === 'servicio' || key === 'plan' ? 'input' : 'change';
       input.addEventListener(handler, () => updateComisionFilter(key, input.value));
     }
   });
@@ -1458,20 +1505,17 @@ function comisionRowTemplate(comision) {
 
 function applyComisionFilters(items) {
   const { filters } = state.comisiones;
-  const today = new Date().toISOString().slice(0, 10);
+  const hasServicio = !!filters.servicio;
+  const hasPlan = !!filters.plan;
   return items.filter((item) => {
-    if (filters.ambito && item.ambito !== filters.ambito) return false;
-    if (filters.rol && item.rol_aplica !== filters.rol) return false;
-    if (filters.nombre && !matchesAutocomplete(item, filters.nombre)) return false;
     if (filters.estado === 'activas' && !item.activo) return false;
     if (filters.estado === 'inactivas' && item.activo) return false;
-    if (filters.search) {
-      const search = filters.search.toLowerCase();
-      if (!`${item.codigo} ${item.nombre_ambito}`.toLowerCase().includes(search)) return false;
-    }
-    if (filters.vigencia === 'hoy' && !isVigenteHoy(item, today)) return false;
-    if (filters.vigencia === 'rango') {
-      if (!overlapsRange(item, filters.vigenciaDesde, filters.vigenciaHasta)) return false;
+    if (item.ambito === 'servicio') {
+      if (hasServicio && !matchesAutocomplete(item, filters.servicio)) return false;
+      if (!hasServicio && hasPlan) return false;
+    } else if (item.ambito === 'plan') {
+      if (hasPlan && !matchesAutocomplete(item, filters.plan)) return false;
+      if (!hasPlan && hasServicio) return false;
     }
     return true;
   });
@@ -1479,14 +1523,9 @@ function applyComisionFilters(items) {
 
 function resetComisionFilters() {
   state.comisiones.filters = {
-    ambito: 'servicio',
-    nombreAmbito: '',
-    rol: '',
     estado: 'activas',
-    vigencia: 'hoy',
-    vigenciaDesde: '',
-    vigenciaHasta: '',
-    search: '',
+    servicio: '',
+    plan: '',
   };
   const { filters } = state.dom.comisiones;
   Object.entries(filters || {}).forEach(([key, input]) => {
@@ -1712,8 +1751,13 @@ async function attemptToggleComision(id, nextState) {
 }
 
 function exportComisiones() {
-  const params = new URLSearchParams({ ...state.comisiones.filters });
-  const url = `${API_BASE_URL}/comisiones/export?${params.toString()}`;
+  const params = new URLSearchParams();
+  const { estado, servicio, plan } = state.comisiones.filters;
+  params.set('estado', estado || '');
+  if (servicio) params.set('servicio', servicio);
+  if (plan) params.set('plan', plan);
+  const query = params.toString();
+  const url = `${API_BASE_URL}/comisiones/export${query ? `?${query}` : ''}`;
   window.open(url, '_blank');
 }
 
@@ -1898,7 +1942,7 @@ function renderImpuestosTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td colspan="6" class="text-center py-4 text-muted">
-        No se registran impuestos. <a href="#" data-impuestos-new>Crear primero</a>
+        No se registran impuestos configurados.
       </td>`;
     body.appendChild(tr);
     return;
@@ -1915,9 +1959,14 @@ function renderImpuestosTable() {
       <td>${impuesto.incluido_en_precio ? 'Incluido' : 'No incluido'}</td>
       <td>
         <div class="form-check form-switch">
-          <input class="form-check-input" type="checkbox" data-impuesto-toggle ${
-            impuesto.activo ? 'checked' : ''
-          }>
+          <input
+            class="form-check-input"
+            type="checkbox"
+            data-impuesto-toggle
+            ${impuesto.activo ? 'checked' : ''}
+            disabled
+            title="Gestión deshabilitada"
+          >
         </div>
       </td>
     `;
@@ -1930,10 +1979,11 @@ function handleImpuestoTableClick(event) {
   if (!tr) return;
   const id = Number(tr.dataset.id);
   if (event.target.matches('[data-impuesto-toggle]')) {
-    toggleImpuesto(id, event.target.checked);
-  } else {
-    fillImpuestoForm(id);
+    event.preventDefault();
+    window.alert('La gestión de impuestos está deshabilitada.');
+    return;
   }
+  fillImpuestoForm(id);
 }
 
 function fillImpuestoForm(id) {
@@ -1967,38 +2017,7 @@ function resetImpuestoForm() {
 
 async function submitImpuestoForm(event) {
   event.preventDefault();
-  const form = event.target;
-  const payload = {
-    codigo: form.codigo.value.trim(),
-    nombre: form.nombre.value.trim(),
-    porcentaje: Number(form.porcentaje.value),
-    incluido_en_precio: form.incluido.checked,
-    activo: form.activo.checked,
-    vigencia_desde: form.vigencia_desde.value || null,
-    vigencia_hasta: form.vigencia_hasta.value || null,
-  };
-  const id = form.id.value ? Number(form.id.value) : null;
-
-  try {
-    let response;
-    if (id) {
-      response = await apiPut(`/impuestos/${id}`, payload);
-    } else {
-      response = await apiPost('/impuestos', payload);
-    }
-    const saved = await response.json();
-    const index = state.quick.impuestos.findIndex((item) => item.id === saved.id);
-    if (index >= 0) {
-      state.quick.impuestos.splice(index, 1, saved);
-    } else {
-      state.quick.impuestos.push(saved);
-    }
-    resetImpuestoForm();
-    renderImpuestosTable();
-  } catch (error) {
-    console.error('Error guardando impuesto', error);
-    window.alert('No se pudo guardar el impuesto.');
-  }
+  window.alert('La gestión de impuestos está deshabilitada.');
 }
 
 async function toggleImpuesto(id, nextState) {
@@ -2083,24 +2102,7 @@ function updateEconfigPreview() {
 
 async function submitEconfigForm(event) {
   event.preventDefault();
-  const form = event.target;
-  const payload = {
-    moneda_defecto: form.moneda.value.trim().toUpperCase(),
-    decimales: Number(form.decimales.value) || 2,
-    regla_redondeo: form.regla.value,
-    activo: form.activo.checked,
-  };
-
-  try {
-    const response = await apiPut('/econconfig', payload);
-    const saved = await response.json();
-    state.quick.econconfig = saved;
-    state.monedaFallback = saved.moneda_defecto || state.monedaFallback;
-    renderEconconfig();
-  } catch (error) {
-    console.error('Error guardando econconfig', error);
-    window.alert('No se pudo guardar la configuración económica.');
-  }
+  window.alert('La configuración económica es de solo lectura.');
 }
 
 
@@ -2150,9 +2152,11 @@ function getDefaultTarifa() {
 }
 
 function getDefaultComision() {
+  const filters = state.comisiones.filters || {};
+  const ambito = filters.plan && !filters.servicio ? 'plan' : 'servicio';
   return {
     codigo: '',
-    ambito: state.comisiones.filters.ambito || 'servicio',
+    ambito,
     referencia_id: '',
     rol_aplica: 'cliente',
     porcentaje: 0,
