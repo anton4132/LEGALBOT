@@ -359,7 +359,6 @@ function setupLayout() {
                         <th>Código</th>
                         <th>Nombre</th>
                         <th>%</th>
-                        <th>Incluido</th>
                         <th>Vigencia</th>
                         <th>Activo</th>
                       </tr>
@@ -388,12 +387,6 @@ function setupLayout() {
                   <div class="col-12 col-sm-6">
                     <label for="tc-impuestos-porcentaje" class="form-label">Porcentaje (%) <span class="text-danger">*</span></label>
                     <input type="number" class="form-control" id="tc-impuestos-porcentaje" min="0" step="0.01" required />
-                  </div>
-                  <div class="col-12 col-sm-6">
-                    <div class="form-check form-switch mt-4">
-                      <input class="form-check-input" type="checkbox" role="switch" id="tc-impuestos-incluido" />
-                      <label class="form-check-label" for="tc-impuestos-incluido">Incluido en precio</label>
-                    </div>
                   </div>
                   <div class="col-12 col-sm-6">
                     <label for="tc-impuestos-vigencia-desde" class="form-label">Vigencia desde</label>
@@ -431,7 +424,8 @@ function setupLayout() {
               <div class="text-muted small" id="tc-econfig-actualizado">&nbsp;</div>
             </div>
             <div class="alert alert-info" role="alert">
-              Esta configuración es de solo lectura. Los valores actuales se muestran para referencia.
+              Activa solo una configuración económica a la vez. Al guardar una nueva versión, las anteriores quedarán
+              inactivas automáticamente.
             </div>
             <form id="tc-econfig-form" class="row g-3" autocomplete="off">
               <div class="col-12 col-md-4">
@@ -504,39 +498,41 @@ function setupLayout() {
                       <span class="text-muted small">Selecciona el ámbito de aplicación.</span>
                     </div>
                     <input type="hidden" name="scope_tipo" id="tarifas-form-scope" />
-                    <div class="d-flex flex-column flex-lg-row gap-2" data-scope-options="tarifa">
+                    <div
+                      class="btn-group w-100 flex-column flex-lg-row"
+                      role="group"
+                      data-scope-options="tarifa"
+                    >
                       <button
                         type="button"
-                        class="btn btn-outline-secondary w-100 text-start"
+                        class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-2 py-3"
                         data-scope-option="tarifa"
                         data-scope-value="plan-servicio"
                       >
-                        <span class="fw-semibold d-block">Plan + Servicio</span>
-                        <span class="small text-muted">Selecciona un plan y luego un servicio del plan.</span>
+                        <i class="bi bi-diagram-3"></i>
+                        <span class="fw-semibold">Plan + Servicio</span>
                       </button>
                       <button
                         type="button"
-                        class="btn btn-outline-secondary w-100 text-start"
+                        class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-2 py-3"
                         data-scope-option="tarifa"
                         data-scope-value="servicio"
                       >
-                        <span class="fw-semibold d-block">Servicio independiente</span>
-                        <span class="small text-muted">Aplica directamente al servicio sin plan asociado.</span>
+                        <i class="bi bi-box-seam"></i>
+                        <span class="fw-semibold">Solo servicio</span>
                       </button>
                       <button
                         type="button"
-                        class="btn btn-outline-secondary w-100 text-start"
+                        class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-2 py-3"
                         data-scope-option="tarifa"
                         data-scope-value="plan"
                       >
-                        <span class="fw-semibold d-block">Solo Plan</span>
-                        <span class="small text-muted">La regla se aplica a todos los servicios del plan.</span>
+                        <i class="bi bi-grid-3x3-gap"></i>
+                        <span class="fw-semibold">Solo plan</span>
                       </button>
                     </div>
                     <p class="form-text mb-1">
-                      Selecciona el ámbito de aplicación: <strong>Plan + Servicio</strong> si el servicio está dentro de un plan;
-                      <strong>Servicio independiente</strong> si no está vinculado a ningún plan; <strong>Solo Plan</strong> si la regla
-                      aplica al plan completo.
+                      Define si la tarifa aplica a un plan con un servicio específico, únicamente a un servicio o al plan completo.
                     </p>
                     <div class="invalid-feedback d-block d-none" data-scope-error="tarifa">
                       Selecciona un ámbito para continuar.
@@ -710,39 +706,41 @@ function setupLayout() {
                       <span class="text-muted small">Selecciona el ámbito de aplicación.</span>
                     </div>
                     <input type="hidden" name="scope_tipo" id="comisiones-form-scope" />
-                    <div class="d-flex flex-column flex-lg-row gap-2" data-scope-options="comision">
+                    <div
+                      class="btn-group w-100 flex-column flex-lg-row"
+                      role="group"
+                      data-scope-options="comision"
+                    >
                       <button
                         type="button"
-                        class="btn btn-outline-secondary w-100 text-start"
+                        class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-2 py-3"
                         data-scope-option="comision"
                         data-scope-value="plan-servicio"
                       >
-                        <span class="fw-semibold d-block">Plan + Servicio</span>
-                        <span class="small text-muted">Selecciona un plan y luego un servicio del plan.</span>
+                        <i class="bi bi-diagram-3"></i>
+                        <span class="fw-semibold">Plan + Servicio</span>
                       </button>
                       <button
                         type="button"
-                        class="btn btn-outline-secondary w-100 text-start"
+                        class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-2 py-3"
                         data-scope-option="comision"
                         data-scope-value="servicio"
                       >
-                        <span class="fw-semibold d-block">Servicio independiente</span>
-                        <span class="small text-muted">Aplica directamente al servicio sin plan asociado.</span>
+                        <i class="bi bi-box-seam"></i>
+                        <span class="fw-semibold">Solo servicio</span>
                       </button>
                       <button
                         type="button"
-                        class="btn btn-outline-secondary w-100 text-start"
+                        class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center gap-2 py-3"
                         data-scope-option="comision"
                         data-scope-value="plan"
                       >
-                        <span class="fw-semibold d-block">Solo Plan</span>
-                        <span class="small text-muted">La comisión se aplica a todos los servicios del plan.</span>
+                        <i class="bi bi-grid-3x3-gap"></i>
+                        <span class="fw-semibold">Solo plan</span>
                       </button>
                     </div>
                     <p class="form-text mb-1">
-                      Selecciona el ámbito de aplicación: <strong>Plan + Servicio</strong> si el servicio está dentro de un plan;
-                      <strong>Servicio independiente</strong> si no está vinculado a ningún plan; <strong>Solo Plan</strong> si la regla
-                      aplica al plan completo.
+                      Define si la comisión se aplica a un plan con servicio, únicamente a un servicio o al plan completo.
                     </p>
                     <div class="invalid-feedback d-block d-none" data-scope-error="comision">
                       Selecciona un ámbito para continuar.
@@ -958,7 +956,6 @@ function cacheDom() {
     porcentaje: document.getElementById('tc-impuestos-porcentaje'),
     vigenciaDesde: document.getElementById('tc-impuestos-vigencia-desde'),
     vigenciaHasta: document.getElementById('tc-impuestos-vigencia-hasta'),
-    incluido: document.getElementById('tc-impuestos-incluido'),
     activo: document.getElementById('tc-impuestos-activo'),
     reset: document.getElementById('tc-impuestos-reset'),
     historyModal: document.getElementById('tc-impuestos-history-modal'),
@@ -1033,15 +1030,11 @@ function renderHelpBanner() {
   banner.innerHTML = `
     <div class="alert alert-info d-flex flex-column flex-lg-row align-items-lg-center gap-3">
       <div>
-        <strong>Prioridad:</strong> Plan &gt; Servicio. Impuestos incluidos se
-        desglosan automáticamente. Redondeo según
-        <code>${state.quick.econconfig?.regla_redondeo || 'dos_decimales'}</code>.
+        <strong>Impuestos:</strong> puedes registrar y editar impuestos. Solo uno puede estar activo a la vez.
       </div>
-      <div class="ms-lg-auto">
-        <span class="me-3">Auditoría disponible en cada fila.</span>
-        <a href="#" class="btn btn-sm btn-outline-secondary" data-lb-help="auditoria">
-          Ver documentación
-        </a>
+      <div class="ms-lg-auto text-lg-end">
+        <strong>Config. económica:</strong> crea y modifica reglas. La previsualización muestra el redondeo real según
+        <code>${state.quick.econconfig?.regla_redondeo || 'dos_decimales'}</code> y los decimales definidos.
       </div>
     </div>
   `;
@@ -2376,7 +2369,7 @@ function renderImpuestosTable() {
   if (!items.length) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td colspan="6" class="text-center py-4 text-muted">
+      <td colspan="5" class="text-center py-4 text-muted">
         No se encontraron impuestos con los filtros aplicados.
       </td>`;
     body.appendChild(tr);
@@ -2390,7 +2383,6 @@ function renderImpuestosTable() {
       <td>${impuesto.codigo}</td>
       <td>${impuesto.nombre}</td>
       <td>${formatPercentage(impuesto.porcentaje)}</td>
-      <td>${impuesto.incluido_en_precio ? 'Incluido' : 'No incluido'}</td>
       <td>${vigenciaLabel(impuesto.vigencia_desde, impuesto.vigencia_hasta)}</td>
       <td>
         <div class="form-check form-switch">
@@ -2427,7 +2419,7 @@ function handleImpuestoTableChange(event) {
   const tr = event.target.closest('tr');
   if (!tr) return;
   const id = Number(tr.dataset.id);
-  toggleImpuesto(id, event.target.checked);
+  toggleImpuesto(id, event.target.checked, event.target);
 }
 
 function fillImpuestoForm(id) {
@@ -2441,7 +2433,6 @@ function fillImpuestoForm(id) {
   dom.porcentaje.value = Number(impuesto.porcentaje ?? 0);
   dom.vigenciaDesde.value = impuesto.vigencia_desde?.slice(0, 10) || '';
   dom.vigenciaHasta.value = impuesto.vigencia_hasta?.slice(0, 10) || '';
-  dom.incluido.checked = !!impuesto.incluido_en_precio;
   dom.activo.checked = impuesto.activo !== false;
   dom.form.dataset.updatedAt = impuesto.actualizado_el || '';
   highlightImpuestoRow(id);
@@ -2478,7 +2469,6 @@ async function submitImpuestoForm(event) {
     codigo: dom.codigo.value.trim(),
     nombre: dom.nombre.value.trim(),
     porcentaje,
-    incluido_en_precio: dom.incluido.checked,
     vigencia_desde: dom.vigenciaDesde.value || null,
     vigencia_hasta: dom.vigenciaHasta.value || null,
     activo: dom.activo.checked,
@@ -2501,38 +2491,42 @@ async function submitImpuestoForm(event) {
     } else {
       response = await apiPost('/impuestos', payload);
     }
-    const saved = await response.json();
-    upsertImpuesto(saved);
+    const body = await response.json();
+    const saved = body?.item || body;
+    if (!saved?.id) {
+      throw new Error('Respuesta inesperada del servidor');
+    }
     dom.id.value = saved.id || '';
     dom.form.dataset.updatedAt = saved.actualizado_el || '';
-    fillImpuestoForm(saved.id);
+    await loadImpuestos();
     renderImpuestosTable();
+    fillImpuestoForm(saved.id);
   } catch (error) {
     console.error('Error guardando impuesto', error);
     window.alert(error.message || 'No se pudo guardar el impuesto.');
   }
 }
 
-function upsertImpuesto(impuesto) {
-  if (!impuesto) return;
-  const index = state.quick.impuestos.findIndex((item) => item.id === impuesto.id);
-  if (index >= 0) {
-    state.quick.impuestos.splice(index, 1, impuesto);
-  } else {
-    state.quick.impuestos.push(impuesto);
-  }
-}
-
-async function toggleImpuesto(id, nextState) {
+async function toggleImpuesto(id, nextState, checkbox) {
+  const previousState = !nextState;
   try {
-    await apiPatch(`/impuestos/${id}`, { activo: nextState });
-    const impuesto = state.quick.impuestos.find((item) => item.id === id);
-    if (impuesto) impuesto.activo = nextState;
+    const response = await apiPatch(`/impuestos/${id}`, { activo: nextState });
+    const body = await response.json();
+    const saved = body?.item || body;
+    if (!saved?.id) {
+      throw new Error('Respuesta inesperada del servidor');
+    }
+    await loadImpuestos();
+    renderImpuestosTable();
+    highlightImpuestoRow(saved.id);
+    const currentId = Number(state.dom.impuestos.id?.value) || null;
+    if (currentId === saved.id) {
+      fillImpuestoForm(saved.id);
+    }
   } catch (error) {
     console.error('Error actualizando impuesto', error);
-    window.alert('No se pudo actualizar el impuesto.');
-  } finally {
-    renderImpuestosTable();
+    if (checkbox) checkbox.checked = previousState;
+    window.alert(error.message || 'No se pudo actualizar el impuesto.');
   }
 }
 
@@ -2565,8 +2559,10 @@ function bindEconconfigEvents() {
 async function loadEconconfig() {
   try {
     const response = await apiGet('/econconfig');
-    const config = await response.json();
-    state.quick.econconfig = config;
+    const body = await response.json();
+    const config =
+      body && Object.prototype.hasOwnProperty.call(body, 'config') ? body.config : body;
+    state.quick.econconfig = config || null;
     state.monedaFallback = config?.moneda_defecto || state.monedaFallback;
   } catch (error) {
     console.error('Error obteniendo econconfig', error);
@@ -2601,8 +2597,12 @@ function updateEconfigPreview() {
     return;
   }
   const moneda = econconfig.moneda.value || state.monedaFallback;
-  const decimales = Number(econconfig.decimales.value) || 2;
-  econconfig.previewResult.textContent = formatCurrency(value, moneda, decimales);
+  const decimales = Number.isFinite(Number(econconfig.decimales.value))
+    ? Number(econconfig.decimales.value)
+    : state.quick.econconfig?.decimales ?? 2;
+  const regla = econconfig.regla.value || state.quick.econconfig?.regla_redondeo || 'dos_decimales';
+  const rounded = applyRoundingRule(value, regla, decimales);
+  econconfig.previewResult.textContent = formatCurrency(rounded, moneda, decimales);
 }
 
 async function submitEconfigForm(event) {
@@ -2642,7 +2642,12 @@ async function submitEconfigForm(event) {
     } else {
       response = await apiPost('/econconfig', payload);
     }
-    const saved = await response.json();
+    const body = await response.json();
+    const saved =
+      body && Object.prototype.hasOwnProperty.call(body, 'config') ? body.config : body;
+    if (!saved) {
+      throw new Error('Respuesta inesperada del servidor');
+    }
     state.quick.econconfig = saved;
     state.monedaFallback = saved.moneda_defecto || state.monedaFallback;
     renderEconconfig();
@@ -2793,16 +2798,43 @@ function statusChip(item) {
   return `<span class="badge ${cls}">${CHIP_LABELS[status]}</span>`;
 }
 
-function formatCurrency(value, currency = state.monedaFallback, minimumFractionDigits) {
+function applyRoundingRule(value, regla, decimales) {
+  const digits = Number.isInteger(decimales) && decimales >= 0 ? decimales : 2;
+  const raw = Number(value ?? 0);
+  if (!Number.isFinite(raw)) return 0;
+  let rounded;
+  switch (regla) {
+    case 'a_0_05':
+      rounded = Math.ceil(raw / 0.05) * 0.05;
+      break;
+    case 'entero_superior':
+      rounded = Math.ceil(raw);
+      break;
+    case 'dos_decimales':
+    default:
+      rounded = Math.round(raw * 10 ** digits) / 10 ** digits;
+      break;
+  }
+  return Number(Number.isFinite(rounded) ? rounded.toFixed(digits) : 0);
+}
+
+function formatCurrency(value, currency = state.monedaFallback, fractionDigits) {
+  const digits = Number.isInteger(fractionDigits) && fractionDigits >= 0
+    ? fractionDigits
+    : state.quick.econconfig?.decimales ?? 2;
   const options = {
     style: 'currency',
     currency,
-    minimumFractionDigits: minimumFractionDigits ?? state.quick.econconfig?.decimales ?? 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   };
   try {
     return new Intl.NumberFormat('es-PE', options).format(Number(value) || 0);
   } catch (error) {
-    return `${currency} ${(Number(value) || 0).toFixed(options.minimumFractionDigits)}`;
+    const fallbackDigits = Number.isInteger(options.minimumFractionDigits)
+      ? options.minimumFractionDigits
+      : digits;
+    return `${currency} ${(Number(value) || 0).toFixed(fallbackDigits)}`;
   }
 }
 
