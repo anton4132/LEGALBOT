@@ -1,7 +1,7 @@
 const { prisma } = require('../config/database');
 
 const includePlanServicios = {
-  planservicios: {
+  planservicio: {
     include: {
       servicio: true,
     },
