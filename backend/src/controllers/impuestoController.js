@@ -38,6 +38,11 @@ function validateVigencia(desde, hasta) {
   }
 }
 
+async function deactivateOtherImpuestos(tx, excludeId) {
+  const where = excludeId ? { id: { not: excludeId } } : {};
+  await tx.impuesto.updateMany({ where, data: { activo: false } });
+}
+
 async function listImpuestos(req, res) {
   const { estado } = req.query;
   const where = {};
@@ -76,16 +81,24 @@ async function createImpuesto(req, res) {
     const vigenciaHasta = parseDate(vigencia_hasta);
     validateVigencia(vigenciaDesde, vigenciaHasta);
 
-    const created = await prisma.impuesto.create({
-      data: {
-        codigo: codigo.trim(),
-        nombre: nombre.trim(),
-        porcentaje: parseDecimal(porcentaje),
-        incluido_en_precio: !!incluido_en_precio,
-        activo: !!activo,
-        vigencia_desde: vigenciaDesde,
-        vigencia_hasta: vigenciaHasta,
-      },
+    const porcentajeDecimal = parseDecimal(porcentaje);
+    const isActive = !!activo;
+
+    const created = await prisma.$transaction(async (tx) => {
+      if (isActive) {
+        await deactivateOtherImpuestos(tx);
+      }
+      return tx.impuesto.create({
+        data: {
+          codigo: codigo.trim(),
+          nombre: nombre.trim(),
+          porcentaje: porcentajeDecimal,
+          incluido_en_precio: !!incluido_en_precio,
+          activo: isActive,
+          vigencia_desde: vigenciaDesde,
+          vigencia_hasta: vigenciaHasta,
+        },
+      });
     });
     res.status(201).json({ success: true, item: created });
   } catch (error) {
@@ -125,17 +138,35 @@ async function updateImpuesto(req, res) {
     const vigenciaHasta = parseDate(vigencia_hasta);
     validateVigencia(vigenciaDesde, vigenciaHasta);
 
-    const updated = await prisma.impuesto.update({
-      where: { id: impuestoId },
-      data: {
-        codigo: codigo.trim(),
-        nombre: nombre.trim(),
-        porcentaje: parseDecimal(porcentaje),
-        incluido_en_precio: !!incluido_en_precio,
-        activo: !!activo,
-        vigencia_desde: vigenciaDesde,
-        vigencia_hasta: vigenciaHasta,
-      },
+    const porcentajeDecimal = parseDecimal(porcentaje);
+    const isActive = !!activo;
+    const ifUnmodifiedSince = req.get('If-Unmodified-Since');
+    if (ifUnmodifiedSince) {
+      const headerDate = new Date(ifUnmodifiedSince);
+      if (!Number.isNaN(headerDate.getTime()) && previous.actualizado_el > headerDate) {
+        return res
+          .status(409)
+          .json({ success: false, message: 'El impuesto fue actualizado por otro usuario' });
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.impuesto.update({
+        where: { id: impuestoId },
+        data: {
+          codigo: codigo.trim(),
+          nombre: nombre.trim(),
+          porcentaje: porcentajeDecimal,
+          incluido_en_precio: !!incluido_en_precio,
+          activo: isActive,
+          vigencia_desde: vigenciaDesde,
+          vigencia_hasta: vigenciaHasta,
+        },
+      });
+      if (result.activo) {
+        await deactivateOtherImpuestos(tx, result.id);
+      }
+      return result;
     });
     res.json({ success: true, item: updated });
   } catch (error) {
@@ -146,6 +177,53 @@ async function updateImpuesto(req, res) {
     if (error instanceof ValidationError || error.isValidation) {
       return res.status(400).json({ success: false, message: error.message });
     }
+    res.status(500).json({ success: false, message: 'Error actualizando impuesto' });
+  }
+}
+
+async function partialUpdateImpuesto(req, res) {
+  const { id } = req.params;
+  const impuestoId = Number(id);
+  if (!impuestoId) {
+    return res.status(400).json({ success: false, message: 'Identificador inválido' });
+  }
+
+  const changes = {};
+  if (req.body.activo !== undefined) {
+    changes.activo = !!req.body.activo;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    return res.status(400).json({ success: false, message: 'No se recibieron cambios para actualizar' });
+  }
+
+  try {
+    const existing = await prisma.impuesto.findUnique({ where: { id: impuestoId } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Impuesto no encontrado' });
+    }
+
+    const ifUnmodifiedSince = req.get('If-Unmodified-Since');
+    if (ifUnmodifiedSince) {
+      const headerDate = new Date(ifUnmodifiedSince);
+      if (!Number.isNaN(headerDate.getTime()) && existing.actualizado_el > headerDate) {
+        return res
+          .status(409)
+          .json({ success: false, message: 'El impuesto fue actualizado por otro usuario' });
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.impuesto.update({ where: { id: impuestoId }, data: changes });
+      if (changes.activo && result.activo) {
+        await deactivateOtherImpuestos(tx, result.id);
+      }
+      return result;
+    });
+
+    res.json({ success: true, item: updated });
+  } catch (error) {
+    console.error('Error actualizando impuesto:', error);
     res.status(500).json({ success: false, message: 'Error actualizando impuesto' });
   }
 }
@@ -179,5 +257,6 @@ module.exports = {
   listImpuestos,
   createImpuesto,
   updateImpuesto,
+  partialUpdateImpuesto,
   deleteImpuesto,
 };
