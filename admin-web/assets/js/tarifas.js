@@ -35,13 +35,9 @@ const state = {
   tarifas: {
     items: [],
     filters: {
-      ambito: 'servicio',
-      nombreAmbito: '',
       estado: 'activas',
-      vigencia: 'hoy',
-      vigenciaDesde: '',
-      vigenciaHasta: '',
-      search: '',
+      servicio: '',
+      plan: '',
     },
     sort: { field: 'vigencia', direction: 'asc' },
     paginator: { page: 1, perPage: 10, total: 0 },
@@ -123,7 +119,7 @@ function setupLayout() {
               id="comisiones-export-btn"
               data-scope="comisiones"
             >
-              Exportar servicios
+              Exportar comisión
             </button>
             <button
               type="button"
@@ -131,7 +127,7 @@ function setupLayout() {
               id="comisiones-new-btn"
               data-scope="comisiones"
             >
-              Nuevo servicio
+              Nueva comisión
             </button>
           </div>
         </div>
@@ -154,17 +150,6 @@ function setupLayout() {
             <h5 class="card-title mb-3">Filtros de tarifas</h5>
             <div class="row g-3 align-items-end">
               <div class="col-12 col-md-4 col-xl-3">
-                <label for="tarifas-filter-ambito" class="form-label">Ámbito</label>
-                <select id="tarifas-filter-ambito" class="form-select">
-                  <option value="servicio">Servicio</option>
-                  <option value="plan">Plan</option>
-                </select>
-              </div>
-              <div class="col-12 col-md-4 col-xl-3">
-                <label for="tarifas-filter-nombre" class="form-label">Servicio / plan</label>
-                <input type="text" class="form-control" id="tarifas-filter-nombre" placeholder="Nombre o ID" />
-              </div>
-              <div class="col-12 col-md-4 col-xl-3">
                 <label for="tarifas-filter-estado" class="form-label">Estado</label>
                 <select id="tarifas-filter-estado" class="form-select">
                   <option value="activas">Activas</option>
@@ -173,23 +158,22 @@ function setupLayout() {
                 </select>
               </div>
               <div class="col-12 col-md-4 col-xl-3">
-                <label for="tarifas-filter-vigencia" class="form-label">Vigencia</label>
-                <select id="tarifas-filter-vigencia" class="form-select">
-                  <option value="hoy">Vigentes hoy</option>
-                  <option value="rango">Por rango</option>
-                </select>
+                <label for="tarifas-filter-servicio" class="form-label">Servicio</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="tarifas-filter-servicio"
+                  placeholder="Nombre o ID"
+                />
               </div>
               <div class="col-12 col-md-4 col-xl-3">
-                <label for="tarifas-filter-desde" class="form-label">Desde</label>
-                <input type="date" class="form-control" id="tarifas-filter-desde" />
-              </div>
-              <div class="col-12 col-md-4 col-xl-3">
-                <label for="tarifas-filter-hasta" class="form-label">Hasta</label>
-                <input type="date" class="form-control" id="tarifas-filter-hasta" />
-              </div>
-              <div class="col-12 col-md-6 col-xl-4">
-                <label for="tarifas-filter-search" class="form-label">Búsqueda rápida</label>
-                <input type="text" class="form-control" id="tarifas-filter-search" placeholder="Código o descripción" />
+                <label for="tarifas-filter-plan" class="form-label">Plan</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="tarifas-filter-plan"
+                  placeholder="Nombre o ID"
+                />
               </div>
               <div class="col-12 d-flex justify-content-end gap-2">
                 <button type="button" class="btn btn-outline-secondary" id="tarifas-filter-reset">Limpiar</button>
@@ -379,9 +363,6 @@ function setupLayout() {
               <div class="card-body">
                 <h5 class="card-title">Registrar / editar impuesto</h5>
                 <p class="text-muted small">Validamos automáticamente solapes de vigencia para impuestos activos.</p>
-                <div class="alert alert-warning" role="alert">
-                  La gestión de impuestos está deshabilitada temporalmente. Solo puedes consultar la información existente.
-                </div>
                 <form id="tc-impuestos-form" class="row g-3" autocomplete="off">
                   <input type="hidden" id="tc-impuestos-id" />
                   <div class="col-12">
@@ -495,28 +476,27 @@ function setupLayout() {
             <form id="tarifas-form">
               <div class="modal-body">
                 <div class="row g-3">
-                  <div class="col-12 col-md-6">
-                    <label for="tarifas-form-codigo" class="form-label">Código <span class="text-danger">*</span></label>
-                    <input type="text" id="tarifas-form-codigo" name="codigo" class="form-control" required />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="tarifas-form-ambito" class="form-label">Ámbito</label>
-                    <select id="tarifas-form-ambito" name="ambito" class="form-select">
-                      <option value="servicio">Servicio</option>
-                      <option value="plan">Plan</option>
-                    </select>
-                  </div>
                   <div class="col-12">
-                    <label for="tarifas-form-referencia" class="form-label">Referencia (ID)</label>
-                    <input type="text" id="tarifas-form-referencia" name="referencia_id" class="form-control" placeholder="ID del servicio o plan" />
+                    <label for="tarifas-form-descripcion" class="form-label">Descripción</label>
+                    <input
+                      type="text"
+                      id="tarifas-form-descripcion"
+                      name="descripcion"
+                      class="form-control"
+                      placeholder="Describe la regla"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
                     <label for="tarifas-form-valor" class="form-label">Valor</label>
-                    <input type="number" id="tarifas-form-valor" name="valor" class="form-control" min="0" step="0.01" required />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="tarifas-form-moneda" class="form-label">Moneda</label>
-                    <input type="text" id="tarifas-form-moneda" name="moneda" class="form-control" maxlength="3" />
+                    <input
+                      type="number"
+                      id="tarifas-form-valor"
+                      name="valor"
+                      class="form-control"
+                      min="0"
+                      step="0.01"
+                      required
+                    />
                   </div>
                   <div class="col-12 col-md-6">
                     <label for="tarifas-form-tipo" class="form-label">Tipo de cálculo</label>
@@ -527,13 +507,25 @@ function setupLayout() {
                   </div>
                   <div class="col-12 col-md-6">
                     <div class="form-check form-switch mt-md-4 pt-md-2">
-                      <input class="form-check-input" type="checkbox" id="tarifas-form-incluye-impuesto" name="incluye_impuesto" checked />
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="tarifas-form-incluye-impuesto"
+                        name="incluye_impuesto"
+                      />
                       <label class="form-check-label" for="tarifas-form-incluye-impuesto">Incluye impuesto</label>
                     </div>
                   </div>
                   <div class="col-12" data-json-group>
                     <label for="tarifas-form-parametros" class="form-label">Parámetros (JSON)</label>
-                    <textarea id="tarifas-form-parametros" name="parametros" class="form-control" rows="5" spellcheck="false" placeholder="{ }"></textarea>
+                    <textarea
+                      id="tarifas-form-parametros"
+                      name="parametros"
+                      class="form-control"
+                      rows="5"
+                      spellcheck="false"
+                      placeholder="{ }"
+                    ></textarea>
                     <div class="form-text">Solo requerido para reglas basadas en consumo.</div>
                   </div>
                   <div class="col-12 col-md-6">
@@ -544,15 +536,11 @@ function setupLayout() {
                     <label for="tarifas-form-hasta" class="form-label">Vigencia hasta</label>
                     <input type="date" id="tarifas-form-hasta" name="vigencia_hasta" class="form-control" />
                   </div>
-                  <div class="col-12 col-md-6">
-                    <div class="form-check form-switch mt-md-4 pt-md-2">
-                      <input class="form-check-input" type="checkbox" id="tarifas-form-activo" name="activo" checked />
+                  <div class="col-12">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="tarifas-form-activo" name="activo" />
                       <label class="form-check-label" for="tarifas-form-activo">Activo</label>
                     </div>
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="tarifas-form-actualizado" class="form-label">Última actualización</label>
-                    <input type="text" id="tarifas-form-actualizado" class="form-control" name="actualizado_el" readonly />
                   </div>
                 </div>
               </div>
@@ -638,20 +626,15 @@ function setupLayout() {
             <form id="comisiones-form">
               <div class="modal-body">
                 <div class="row g-3">
-                  <div class="col-12 col-md-6">
-                    <label for="comisiones-form-codigo" class="form-label">Código <span class="text-danger">*</span></label>
-                    <input type="text" id="comisiones-form-codigo" name="codigo" class="form-control" required />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="comisiones-form-ambito" class="form-label">Ámbito</label>
-                    <select id="comisiones-form-ambito" name="ambito" class="form-select">
-                      <option value="servicio">Servicio</option>
-                      <option value="plan">Plan</option>
-                    </select>
-                  </div>
                   <div class="col-12">
-                    <label for="comisiones-form-referencia" class="form-label">Referencia (ID)</label>
-                    <input type="text" id="comisiones-form-referencia" name="referencia_id" class="form-control" placeholder="ID del servicio o plan" />
+                    <label for="comisiones-form-descripcion" class="form-label">Descripción</label>
+                    <input
+                      type="text"
+                      id="comisiones-form-descripcion"
+                      name="descripcion"
+                      class="form-control"
+                      placeholder="Describe la comisión"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
                     <label for="comisiones-form-rol" class="form-label">Rol aplica</label>
@@ -672,15 +655,11 @@ function setupLayout() {
                     <label for="comisiones-form-hasta" class="form-label">Vigencia hasta</label>
                     <input type="date" id="comisiones-form-hasta" name="vigencia_hasta" class="form-control" />
                   </div>
-                  <div class="col-12 col-md-6">
-                    <div class="form-check form-switch mt-md-4 pt-md-2">
-                      <input class="form-check-input" type="checkbox" id="comisiones-form-activo" name="activo" checked />
+                  <div class="col-12">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="comisiones-form-activo" name="activo" />
                       <label class="form-check-label" for="comisiones-form-activo">Activo</label>
                     </div>
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="comisiones-form-actualizado" class="form-label">Última actualización</label>
-                    <input type="text" id="comisiones-form-actualizado" class="form-control" name="actualizado_el" readonly />
                   </div>
                 </div>
               </div>
@@ -731,7 +710,6 @@ function setupLayout() {
 
 async function init() {
   cacheDom();
-  enforceReadOnlyModules();
   bindGlobalEvents();
   await Promise.all([
     loadTarifas(),
@@ -760,13 +738,9 @@ function cacheDom() {
     tableBody: document.getElementById('tarifas-table-body'),
     empty: document.getElementById('tarifas-empty-state'),
     filters: {
-      ambito: document.getElementById('tarifas-filter-ambito'),
-      nombre: document.getElementById('tarifas-filter-nombre'),
       estado: document.getElementById('tarifas-filter-estado'),
-      vigencia: document.getElementById('tarifas-filter-vigencia'),
-      vigenciaDesde: document.getElementById('tarifas-filter-desde'),
-      vigenciaHasta: document.getElementById('tarifas-filter-hasta'),
-      search: document.getElementById('tarifas-filter-search'),
+      servicio: document.getElementById('tarifas-filter-servicio'),
+      plan: document.getElementById('tarifas-filter-plan'),
       reset: document.getElementById('tarifas-filter-reset'),
     },
     paginator: document.getElementById('tarifas-pagination'),
@@ -852,34 +826,6 @@ function cacheDom() {
   };
 
   state.dom = dom;
-}
-
-function enforceReadOnlyModules() {
-  disableImpuestosEditing();
-  disableEconfigEditing();
-}
-
-function disableFormControls(form, exceptIds = []) {
-  if (!form) return;
-  const exceptions = new Set(exceptIds);
-  const elements = form.querySelectorAll('input, select, textarea, button');
-  elements.forEach((element) => {
-    if (element.type === 'hidden') return;
-    if (exceptions.has(element.id)) return;
-    element.disabled = true;
-  });
-}
-
-function disableImpuestosEditing() {
-  const form = state.dom.impuestos?.form;
-  if (!form) return;
-  disableFormControls(form);
-}
-
-function disableEconfigEditing() {
-  const form = state.dom.econconfig?.form;
-  if (!form) return;
-  disableFormControls(form, ['tc-econfig-preview']);
 }
 
 function bindGlobalEvents() {
@@ -982,7 +928,7 @@ function bindTarifasEvents() {
         renderTarifas();
       });
     } else {
-      const handler = key === 'nombre' || key === 'search' ? 'input' : 'change';
+      const handler = key === 'servicio' || key === 'plan' ? 'input' : 'change';
       input.addEventListener(handler, () => {
         updateTarifaFilter(key, input.value);
       });
@@ -1010,7 +956,7 @@ function bindTarifasEvents() {
   if (tarifas.form) {
     tarifas.form.addEventListener('submit', submitTarifaForm);
     tarifas.form
-      .querySelectorAll('[name="tipo_calculo"],[name="incluye_impuesto"],[name="ambito"]')
+      .querySelectorAll('[name="tipo_calculo"],[name="incluye_impuesto"]')
       .forEach((field) => field.addEventListener('change', updateTarifaFormUi));
     const jsonField = tarifas.form.querySelector('[name="parametros"]');
     jsonField?.addEventListener('input', () => validateJsonField(jsonField));
@@ -1094,19 +1040,17 @@ function tarifaRowTemplate(tarifa) {
 
 function applyTarifaFilters(items) {
   const { filters } = state.tarifas;
-  const today = new Date().toISOString().slice(0, 10);
+  const hasServicio = !!filters.servicio;
+  const hasPlan = !!filters.plan;
   return items.filter((item) => {
-    if (filters.ambito && item.ambito !== filters.ambito) return false;
-    if (filters.nombre && !matchesAutocomplete(item, filters.nombre)) return false;
     if (filters.estado === 'activas' && !item.activo) return false;
     if (filters.estado === 'inactivas' && item.activo) return false;
-    if (filters.search) {
-      const search = filters.search.toLowerCase();
-      if (!`${item.codigo} ${item.nombre_ambito}`.toLowerCase().includes(search)) return false;
-    }
-    if (filters.vigencia === 'hoy' && !isVigenteHoy(item, today)) return false;
-    if (filters.vigencia === 'rango') {
-      if (!overlapsRange(item, filters.vigenciaDesde, filters.vigenciaHasta)) return false;
+    if (item.ambito === 'servicio') {
+      if (hasServicio && !matchesAutocomplete(item, filters.servicio)) return false;
+      if (!hasServicio && hasPlan) return false;
+    } else if (item.ambito === 'plan') {
+      if (hasPlan && !matchesAutocomplete(item, filters.plan)) return false;
+      if (!hasPlan && hasServicio) return false;
     }
     return true;
   });
@@ -1114,13 +1058,9 @@ function applyTarifaFilters(items) {
 
 function resetTarifaFilters() {
   state.tarifas.filters = {
-    ambito: 'servicio',
-    nombreAmbito: '',
     estado: 'activas',
-    vigencia: 'hoy',
-    vigenciaDesde: '',
-    vigenciaHasta: '',
-    search: '',
+    servicio: '',
+    plan: '',
   };
   const { filters } = state.dom.tarifas;
   Object.entries(filters || {}).forEach(([key, input]) => {
@@ -1130,10 +1070,8 @@ function resetTarifaFilters() {
 }
 
 function updateTarifaFilter(key, value) {
-  state.tarifas.filters[key] = value;
-  if (key !== 'search') {
-    state.tarifas.paginator.page = 1;
-  }
+  state.tarifas.filters[key] = typeof value === 'string' ? value.trim() : value;
+  state.tarifas.paginator.page = 1;
   renderTarifas();
 }
 
@@ -1192,11 +1130,8 @@ function populateTarifaForm() {
   const { form, formModal } = state.dom.tarifas;
   if (!form) return;
   const data = state.tarifas.form.data || getDefaultTarifa();
-  form.querySelector('[name="codigo"]').value = data.codigo || '';
-  form.querySelector('[name="ambito"]').value = data.ambito || 'servicio';
-  form.querySelector('[name="referencia_id"]').value = data.referencia_id || '';
+  form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="valor"]').value = (data.valor ?? '').toString();
-  form.querySelector('[name="moneda"]').value = data.moneda || state.monedaFallback;
   form.querySelector('[name="incluye_impuesto"]').checked = !!data.incluye_impuesto;
   form.querySelector('[name="tipo_calculo"]').value = data.tipo_calculo || 'fijo';
   form.querySelector('[name="parametros"]').value = JSON.stringify(
@@ -1207,7 +1142,6 @@ function populateTarifaForm() {
   form.querySelector('[name="vigencia_desde"]').value = data.vigencia_desde || '';
   form.querySelector('[name="vigencia_hasta"]').value = data.vigencia_hasta || '';
   form.querySelector('[name="activo"]').checked = data.activo !== false;
-  form.querySelector('[name="actualizado_el"]').value = data.actualizado_el || '';
 
   updateTarifaFormUi();
 
@@ -1249,20 +1183,26 @@ async function submitTarifaForm(event) {
   const jsonField = form.querySelector('[name="parametros"]');
   if (!validateJsonField(jsonField)) return;
 
+  const base = state.tarifas.form.data || {};
   const payload = {
-    codigo: form.codigo.value.trim(),
-    ambito: form.ambito.value,
-    referencia_id: form.referencia_id.value || null,
+    descripcion: form.descripcion.value.trim() || null,
     valor: Number(form.valor.value),
-    moneda: form.moneda.value || state.monedaFallback,
     incluye_impuesto: form.incluye_impuesto.checked,
     tipo_calculo: form.tipo_calculo.value,
     parametros: jsonField.value ? JSON.parse(jsonField.value) : {},
     vigencia_desde: form.vigencia_desde.value || null,
     vigencia_hasta: form.vigencia_hasta.value || null,
     activo: form.activo.checked,
-    actualizado_el: form.actualizado_el.value || null,
   };
+  if (payload.tipo_calculo !== 'consumo_ia') {
+    payload.parametros = {};
+  }
+
+  const requestBody = {
+    ...base,
+    ...payload,
+  };
+  requestBody.actualizado_el = base.actualizado_el || null;
 
   if (!Number.isFinite(payload.valor) || payload.valor < 0) {
     form.valor.classList.add('is-invalid');
@@ -1270,13 +1210,13 @@ async function submitTarifaForm(event) {
   }
   form.valor.classList.remove('is-invalid');
 
-  const conflict = findTarifaConflict(payload, state.tarifas.form.data?.id);
+  const conflict = findTarifaConflict(requestBody, state.tarifas.form.data?.id);
   if (conflict) {
-    showTarifaConflictModal(conflict, payload);
+    showTarifaConflictModal(conflict, requestBody);
     return;
   }
 
-  await persistTarifa(payload, state.tarifas.form);
+  await persistTarifa(requestBody, state.tarifas.form);
 }
 
 
@@ -1535,7 +1475,7 @@ function resetComisionFilters() {
 }
 
 function updateComisionFilter(key, value) {
-  state.comisiones.filters[key] = value;
+  state.comisiones.filters[key] = typeof value === 'string' ? value.trim() : value;
   if (key !== 'search') {
     state.comisiones.paginator.page = 1;
   }
@@ -1597,15 +1537,12 @@ function populateComisionForm() {
   const { form, formModal } = state.dom.comisiones;
   if (!form) return;
   const data = state.comisiones.form.data || getDefaultComision();
-  form.querySelector('[name="codigo"]').value = data.codigo || '';
-  form.querySelector('[name="ambito"]').value = data.ambito || 'servicio';
-  form.querySelector('[name="referencia_id"]').value = data.referencia_id || '';
+  form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="rol_aplica"]').value = data.rol_aplica || 'cliente';
   form.querySelector('[name="porcentaje"]').value = (data.porcentaje ?? '').toString();
   form.querySelector('[name="vigencia_desde"]').value = data.vigencia_desde || '';
   form.querySelector('[name="vigencia_hasta"]').value = data.vigencia_hasta || '';
   form.querySelector('[name="activo"]').checked = data.activo !== false;
-  form.querySelector('[name="actualizado_el"]').value = data.actualizado_el || '';
 
   const title = formModal?.querySelector('[data-modal-title]');
   if (title) {
@@ -1624,25 +1561,29 @@ async function submitComisionForm(event) {
   }
   form.porcentaje.classList.remove('is-invalid');
 
+  const base = state.comisiones.form.data || {};
   const payload = {
-    codigo: form.codigo.value.trim(),
-    ambito: form.ambito.value,
-    referencia_id: form.referencia_id.value || null,
+    descripcion: form.descripcion.value.trim() || null,
     rol_aplica: form.rol_aplica.value,
     porcentaje,
     vigencia_desde: form.vigencia_desde.value || null,
     vigencia_hasta: form.vigencia_hasta.value || null,
     activo: form.activo.checked,
-    actualizado_el: form.actualizado_el.value || null,
   };
 
-  const conflict = findComisionConflict(payload, state.comisiones.form.data?.id);
+  const requestBody = {
+    ...base,
+    ...payload,
+  };
+  requestBody.actualizado_el = base.actualizado_el || null;
+
+  const conflict = findComisionConflict(requestBody, state.comisiones.form.data?.id);
   if (conflict) {
-    showComisionConflictModal(conflict, payload);
+    showComisionConflictModal(conflict, requestBody);
     return;
   }
 
-  await persistComision(payload, state.comisiones.form);
+  await persistComision(requestBody, state.comisiones.form);
 }
 
 
@@ -1918,6 +1859,7 @@ function bindImpuestosEvents() {
 
   impuestos.estado?.addEventListener('change', () => refreshImpuestosList());
   impuestos.tableBody?.addEventListener('click', handleImpuestoTableClick);
+  impuestos.tableBody?.addEventListener('change', handleImpuestoTableChange);
   impuestos.form?.addEventListener('submit', submitImpuestoForm);
   impuestos.reset?.addEventListener('click', resetImpuestoForm);
 }
@@ -1938,25 +1880,31 @@ function renderImpuestosTable() {
   if (!body) return;
   body.innerHTML = '';
 
-  if (!state.quick.impuestos.length) {
+  const estado = state.dom.impuestos.estado?.value ?? '';
+  const items = state.quick.impuestos.filter((impuesto) => {
+    if (!estado) return true;
+    return String(impuesto.activo) === estado;
+  });
+
+  if (!items.length) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td colspan="6" class="text-center py-4 text-muted">
-        No se registran impuestos configurados.
+        No se encontraron impuestos con los filtros aplicados.
       </td>`;
     body.appendChild(tr);
     return;
   }
 
-  state.quick.impuestos.forEach((impuesto) => {
+  items.forEach((impuesto) => {
     const tr = document.createElement('tr');
     tr.dataset.id = impuesto.id;
     tr.innerHTML = `
       <td>${impuesto.codigo}</td>
       <td>${impuesto.nombre}</td>
       <td>${formatPercentage(impuesto.porcentaje)}</td>
-      <td>${vigenciaLabel(impuesto.vigencia_desde, impuesto.vigencia_hasta)}</td>
       <td>${impuesto.incluido_en_precio ? 'Incluido' : 'No incluido'}</td>
+      <td>${vigenciaLabel(impuesto.vigencia_desde, impuesto.vigencia_hasta)}</td>
       <td>
         <div class="form-check form-switch">
           <input
@@ -1964,40 +1912,51 @@ function renderImpuestosTable() {
             type="checkbox"
             data-impuesto-toggle
             ${impuesto.activo ? 'checked' : ''}
-            disabled
-            title="Gestión deshabilitada"
           >
         </div>
       </td>
     `;
     body.appendChild(tr);
   });
+
+  const selectedId = Number(state.dom.impuestos.id?.value) || null;
+  if (selectedId) {
+    highlightImpuestoRow(selectedId);
+  }
 }
 
 function handleImpuestoTableClick(event) {
+  if (event.target.matches('[data-impuesto-toggle]')) {
+    return;
+  }
   const tr = event.target.closest('tr');
   if (!tr) return;
   const id = Number(tr.dataset.id);
-  if (event.target.matches('[data-impuesto-toggle]')) {
-    event.preventDefault();
-    window.alert('La gestión de impuestos está deshabilitada.');
-    return;
-  }
   fillImpuestoForm(id);
+}
+
+function handleImpuestoTableChange(event) {
+  if (!event.target.matches('[data-impuesto-toggle]')) return;
+  const tr = event.target.closest('tr');
+  if (!tr) return;
+  const id = Number(tr.dataset.id);
+  toggleImpuesto(id, event.target.checked);
 }
 
 function fillImpuestoForm(id) {
   const impuesto = state.quick.impuestos.find((item) => item.id === id);
   if (!impuesto) return;
-  const { form } = state.dom.impuestos;
-  form.id.value = impuesto.id;
-  form.codigo.value = impuesto.codigo || '';
-  form.nombre.value = impuesto.nombre || '';
-  form.porcentaje.value = Number(impuesto.porcentaje ?? 0);
-  form.vigencia_desde.value = impuesto.vigencia_desde?.slice(0, 10) || '';
-  form.vigencia_hasta.value = impuesto.vigencia_hasta?.slice(0, 10) || '';
-  form.incluido.checked = !!impuesto.incluido_en_precio;
-  form.activo.checked = impuesto.activo !== false;
+  const dom = state.dom.impuestos;
+  if (!dom?.form) return;
+  dom.id.value = impuesto.id;
+  dom.codigo.value = impuesto.codigo || '';
+  dom.nombre.value = impuesto.nombre || '';
+  dom.porcentaje.value = Number(impuesto.porcentaje ?? 0);
+  dom.vigenciaDesde.value = impuesto.vigencia_desde?.slice(0, 10) || '';
+  dom.vigenciaHasta.value = impuesto.vigencia_hasta?.slice(0, 10) || '';
+  dom.incluido.checked = !!impuesto.incluido_en_precio;
+  dom.activo.checked = impuesto.activo !== false;
+  dom.form.dataset.updatedAt = impuesto.actualizado_el || '';
   highlightImpuestoRow(id);
 }
 
@@ -2009,15 +1968,72 @@ function highlightImpuestoRow(id) {
 }
 
 function resetImpuestoForm() {
-  const { form } = state.dom.impuestos;
-  form.reset();
-  form.id.value = '';
+  const dom = state.dom.impuestos;
+  if (!dom?.form) return;
+  dom.form.reset();
+  dom.id.value = '';
+  dom.form.dataset.updatedAt = '';
   highlightImpuestoRow(null);
 }
 
 async function submitImpuestoForm(event) {
   event.preventDefault();
-  window.alert('La gestión de impuestos está deshabilitada.');
+  const dom = state.dom.impuestos;
+  if (!dom?.form) return;
+  const porcentaje = Number(dom.porcentaje.value);
+  if (!Number.isFinite(porcentaje) || porcentaje < 0) {
+    dom.porcentaje.classList.add('is-invalid');
+    return;
+  }
+  dom.porcentaje.classList.remove('is-invalid');
+
+  const payload = {
+    codigo: dom.codigo.value.trim(),
+    nombre: dom.nombre.value.trim(),
+    porcentaje,
+    incluido_en_precio: dom.incluido.checked,
+    vigencia_desde: dom.vigenciaDesde.value || null,
+    vigencia_hasta: dom.vigenciaHasta.value || null,
+    activo: dom.activo.checked,
+  };
+
+  if (!payload.codigo || !payload.nombre) {
+    window.alert('Completa código y nombre antes de guardar.');
+    return;
+  }
+
+  try {
+    const id = dom.id.value ? Number(dom.id.value) : null;
+    const headers = {};
+    if (dom.form.dataset.updatedAt) {
+      headers['If-Unmodified-Since'] = dom.form.dataset.updatedAt;
+    }
+    let response;
+    if (id) {
+      response = await apiPut(`/impuestos/${id}`, payload, headers);
+    } else {
+      response = await apiPost('/impuestos', payload);
+    }
+    const saved = await response.json();
+    upsertImpuesto(saved);
+    dom.id.value = saved.id || '';
+    dom.form.dataset.updatedAt = saved.actualizado_el || '';
+    fillImpuestoForm(saved.id);
+    renderImpuestosTable();
+  } catch (error) {
+    console.error('Error guardando impuesto', error);
+    window.alert(error.message || 'No se pudo guardar el impuesto.');
+  }
+}
+
+function upsertImpuesto(impuesto) {
+  if (!impuesto) return;
+  const index = state.quick.impuestos.findIndex((item) => item.id === impuesto.id);
+  if (index >= 0) {
+    state.quick.impuestos.splice(index, 1, impuesto);
+  } else {
+    state.quick.impuestos.push(impuesto);
+  }
 }
 
 async function toggleImpuesto(id, nextState) {
@@ -2080,6 +2096,8 @@ function renderEconconfig() {
   econconfig.decimales.value = config.decimales ?? 2;
   econconfig.regla.value = config.regla_redondeo || 'dos_decimales';
   econconfig.activo.checked = config.activo !== false;
+  econconfig.moneda.classList.remove('is-invalid');
+  econconfig.decimales.classList.remove('is-invalid');
   econconfig.updatedLabel.textContent = config.actualizado_el
     ? `Actualizado el ${formatExactDate(config.actualizado_el)}`
     : 'Sin actualizar';
@@ -2102,7 +2120,49 @@ function updateEconfigPreview() {
 
 async function submitEconfigForm(event) {
   event.preventDefault();
-  window.alert('La configuración económica es de solo lectura.');
+  const { econconfig } = state.dom;
+  if (!econconfig?.form) return;
+
+  const moneda = econconfig.moneda.value.trim().toUpperCase();
+  if (!moneda || moneda.length !== 3) {
+    econconfig.moneda.classList.add('is-invalid');
+    return;
+  }
+  econconfig.moneda.classList.remove('is-invalid');
+
+  const decimales = Number(econconfig.decimales.value);
+  if (!Number.isFinite(decimales) || decimales < 0) {
+    econconfig.decimales.classList.add('is-invalid');
+    return;
+  }
+  econconfig.decimales.classList.remove('is-invalid');
+
+  const payload = {
+    moneda_defecto: moneda,
+    decimales,
+    regla_redondeo: econconfig.regla.value,
+    activo: econconfig.activo.checked,
+  };
+
+  try {
+    const headers = {};
+    if (state.quick.econconfig?.actualizado_el) {
+      headers['If-Unmodified-Since'] = state.quick.econconfig.actualizado_el;
+    }
+    let response;
+    if (state.quick.econconfig) {
+      response = await apiPut('/econconfig', payload, headers);
+    } else {
+      response = await apiPost('/econconfig', payload);
+    }
+    const saved = await response.json();
+    state.quick.econconfig = saved;
+    state.monedaFallback = saved.moneda_defecto || state.monedaFallback;
+    renderEconconfig();
+  } catch (error) {
+    console.error('Error guardando configuración económica', error);
+    window.alert(error.message || 'No se pudo guardar la configuración económica.');
+  }
 }
 
 
@@ -2136,11 +2196,8 @@ async function loadComisiones() {
 
 function getDefaultTarifa() {
   return {
-    codigo: '',
-    ambito: state.tarifas.filters.ambito || 'servicio',
-    referencia_id: '',
+    descripcion: '',
     valor: 0,
-    moneda: state.quick.econconfig?.moneda_defecto || state.monedaFallback,
     incluye_impuesto: true,
     tipo_calculo: 'fijo',
     parametros: {},
@@ -2152,12 +2209,8 @@ function getDefaultTarifa() {
 }
 
 function getDefaultComision() {
-  const filters = state.comisiones.filters || {};
-  const ambito = filters.plan && !filters.servicio ? 'plan' : 'servicio';
   return {
-    codigo: '',
-    ambito,
-    referencia_id: '',
+    descripcion: '',
     rol_aplica: 'cliente',
     porcentaje: 0,
     vigencia_desde: new Date().toISOString().slice(0, 10),
@@ -2354,7 +2407,8 @@ function setupShortcuts() {
     if (event.key === '/' || event.key === '?') {
       event.preventDefault();
       const filters = state.tabs === 'tarifas' ? state.dom.tarifas.filters : state.dom.comisiones.filters;
-      filters?.search?.focus();
+      const primaryField = filters?.servicio || filters?.plan || filters?.estado;
+      primaryField?.focus();
     }
   });
 }

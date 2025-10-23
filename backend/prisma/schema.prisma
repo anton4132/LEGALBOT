@@ -241,23 +241,22 @@ model estadopago {
   pago   pago[]
 }
 
-
 model pago {
-  id                 Int      @id @default(autoincrement())
+  id                 Int     @id @default(autoincrement())
   usuario_id         Int
-  monto              Decimal  @db.Decimal
-  moneda             String   @db.Char(3)
+  monto              Decimal @db.Decimal
+  moneda             String  @db.Char(3)
   concepto           String?
   proveedor_txn      String?
-  referencia         String?  @unique
-  voucher_archivo_id Int?     @unique
-  estado_id          Int      @db.SmallInt
+  referencia         String? @unique
+  voucher_archivo_id Int?    @unique
+  estado_id          Int     @db.SmallInt
   metodo_pago        String?
   servicio_id        Int?
   plan_id            Int?
 
-  creado_el          DateTime  @default(now()) @db.Timestamptz(6)
-  actualizado_el     DateTime  @updatedAt @db.Timestamptz(6)
+  creado_el      DateTime @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
 
   cita        cita[]
   documentos  documento[]
@@ -267,8 +266,8 @@ model pago {
   usuario     usuario       @relation(fields: [usuario_id], references: [id])
   voucher     archivo?      @relation("PagoVoucher", fields: [voucher_archivo_id], references: [id])
 
-  servicio    servicio?     @relation(fields: [servicio_id], references: [id])
-  plan        plan?         @relation(fields: [plan_id], references: [id])
+  servicio servicio? @relation(fields: [servicio_id], references: [id])
+  plan     plan?     @relation(fields: [plan_id], references: [id])
 
   @@index([estado_id])
   @@index([usuario_id])
@@ -316,27 +315,26 @@ enum tipo_regla_tc {
 }
 
 model tarifa {
-  id               Int            @id @default(autoincrement())
-  
-  descripcion      String?                                      //front  - form 
-  valor            Decimal        @db.Decimal                   //front  - form
-  incluye_impuesto Boolean        @default(false)               //front  - form 
-  tipo_calculo     tipo_calculo_tc?                              //front  - form 
-  parametros       Json?                                         //front  - form->solo si tipo de consumo es ia 
-  activo           Boolean        @default(true)                //front  - form 
-  vigencia_desde   DateTime?      @db.Timestamptz(6)             //front  - form 
-  vigencia_hasta   DateTime?      @db.Timestamptz(6)             //front  - form 
+  id Int @id @default(autoincrement())
+
+  descripcion      String? //front  - form 
+  valor            Decimal          @db.Decimal //front  - form
+  incluye_impuesto Boolean          @default(false) //front  - form 
+  tipo_calculo     tipo_calculo_tc? //front  - form 
+  parametros       Json? //front  - form->solo si tipo de consumo es ia 
+  activo           Boolean          @default(true) //front  - form 
+  vigencia_desde   DateTime?        @db.Timestamptz(6) //front  - form 
+  vigencia_hasta   DateTime?        @db.Timestamptz(6) //front  - form 
 
   servicio_id Int?
   plan_id     Int?
 
-  servicio servicio? @relation(fields: [servicio_id], references: [id], onDelete: SetNull)
-  plan     plan?     @relation(fields: [plan_id], references: [id], onDelete: SetNull)
+  servicio servicio? @relation("ServicioTarifa", fields: [servicio_id], references: [id], onDelete: SetNull)
+  plan     plan?     @relation("PlanTarifa", fields: [plan_id], references: [id], onDelete: SetNull)
 
-   // Auditoría para UI (Última actualización)
+  // Auditoría para UI (Última actualización)
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
 
   @@index([servicio_id])
   @@index([plan_id])
@@ -345,23 +343,22 @@ model tarifa {
 
 model comision {
   id             Int           @id @default(autoincrement())
-  descripcion    String?                                      //front-form
-  rol_aplica     rol_aplica_tc                               //front-form
-  porcentaje     Decimal        @db.Decimal                   //front-form
-  activo         Boolean        @default(true)                //front-form
-  vigencia_desde DateTime?      @db.Timestamptz(6)             //front-form
-  vigencia_hasta DateTime?      @db.Timestamptz(6)             //front-form
+  descripcion    String? //front-form
+  rol_aplica     rol_aplica_tc //front-form
+  porcentaje     Decimal       @db.Decimal //front-form
+  activo         Boolean       @default(true) //front-form
+  vigencia_desde DateTime?     @db.Timestamptz(6) //front-form
+  vigencia_hasta DateTime?     @db.Timestamptz(6) //front-form
 
   servicio_id Int?
   plan_id     Int?
 
-  servicio servicio? @relation(fields: [servicio_id], references: [id], onDelete: SetNull)
-  plan     plan?     @relation(fields: [plan_id], references: [id], onDelete: SetNull)
+  servicio servicio? @relation("ServicioComision", fields: [servicio_id], references: [id], onDelete: SetNull)
+  plan     plan?     @relation("PlanComision", fields: [plan_id], references: [id], onDelete: SetNull)
 
   // Auditoría para UI
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
 
   @@index([servicio_id])
   @@index([plan_id])
@@ -371,7 +368,7 @@ model comision {
 
 model impuesto {
   id                 Int       @id @default(autoincrement())
-  codigo             String    @unique                       //codigo generado por backend
+  codigo             String    @unique //codigo generado por backend
   nombre             String
   porcentaje         Decimal   @db.Decimal
   incluido_en_precio Boolean   @default(false)
@@ -716,9 +713,11 @@ model plan {
   almacenamiento_maximo Int?
   actualizado_el        DateTime @updatedAt @db.Timestamptz(6)
 
-  usuarios      usuario[]
-  planservicios planservicio[]
-  tarifas       tarifacomision[] @relation("PlanTarifa")
+  usuarios     usuario[]
+  tarifas      tarifa[]       @relation("PlanTarifa")
+  comisiones   comision[]     @relation("PlanComision")
+  pago         pago[]
+  planservicio planservicio[]
 
   @@index([nombre])
 }
@@ -734,7 +733,9 @@ model servicio {
   fecha_modificada DateTime @updatedAt @db.Timestamptz(6)
 
   planservicios planservicio[]
-  tarifas       tarifacomision[] @relation("ServicioTarifa")
+  tarifas       tarifa[]       @relation("ServicioTarifa")
+  comisiones    comision[]     @relation("ServicioComision")
+  pago          pago[]
 
   @@index([activo])
   @@index([codigo])
