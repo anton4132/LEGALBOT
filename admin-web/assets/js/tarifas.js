@@ -28,6 +28,12 @@ const CHIP_LABELS = {
   pausada: 'Pausada',
 };
 
+const SCOPE_TYPES = {
+  PLAN_SERVICIO: 'plan-servicio',
+  SERVICIO: 'servicio',
+  PLAN: 'plan',
+};
+
 const state = {
   ready: false,
   monedaFallback: 'PEN',
@@ -68,6 +74,12 @@ const state = {
   quick: {
     impuestos: [],
     econconfig: null,
+  },
+  catalogs: {
+    planes: [],
+    servicios: [],
+    planServicios: [],
+    ready: false,
   },
   dom: {},
 };
@@ -486,6 +498,62 @@ function setupLayout() {
                       placeholder="Describe la regla"
                     />
                   </div>
+                  <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <label class="form-label mb-0">Ámbito de aplicación</label>
+                      <span class="text-muted small">Selecciona el ámbito de aplicación.</span>
+                    </div>
+                    <input type="hidden" name="scope_tipo" id="tarifas-form-scope" />
+                    <div class="d-flex flex-column flex-lg-row gap-2" data-scope-options="tarifa">
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary w-100 text-start"
+                        data-scope-option="tarifa"
+                        data-scope-value="plan-servicio"
+                      >
+                        <span class="fw-semibold d-block">Plan + Servicio</span>
+                        <span class="small text-muted">Selecciona un plan y luego un servicio del plan.</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary w-100 text-start"
+                        data-scope-option="tarifa"
+                        data-scope-value="servicio"
+                      >
+                        <span class="fw-semibold d-block">Servicio independiente</span>
+                        <span class="small text-muted">Aplica directamente al servicio sin plan asociado.</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary w-100 text-start"
+                        data-scope-option="tarifa"
+                        data-scope-value="plan"
+                      >
+                        <span class="fw-semibold d-block">Solo Plan</span>
+                        <span class="small text-muted">La regla se aplica a todos los servicios del plan.</span>
+                      </button>
+                    </div>
+                    <p class="form-text mb-1">
+                      Selecciona el ámbito de aplicación: <strong>Plan + Servicio</strong> si el servicio está dentro de un plan;
+                      <strong>Servicio independiente</strong> si no está vinculado a ningún plan; <strong>Solo Plan</strong> si la regla
+                      aplica al plan completo.
+                    </p>
+                    <div class="invalid-feedback d-block d-none" data-scope-error="tarifa">
+                      Selecciona un ámbito para continuar.
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-6 d-none" data-scope-plan-group="tarifa">
+                    <label for="tarifas-form-plan" class="form-label">Plan</label>
+                    <select id="tarifas-form-plan" name="plan_id" class="form-select">
+                      <option value="">Selecciona un plan</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6 d-none" data-scope-servicio-group="tarifa">
+                    <label for="tarifas-form-servicio" class="form-label">Servicio</label>
+                    <select id="tarifas-form-servicio" name="servicio_id" class="form-select" disabled>
+                      <option value="">Selecciona un servicio</option>
+                    </select>
+                  </div>
                   <div class="col-12 col-md-6">
                     <label for="tarifas-form-valor" class="form-label">Valor</label>
                     <input
@@ -636,6 +704,62 @@ function setupLayout() {
                       placeholder="Describe la comisión"
                     />
                   </div>
+                  <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <label class="form-label mb-0">Ámbito de aplicación</label>
+                      <span class="text-muted small">Selecciona el ámbito de aplicación.</span>
+                    </div>
+                    <input type="hidden" name="scope_tipo" id="comisiones-form-scope" />
+                    <div class="d-flex flex-column flex-lg-row gap-2" data-scope-options="comision">
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary w-100 text-start"
+                        data-scope-option="comision"
+                        data-scope-value="plan-servicio"
+                      >
+                        <span class="fw-semibold d-block">Plan + Servicio</span>
+                        <span class="small text-muted">Selecciona un plan y luego un servicio del plan.</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary w-100 text-start"
+                        data-scope-option="comision"
+                        data-scope-value="servicio"
+                      >
+                        <span class="fw-semibold d-block">Servicio independiente</span>
+                        <span class="small text-muted">Aplica directamente al servicio sin plan asociado.</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary w-100 text-start"
+                        data-scope-option="comision"
+                        data-scope-value="plan"
+                      >
+                        <span class="fw-semibold d-block">Solo Plan</span>
+                        <span class="small text-muted">La comisión se aplica a todos los servicios del plan.</span>
+                      </button>
+                    </div>
+                    <p class="form-text mb-1">
+                      Selecciona el ámbito de aplicación: <strong>Plan + Servicio</strong> si el servicio está dentro de un plan;
+                      <strong>Servicio independiente</strong> si no está vinculado a ningún plan; <strong>Solo Plan</strong> si la regla
+                      aplica al plan completo.
+                    </p>
+                    <div class="invalid-feedback d-block d-none" data-scope-error="comision">
+                      Selecciona un ámbito para continuar.
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-6 d-none" data-scope-plan-group="comision">
+                    <label for="comisiones-form-plan" class="form-label">Plan</label>
+                    <select id="comisiones-form-plan" name="plan_id" class="form-select">
+                      <option value="">Selecciona un plan</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6 d-none" data-scope-servicio-group="comision">
+                    <label for="comisiones-form-servicio" class="form-label">Servicio</label>
+                    <select id="comisiones-form-servicio" name="servicio_id" class="form-select" disabled>
+                      <option value="">Selecciona un servicio</option>
+                    </select>
+                  </div>
                   <div class="col-12 col-md-6">
                     <label for="comisiones-form-rol" class="form-label">Rol aplica</label>
                     <select id="comisiones-form-rol" name="rol_aplica" class="form-select">
@@ -712,6 +836,7 @@ async function init() {
   cacheDom();
   bindGlobalEvents();
   await Promise.all([
+    loadTarifaCatalogs(),
     loadTarifas(),
     loadComisiones(),
     loadImpuestos(),
@@ -755,6 +880,19 @@ function cacheDom() {
     form: document.getElementById('tarifas-form'),
   };
 
+  if (dom.tarifas.form) {
+    const form = dom.tarifas.form;
+    dom.tarifas.scope = {
+      hidden: form.querySelector('#tarifas-form-scope'),
+      options: form.querySelectorAll('[data-scope-option="tarifa"]'),
+      planGroup: form.querySelector('[data-scope-plan-group="tarifa"]'),
+      servicioGroup: form.querySelector('[data-scope-servicio-group="tarifa"]'),
+      planSelect: form.querySelector('#tarifas-form-plan'),
+      servicioSelect: form.querySelector('#tarifas-form-servicio'),
+      error: form.querySelector('[data-scope-error="tarifa"]'),
+    };
+  }
+
   dom.comisiones = {
     tableBody: document.getElementById('comisiones-table-body'),
     empty: document.getElementById('comisiones-empty-state'),
@@ -775,6 +913,19 @@ function cacheDom() {
     formModal: document.getElementById('comisiones-form-modal'),
     form: document.getElementById('comisiones-form'),
   };
+
+  if (dom.comisiones.form) {
+    const form = dom.comisiones.form;
+    dom.comisiones.scope = {
+      hidden: form.querySelector('#comisiones-form-scope'),
+      options: form.querySelectorAll('[data-scope-option="comision"]'),
+      planGroup: form.querySelector('[data-scope-plan-group="comision"]'),
+      servicioGroup: form.querySelector('[data-scope-servicio-group="comision"]'),
+      planSelect: form.querySelector('#comisiones-form-plan'),
+      servicioSelect: form.querySelector('#comisiones-form-servicio'),
+      error: form.querySelector('[data-scope-error="comision"]'),
+    };
+  }
 
   dom.simulator = {
     open: document.getElementById('tarifas-simulator-btn'),
@@ -965,6 +1116,8 @@ function bindTarifasEvents() {
   state.dom.tarifas.conflictResolveButtons.forEach((btn) =>
     btn.addEventListener('click', () => resolveTarifaConflict(btn.dataset.conflictAction))
   );
+
+  initScopeControls('tarifas');
 }
 
 function renderTarifas() {
@@ -1009,7 +1162,7 @@ function tarifaRowTemplate(tarifa) {
     <td><div class="fw-semibold">${tarifa.codigo}</div><div class="small text-muted">${chip}</div></td>
     <td>
       <div class="fw-semibold">${ambitoLabel(tarifa)}</div>
-      <div class="small text-muted">${tarifa.ambito === 'plan' ? 'Plan' : 'Servicio'}</div>
+      <div class="small text-muted">${scopeTypeLabel(tarifa)}</div>
     </td>
     <td>
       <span>${formatCurrency(tarifa.valor, tarifa.moneda)}</span>
@@ -1045,13 +1198,11 @@ function applyTarifaFilters(items) {
   return items.filter((item) => {
     if (filters.estado === 'activas' && !item.activo) return false;
     if (filters.estado === 'inactivas' && item.activo) return false;
-    if (item.ambito === 'servicio') {
-      if (hasServicio && !matchesAutocomplete(item, filters.servicio)) return false;
-      if (!hasServicio && hasPlan) return false;
-    } else if (item.ambito === 'plan') {
-      if (hasPlan && !matchesAutocomplete(item, filters.plan)) return false;
-      if (!hasPlan && hasServicio) return false;
-    }
+    const scopeType = resolveScopeType(item);
+    if (hasServicio && !matchesAutocomplete(item, filters.servicio, 'servicio')) return false;
+    if (hasPlan && !matchesAutocomplete(item, filters.plan, 'plan')) return false;
+    if (!hasServicio && hasPlan && scopeType === SCOPE_TYPES.SERVICIO) return false;
+    if (!hasPlan && hasServicio && scopeType === SCOPE_TYPES.PLAN) return false;
     return true;
   });
 }
@@ -1130,6 +1281,7 @@ function populateTarifaForm() {
   const { form, formModal } = state.dom.tarifas;
   if (!form) return;
   const data = state.tarifas.form.data || getDefaultTarifa();
+  prepareScopeOptions('tarifas', data);
   form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="valor"]').value = (data.valor ?? '').toString();
   form.querySelector('[name="incluye_impuesto"]').checked = !!data.incluye_impuesto;
@@ -1183,6 +1335,39 @@ async function submitTarifaForm(event) {
   const jsonField = form.querySelector('[name="parametros"]');
   if (!validateJsonField(jsonField)) return;
 
+  const scopeControls = state.dom.tarifas.scope || {};
+  const scopeType = scopeControls.hidden?.value || '';
+  const planId = parseOptionalId(form.plan_id?.value);
+  const servicioId = parseOptionalId(form.servicio_id?.value);
+  clearScopeError('tarifas');
+
+  if (!scopeType) {
+    showScopeError('tarifas', 'Selecciona el ámbito de aplicación antes de guardar.');
+    return;
+  }
+
+  if (
+    (scopeType === SCOPE_TYPES.PLAN || scopeType === SCOPE_TYPES.PLAN_SERVICIO) &&
+    !planId
+  ) {
+    scopeControls.planSelect?.classList.add('is-invalid');
+    showScopeError('tarifas', 'Selecciona un plan para definir el ámbito.');
+    scopeControls.planSelect?.focus();
+    return;
+  }
+  scopeControls.planSelect?.classList.remove('is-invalid');
+
+  if (
+    (scopeType === SCOPE_TYPES.SERVICIO || scopeType === SCOPE_TYPES.PLAN_SERVICIO) &&
+    !servicioId
+  ) {
+    scopeControls.servicioSelect?.classList.add('is-invalid');
+    showScopeError('tarifas', 'Selecciona un servicio para definir el ámbito.');
+    scopeControls.servicioSelect?.focus();
+    return;
+  }
+  scopeControls.servicioSelect?.classList.remove('is-invalid');
+
   const base = state.tarifas.form.data || {};
   const payload = {
     descripcion: form.descripcion.value.trim() || null,
@@ -1193,6 +1378,8 @@ async function submitTarifaForm(event) {
     vigencia_desde: form.vigencia_desde.value || null,
     vigencia_hasta: form.vigencia_hasta.value || null,
     activo: form.activo.checked,
+    plan_id: planId,
+    servicio_id: servicioId,
   };
   if (payload.tipo_calculo !== 'consumo_ia') {
     payload.parametros = {};
@@ -1234,6 +1421,7 @@ async function persistTarifa(payload, formState) {
     const saved = await response.json();
     upsertTarifa(saved);
     state.dom.tarifas.form.reset();
+    prepareScopeOptions('tarifas', getDefaultTarifa());
     getBootstrapModal(state.dom.tarifas.formModal).hide();
     renderTarifas();
   } catch (error) {
@@ -1254,9 +1442,8 @@ function upsertTarifa(tarifa) {
 function findTarifaConflict(tarifa, ignoreId) {
   return state.tarifas.items.find((item) => {
     if (item.id === ignoreId) return false;
-    if (item.ambito !== tarifa.ambito) return false;
-    if (item.referencia_id !== tarifa.referencia_id) return false;
     if (!item.activo || !tarifa.activo) return false;
+    if (!hasSameScope(item, tarifa)) return false;
     return rangesOverlap(
       item.vigencia_desde,
       item.vigencia_hasta,
@@ -1375,6 +1562,272 @@ function bindComisionesEvents() {
   state.dom.comisiones.conflictResolveButtons.forEach((btn) =>
     btn.addEventListener('click', () => resolveComisionConflict(btn.dataset.conflictAction))
   );
+
+  initScopeControls('comisiones');
+}
+
+function initScopeControls(formKey) {
+  const scope = getScopeDom(formKey);
+  if (!scope) return;
+
+  scope.options?.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.scopeValue || '';
+      selectScope(formKey, type);
+    });
+  });
+
+  scope.planSelect?.addEventListener('change', () => {
+    scope.planSelect.classList.remove('is-invalid');
+    updateScopeServiceOptions(formKey, null);
+    if (scope.servicioSelect && scope.hidden?.value === SCOPE_TYPES.PLAN_SERVICIO) {
+      scope.servicioSelect.value = '';
+      scope.servicioSelect.classList.remove('is-invalid');
+    }
+    clearScopeError(formKey);
+  });
+
+  scope.servicioSelect?.addEventListener('change', () => {
+    scope.servicioSelect.classList.remove('is-invalid');
+    clearScopeError(formKey);
+  });
+}
+
+function getScopeDom(formKey) {
+  if (formKey === 'tarifas') return state.dom.tarifas.scope || null;
+  if (formKey === 'comisiones') return state.dom.comisiones.scope || null;
+  return null;
+}
+
+function selectScope(formKey, type, options = {}) {
+  const scope = getScopeDom(formKey);
+  if (!scope) return;
+
+  const normalized = type || '';
+  if (scope.hidden) {
+    scope.hidden.value = normalized;
+  }
+
+  scope.options?.forEach((btn) => {
+    const isActive = btn.dataset.scopeValue === normalized;
+    btn.classList.toggle('active', isActive);
+    btn.classList.toggle('btn-primary', isActive);
+    btn.classList.toggle('btn-outline-secondary', !isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+  });
+
+  const showPlan = normalized === SCOPE_TYPES.PLAN || normalized === SCOPE_TYPES.PLAN_SERVICIO;
+  const showServicio =
+    normalized === SCOPE_TYPES.SERVICIO || normalized === SCOPE_TYPES.PLAN_SERVICIO;
+
+  toggleScopeGroup(scope.planGroup, showPlan);
+  toggleScopeGroup(scope.servicioGroup, showServicio);
+
+  if (scope.planSelect) {
+    if (showPlan) {
+      scope.planSelect.setAttribute('required', '');
+    } else {
+      scope.planSelect.removeAttribute('required');
+    }
+  }
+
+  if (scope.servicioSelect) {
+    if (showServicio) {
+      scope.servicioSelect.setAttribute('required', '');
+    } else {
+      scope.servicioSelect.removeAttribute('required');
+    }
+  }
+
+  if (!options.skipServiceUpdate) {
+    updateScopeServiceOptions(formKey);
+  }
+
+  clearScopeError(formKey);
+  scope.planSelect?.classList.remove('is-invalid');
+  scope.servicioSelect?.classList.remove('is-invalid');
+}
+
+function toggleScopeGroup(element, visible) {
+  if (!element) return;
+  element.classList.toggle('d-none', !visible);
+}
+
+function prepareScopeOptions(formKey, data) {
+  const scope = getScopeDom(formKey);
+  if (!scope) return;
+
+  const planId = normalizeId(data?.plan_id ?? data?.plan?.id);
+  const servicioId = normalizeId(data?.servicio_id ?? data?.servicio?.id);
+  const scopeType = determineScopeType(planId, servicioId, data?.ambito);
+
+  populatePlanOptions(scope.planSelect, planId, data?.plan);
+  if (scope.planSelect) {
+    scope.planSelect.value = planId ? String(planId) : '';
+  }
+
+  selectScope(formKey, scopeType, { skipServiceUpdate: true });
+  updateScopeServiceOptions(formKey, servicioId, data?.servicio);
+  if (scope.servicioSelect) {
+    scope.servicioSelect.value = servicioId ? String(servicioId) : '';
+  }
+
+  clearScopeError(formKey);
+  scope.planSelect?.classList.remove('is-invalid');
+  scope.servicioSelect?.classList.remove('is-invalid');
+}
+
+function populatePlanOptions(select, selectedId, fallbackPlan) {
+  if (!select) return;
+  const source = [...(state.catalogs.planes || [])];
+  const targetId = normalizeId(selectedId);
+  const fallbackId = normalizeId(fallbackPlan?.id);
+  if (fallbackPlan && fallbackId && !source.some((plan) => plan.id === fallbackId)) {
+    source.push(fallbackPlan);
+  }
+  const existing = targetId ? findPlanById(targetId) : null;
+  if (existing && !source.some((plan) => plan.id === existing.id)) {
+    source.push(existing);
+  }
+
+  const seen = new Set();
+  const unique = [];
+  source.forEach((plan) => {
+    if (!plan || seen.has(plan.id)) return;
+    seen.add(plan.id);
+    unique.push(plan);
+  });
+
+  unique.sort((a, b) => {
+    const nameA = (a?.nombre || '').toString();
+    const nameB = (b?.nombre || '').toString();
+    return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+  });
+
+  select.innerHTML = '<option value="">Selecciona un plan</option>';
+  unique.forEach((plan) => {
+    const option = document.createElement('option');
+    option.value = plan.id;
+    const suffix = plan.activo === false ? ' (inactivo)' : '';
+    option.textContent = `${plan.nombre || `ID ${plan.id}`}${suffix}`;
+    select.appendChild(option);
+  });
+
+  if (targetId) {
+    select.value = String(targetId);
+  }
+}
+
+function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
+  const scope = getScopeDom(formKey);
+  if (!scope?.servicioSelect) return;
+  const select = scope.servicioSelect;
+  const scopeType = scope.hidden?.value || '';
+  const planId = normalizeId(scope.planSelect?.value);
+  let services = [];
+  let disable = false;
+  let placeholder = 'Selecciona un servicio';
+
+  if (scopeType === SCOPE_TYPES.PLAN_SERVICIO) {
+    if (planId) {
+      services = getServicesForPlan(planId);
+    } else {
+      disable = true;
+      placeholder = 'Selecciona un plan para ver servicios';
+    }
+  } else if (scopeType === SCOPE_TYPES.SERVICIO) {
+    services = [...(state.catalogs.servicios || [])];
+  } else {
+    disable = true;
+    placeholder = 'Selecciona un ámbito para continuar';
+  }
+
+  const desiredId = normalizeId(selectedId ?? select.value);
+  const fallback = fallbackService && normalizeId(fallbackService.id) ? fallbackService : null;
+  if (fallback && fallback.id && services.every((svc) => svc.id !== fallback.id)) {
+    services.push(fallback);
+  }
+  if (desiredId) {
+    const existing = findServiceById(desiredId);
+    if (existing && services.every((svc) => svc.id !== existing.id)) {
+      services.push(existing);
+    }
+  }
+
+  const seen = new Set();
+  const unique = services
+    .filter((svc) => svc && !seen.has(svc.id) && seen.add(svc.id) === true)
+    .sort((a, b) => {
+      const labelA = (a.nombre || a.codigo || '').toString();
+      const labelB = (b.nombre || b.codigo || '').toString();
+      return labelA.localeCompare(labelB, 'es', { sensitivity: 'base' });
+    });
+
+  select.innerHTML = `<option value="">${placeholder}</option>`;
+  unique.forEach((service) => {
+    const option = document.createElement('option');
+    option.value = service.id;
+    const parts = [];
+    if (service.nombre) parts.push(service.nombre);
+    if (service.codigo && service.codigo !== service.nombre) parts.push(service.codigo);
+    const label = parts.length ? parts.join(' · ') : `ID ${service.id}`;
+    const suffix = service.activo === false ? ' (inactivo)' : '';
+    option.textContent = `${label}${suffix}`;
+    select.appendChild(option);
+  });
+
+  select.disabled = disable;
+  if (desiredId && !disable) {
+    select.value = String(desiredId);
+  } else {
+    select.value = '';
+  }
+}
+
+function getServicesForPlan(planId) {
+  const targetId = normalizeId(planId);
+  if (!targetId) return [];
+  const assignments = state.catalogs.planServicios || [];
+  return assignments
+    .filter((assignment) => assignment.plan_id === targetId && assignment.activo !== false)
+    .map((assignment) => findServiceById(assignment.servicio_id))
+    .filter(Boolean);
+}
+
+function findPlanById(id) {
+  const targetId = normalizeId(id);
+  if (!targetId) return null;
+  return (state.catalogs.planes || []).find((plan) => plan.id === targetId) || null;
+}
+
+function findServiceById(id) {
+  const targetId = normalizeId(id);
+  if (!targetId) return null;
+  return (state.catalogs.servicios || []).find((svc) => svc.id === targetId) || null;
+}
+
+function showScopeError(formKey, message) {
+  const scope = getScopeDom(formKey);
+  if (!scope?.error) return;
+  if (message) {
+    scope.error.textContent = message;
+  }
+  scope.error.classList.remove('d-none');
+}
+
+function clearScopeError(formKey) {
+  const scope = getScopeDom(formKey);
+  if (!scope?.error) return;
+  scope.error.classList.add('d-none');
+}
+
+function determineScopeType(planId, servicioId, fallbackAmbito) {
+  if (planId && servicioId) return SCOPE_TYPES.PLAN_SERVICIO;
+  if (planId) return SCOPE_TYPES.PLAN;
+  if (servicioId) return SCOPE_TYPES.SERVICIO;
+  if (fallbackAmbito === 'plan') return SCOPE_TYPES.PLAN;
+  if (fallbackAmbito === 'servicio') return SCOPE_TYPES.SERVICIO;
+  return '';
 }
 
 function renderComisiones() {
@@ -1417,7 +1870,7 @@ function comisionRowTemplate(comision) {
     <td><div class="fw-semibold">${comision.codigo}</div><div class="small text-muted">${chip}</div></td>
     <td>
       <div class="fw-semibold">${ambitoLabel(comision)}</div>
-      <div class="small text-muted">${comision.ambito === 'plan' ? 'Plan' : 'Servicio'}</div>
+      <div class="small text-muted">${scopeTypeLabel(comision)}</div>
     </td>
     <td>${rolBadge}</td>
     <td>${formatPercentage(comision.porcentaje)}</td>
@@ -1450,13 +1903,11 @@ function applyComisionFilters(items) {
   return items.filter((item) => {
     if (filters.estado === 'activas' && !item.activo) return false;
     if (filters.estado === 'inactivas' && item.activo) return false;
-    if (item.ambito === 'servicio') {
-      if (hasServicio && !matchesAutocomplete(item, filters.servicio)) return false;
-      if (!hasServicio && hasPlan) return false;
-    } else if (item.ambito === 'plan') {
-      if (hasPlan && !matchesAutocomplete(item, filters.plan)) return false;
-      if (!hasPlan && hasServicio) return false;
-    }
+    const scopeType = resolveScopeType(item);
+    if (hasServicio && !matchesAutocomplete(item, filters.servicio, 'servicio')) return false;
+    if (hasPlan && !matchesAutocomplete(item, filters.plan, 'plan')) return false;
+    if (!hasServicio && hasPlan && scopeType === SCOPE_TYPES.SERVICIO) return false;
+    if (!hasPlan && hasServicio && scopeType === SCOPE_TYPES.PLAN) return false;
     return true;
   });
 }
@@ -1537,6 +1988,7 @@ function populateComisionForm() {
   const { form, formModal } = state.dom.comisiones;
   if (!form) return;
   const data = state.comisiones.form.data || getDefaultComision();
+  prepareScopeOptions('comisiones', data);
   form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="rol_aplica"]').value = data.rol_aplica || 'cliente';
   form.querySelector('[name="porcentaje"]').value = (data.porcentaje ?? '').toString();
@@ -1561,6 +2013,39 @@ async function submitComisionForm(event) {
   }
   form.porcentaje.classList.remove('is-invalid');
 
+  const scopeControls = state.dom.comisiones.scope || {};
+  const scopeType = scopeControls.hidden?.value || '';
+  const planId = parseOptionalId(form.plan_id?.value);
+  const servicioId = parseOptionalId(form.servicio_id?.value);
+  clearScopeError('comisiones');
+
+  if (!scopeType) {
+    showScopeError('comisiones', 'Selecciona el ámbito de aplicación antes de guardar.');
+    return;
+  }
+
+  if (
+    (scopeType === SCOPE_TYPES.PLAN || scopeType === SCOPE_TYPES.PLAN_SERVICIO) &&
+    !planId
+  ) {
+    scopeControls.planSelect?.classList.add('is-invalid');
+    showScopeError('comisiones', 'Selecciona un plan para definir el ámbito.');
+    scopeControls.planSelect?.focus();
+    return;
+  }
+  scopeControls.planSelect?.classList.remove('is-invalid');
+
+  if (
+    (scopeType === SCOPE_TYPES.SERVICIO || scopeType === SCOPE_TYPES.PLAN_SERVICIO) &&
+    !servicioId
+  ) {
+    scopeControls.servicioSelect?.classList.add('is-invalid');
+    showScopeError('comisiones', 'Selecciona un servicio para definir el ámbito.');
+    scopeControls.servicioSelect?.focus();
+    return;
+  }
+  scopeControls.servicioSelect?.classList.remove('is-invalid');
+
   const base = state.comisiones.form.data || {};
   const payload = {
     descripcion: form.descripcion.value.trim() || null,
@@ -1569,6 +2054,8 @@ async function submitComisionForm(event) {
     vigencia_desde: form.vigencia_desde.value || null,
     vigencia_hasta: form.vigencia_hasta.value || null,
     activo: form.activo.checked,
+    plan_id: planId,
+    servicio_id: servicioId,
   };
 
   const requestBody = {
@@ -1590,8 +2077,7 @@ async function submitComisionForm(event) {
 function findComisionConflict(comision, ignoreId) {
   return state.comisiones.items.find((item) => {
     if (item.id === ignoreId) return false;
-    if (item.ambito !== comision.ambito) return false;
-    if (item.referencia_id !== comision.referencia_id) return false;
+    if (!hasSameScope(item, comision)) return false;
     if (item.rol_aplica !== comision.rol_aplica) return false;
     if (!item.activo || !comision.activo) return false;
     return rangesOverlap(
@@ -1653,6 +2139,7 @@ async function persistComision(payload, formState) {
     const saved = await response.json();
     upsertComision(saved);
     state.dom.comisiones.form.reset();
+    prepareScopeOptions('comisiones', getDefaultComision());
     getBootstrapModal(state.dom.comisiones.formModal).hide();
     renderComisiones();
   } catch (error) {
@@ -2172,6 +2659,23 @@ async function submitEconfigForm(event) {
  * ------------------------------
  */
 
+async function loadTarifaCatalogs() {
+  try {
+    const response = await apiGet('/tarifas/catalogs');
+    const data = await response.json();
+    state.catalogs.planes = data.planes || [];
+    state.catalogs.servicios = data.servicios || [];
+    state.catalogs.planServicios = data.planServicios || [];
+    state.catalogs.ready = true;
+  } catch (error) {
+    console.error('Error cargando catálogos de tarifas', error);
+    state.catalogs.planes = [];
+    state.catalogs.servicios = [];
+    state.catalogs.planServicios = [];
+    state.catalogs.ready = false;
+  }
+}
+
 async function loadTarifas() {
   try {
     const response = await apiGet('/tarifas');
@@ -2205,6 +2709,8 @@ function getDefaultTarifa() {
     vigencia_hasta: '',
     activo: true,
     actualizado_el: '',
+    plan_id: null,
+    servicio_id: null,
   };
 }
 
@@ -2217,12 +2723,32 @@ function getDefaultComision() {
     vigencia_hasta: '',
     activo: true,
     actualizado_el: '',
+    plan_id: null,
+    servicio_id: null,
   };
 }
 
-function matchesAutocomplete(item, needle) {
+function matchesAutocomplete(item, needle, type) {
   if (!needle) return true;
-  return item.nombre_ambito?.toLowerCase().includes(needle.toLowerCase());
+  const search = needle.trim().toLowerCase();
+  if (!search) return true;
+
+  if (!type || type === 'servicio') {
+    const servicio = item.servicio || {};
+    if (servicio.nombre?.toLowerCase().includes(search)) return true;
+    if (servicio.codigo?.toLowerCase().includes(search)) return true;
+    if (servicio.id && String(servicio.id).toLowerCase().includes(search)) return true;
+  }
+
+  if (!type || type === 'plan') {
+    const plan = item.plan || {};
+    if (plan.nombre?.toLowerCase().includes(search)) return true;
+    if (plan.id && String(plan.id).toLowerCase().includes(search)) return true;
+  }
+
+  if (item.nombre_ambito?.toLowerCase().includes(search)) return true;
+  if (item.codigo && String(item.codigo).toLowerCase().includes(search)) return true;
+  return false;
 }
 
 function vigenciaLabel(desde, hasta) {
@@ -2317,8 +2843,75 @@ function formatRelative(date) {
   return `hace ${years} ${years === 1 ? 'año' : 'años'}`;
 }
 
+function parseOptionalId(value) {
+  return normalizeId(value);
+}
+
+function normalizeId(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function resolveScopeType(item) {
+  if (!item) return '';
+  const planId = normalizeId(item.plan_id ?? item.plan?.id);
+  const servicioId = normalizeId(item.servicio_id ?? item.servicio?.id);
+  if (planId && servicioId) return SCOPE_TYPES.PLAN_SERVICIO;
+  if (planId) return SCOPE_TYPES.PLAN;
+  if (servicioId) return SCOPE_TYPES.SERVICIO;
+  const ambito = typeof item.ambito === 'string' ? item.ambito.toLowerCase() : null;
+  if (ambito === 'plan_servicio' || ambito === 'plan-servicio') {
+    return SCOPE_TYPES.PLAN_SERVICIO;
+  }
+  if (ambito === 'plan') return SCOPE_TYPES.PLAN;
+  if (ambito === 'servicio') return SCOPE_TYPES.SERVICIO;
+  return '';
+}
+
+function scopeTypeLabel(item) {
+  const type = typeof item === 'string' ? item : resolveScopeType(item);
+  switch (type) {
+    case SCOPE_TYPES.PLAN_SERVICIO:
+      return 'Plan + Servicio';
+    case SCOPE_TYPES.PLAN:
+      return 'Plan';
+    case SCOPE_TYPES.SERVICIO:
+      return 'Servicio independiente';
+    default:
+      return '—';
+  }
+}
+
 function ambitoLabel(item) {
-  return item.nombre_ambito || '—';
+  if (!item) return '—';
+  if (item.nombre_ambito) return item.nombre_ambito;
+  const planName = item.plan?.nombre;
+  const servicio = item.servicio || {};
+  const servicioName = servicio.nombre || servicio.codigo;
+  if (planName && servicioName) return `${planName} · ${servicioName}`;
+  if (planName) return planName;
+  if (servicioName) return servicioName;
+  return '—';
+}
+
+function hasSameScope(a, b) {
+  const planA = normalizeId(a?.plan_id ?? a?.plan?.id);
+  const planB = normalizeId(b?.plan_id ?? b?.plan?.id);
+  const servicioA = normalizeId(a?.servicio_id ?? a?.servicio?.id);
+  const servicioB = normalizeId(b?.servicio_id ?? b?.servicio?.id);
+  if (planA === planB && servicioA === servicioB) return true;
+  const ambitoA = typeof a?.ambito === 'string' ? a.ambito.toLowerCase() : null;
+  const ambitoB = typeof b?.ambito === 'string' ? b.ambito.toLowerCase() : null;
+  if (!planA && !planB && !servicioA && !servicioB) {
+    if (ambitoA && ambitoA === ambitoB) return true;
+  }
+  if (ambitoA && ambitoB && ambitoA === ambitoB) {
+    if (a.referencia_id !== undefined && b.referencia_id !== undefined) {
+      return normalizeId(a.referencia_id) === normalizeId(b.referencia_id);
+    }
+  }
+  return false;
 }
 
 function isVigenteHoy(item, today) {

@@ -371,7 +371,6 @@ model impuesto {
   codigo             String    @unique //codigo generado por backend
   nombre             String
   porcentaje         Decimal   @db.Decimal
-  incluido_en_precio Boolean   @default(false)
   activo             Boolean   @default(true)
   vigencia_desde     DateTime? @db.Timestamptz(6)
   vigencia_hasta     DateTime? @db.Timestamptz(6)
