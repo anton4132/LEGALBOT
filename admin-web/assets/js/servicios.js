@@ -332,7 +332,10 @@ async function loadPlans() {
     const plans = Array.isArray(data) ? data : data.plans || [];
     state.plans = plans.map(plan => normalizePlan(plan, state.services));
     state.planAssignments = new Map(
-      state.plans.map(plan => [plan.id, (plan.planservicios || []).map(item => ({ ...item }))])
+      state.plans.map(plan => [
+        plan.id,
+        (plan.planservicios || []).map(item => normalizePlanServicio(item, state.services)).filter(Boolean)
+      ])
     );
   } catch (error) {
     console.error('Error cargando planes:', error);
@@ -352,10 +355,22 @@ async function loadServices() {
   }
 }
 
+function extractPlanServicios(plan) {
+  if (!plan) return [];
+  const candidates = [
+    plan.planservicios,
+    plan.planServicios,
+    plan.plan_servicios,
+    plan.planServices
+  ];
+  return candidates.find((value) => Array.isArray(value)) || [];
+}
+
 function normalizePlan(plan, services = state.services) {
-  const planservicios = Array.isArray(plan.planservicios)
-    ? plan.planservicios.map((item) => normalizePlanServicio(item, services))
-    : [];
+  const rawAssignments = extractPlanServicios(plan);
+  const planservicios = rawAssignments
+    .map((item) => normalizePlanServicio(item, services))
+    .filter(Boolean);
   return {
     ...plan,
     planservicios
@@ -436,7 +451,27 @@ function renderPlansTable() {
   }
 
   plans.forEach(plan => {
-    const serviciosAsignados = (state.planAssignments.get(plan.id) || []).length;
+    const assignments = state.planAssignments.get(plan.id) || [];
+    const serviciosAsignados = assignments.length;
+    const previewItems = assignments
+      .slice()
+      .sort((a, b) => {
+        const nameA = a.servicio?.nombre || '';
+        const nameB = b.servicio?.nombre || '';
+        return nameA.localeCompare(nameB);
+      })
+      .map(item => {
+        const label = item.servicio?.nombre || `Servicio #${item.servicio_id}`;
+        return `<span class="badge rounded-pill text-bg-light text-truncate" style="max-width: 160px;" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+      })
+      .slice(0, 4);
+    const extraCount = serviciosAsignados - previewItems.length;
+    const extraBadge = extraCount > 0
+      ? `<span class="badge rounded-pill text-bg-secondary">+${extraCount}</span>`
+      : '';
+    const servicesPreview = serviciosAsignados
+      ? `<div class="d-flex flex-wrap gap-1 mt-2">${previewItems.join('')}${extraBadge}</div>`
+      : '<div class="text-muted small mt-2">Sin servicios vinculados</div>';
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>
@@ -446,6 +481,7 @@ function renderPlansTable() {
       <td>${formatStorage(plan.almacenamiento_maximo)}</td>
       <td>
         <span class="badge rounded-pill text-bg-primary">${serviciosAsignados}</span>
+        ${servicesPreview}
       </td>
       <td>${formatDateTime(plan.actualizado_el)}</td>
       <td class="text-end">
@@ -568,7 +604,11 @@ async function savePlan() {
       } else {
         state.plans.push(planData);
       }
-      state.planAssignments.set(planData.id, [...(planData.planservicios || [])]);
+      state.planAssignments.set(
+        planData.id,
+        (planData.planservicios || []).map(item => normalizePlanServicio(item, state.services)).filter(Boolean)
+      );
+      rehydratePlanAssignments(planData.id);
       state.plans.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
     } else {
       await loadPlans();
@@ -601,6 +641,7 @@ async function deletePlan(id) {
     if (!res.ok) throw new Error(data?.message || 'Error eliminando plan');
 
     showAlert('Plan eliminado correctamente', 'success');
+    state.planAssignments.delete(id);
     await loadPlans();
     rehydratePlanAssignments();
     renderPlansTable();
@@ -647,12 +688,28 @@ function populatePlanServiceOptions() {
     ? [...state.services]
     : state.services.filter(service => service.activo);
 
+  const fallbackServices = assignments
+    .map(item => item.servicio || state.services.find(service => service.id === item.servicio_id))
+    .filter(Boolean);
+
+  fallbackServices.forEach(service => {
+    if (service && services.every(existing => existing.id !== service.id)) {
+      services.push(service);
+    }
+  });
+
   services
-    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    .sort((a, b) => {
+      const labelA = (a.nombre || a.codigo || '').toString();
+      const labelB = (b.nombre || b.codigo || '').toString();
+      return labelA.localeCompare(labelB);
+    })
     .forEach(service => {
       const option = document.createElement('option');
       option.value = service.id;
-      option.textContent = `${service.codigo} — ${service.nombre}`;
+      const labelParts = [service.codigo, service.nombre].filter(Boolean);
+      const label = labelParts.length ? labelParts.join(' — ') : `ID ${service.id}`;
+      option.textContent = label;
       if (!state.editingPlanServiceId && assignedIds.includes(service.id)) {
         option.disabled = true;
         option.textContent += ' (ya vinculado)';
@@ -672,9 +729,20 @@ function renderPlanServicesTable(planId) {
   const tbody = document.getElementById('planServicesTableBody');
   const countBadge = document.getElementById('planServiceCount');
   if (!tbody) return;
-  const assignments = state.planAssignments.get(planId) || [];
+  const assignments = (state.planAssignments.get(planId) || []).map(item => {
+    const servicio = item.servicio
+      || state.services.find(service => service.id === item.servicio_id)
+      || null;
+    if (servicio && item.servicio !== servicio) {
+      return { ...item, servicio };
+    }
+    return item;
+  });
+  state.planAssignments.set(planId, assignments);
 
-  countBadge.textContent = `${assignments.length} servicio${assignments.length === 1 ? '' : 's'}`;
+  if (countBadge) {
+    countBadge.textContent = `${assignments.length} servicio${assignments.length === 1 ? '' : 's'}`;
+  }
 
   tbody.innerHTML = '';
 
@@ -1076,6 +1144,10 @@ async function refreshPlanAssignmentsAfterServiceChange(servicioId) {
   });
   if (!affected.length) return;
   await Promise.all(affected.map(planId => refreshPlanAssignments(planId)));
+  if (state.currentPlanForLink && affected.includes(state.currentPlanForLink)) {
+    renderPlanServicesTable(state.currentPlanForLink);
+    populatePlanServiceOptions();
+  }
 }
 
 function showAlert(message, type = 'info') {
