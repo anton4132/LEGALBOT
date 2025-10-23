@@ -427,14 +427,24 @@ function setupLayout() {
       </div>
 
       <div data-lb-view="econconfig" class="d-none">
-        <section class="card shadow-sm border-0">
-          <div class="card-body">
-            <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-4">
-              <div class="flex-grow-1">
-                <h5 class="card-title mb-0">Configuración económica</h5>
-                <p class="text-muted small mb-0">Define moneda por defecto, decimales y reglas de redondeo.</p>
+        <div class="row g-3 align-items-stretch">
+          <div class="col-12 col-xl-7">
+            <section class="card shadow-sm border-0 h-100">
+              <div class="card-body d-flex flex-column gap-3">
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+                  <div>
+                    <h5 class="card-title mb-1">Configuración económica</h5>
+                    <p class="text-muted small mb-0">Revisa la configuración activa y sus reglas de redondeo.</p>
+                  </div>
+                  <div class="text-muted small text-lg-end" id="tc-econfig-actualizado">&nbsp;</div>
+                </div>
+                <div id="tc-econfig-summary" class="flex-grow-1"></div>
               </div>
-              <div class="d-flex flex-column align-items-lg-end gap-2">
+            </section>
+          </div>
+          <div class="col-12 col-xl-5">
+            <section class="card shadow-sm border-0 h-100">
+              <div class="card-body d-flex flex-column gap-3">
                 <div class="btn-group" role="group" id="tc-econfig-mode-group">
                   <button type="button" class="btn btn-outline-primary active" data-econfig-mode="update">
                     Editar configuración activa
@@ -443,50 +453,45 @@ function setupLayout() {
                     Nueva configuración
                   </button>
                 </div>
-                <div class="text-muted small text-lg-end" id="tc-econfig-actualizado">&nbsp;</div>
+                <form id="tc-econfig-form" class="row g-3" autocomplete="off">
+                  <div class="col-12 col-md-6">
+                    <label for="tc-econfig-moneda" class="form-label">Moneda por defecto <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="tc-econfig-moneda" maxlength="3" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="tc-econfig-decimales" class="form-label">Decimales <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="tc-econfig-decimales" min="0" max="6" required />
+                  </div>
+                  <div class="col-12">
+                    <label for="tc-econfig-regla" class="form-label">Regla de redondeo</label>
+                    <select id="tc-econfig-regla" class="form-select">
+                      <option value="dos_decimales">Dos decimales (0.00)</option>
+                      <option value="a_0_05">Múltiplo de 0.05</option>
+                      <option value="entero_superior">Entero superior</option>
+                    </select>
+                  </div>
+                  <div class="col-12">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" role="switch" id="tc-econfig-activo" checked />
+                      <label class="form-check-label" for="tc-econfig-activo">Configuración activa</label>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <label for="tc-econfig-preview" class="form-label">Previsualización de redondeo</label>
+                    <div class="input-group">
+                      <input type="number" class="form-control" id="tc-econfig-preview" step="0.01" placeholder="Importe base" />
+                      <span class="input-group-text" id="tc-econfig-preview-result">—</span>
+                    </div>
+                    <small class="text-muted">Introduce un importe para ver cómo se aplica la regla seleccionada.</small>
+                  </div>
+                  <div class="col-12 d-flex justify-content-end gap-2">
+                    <button type="submit" class="btn btn-primary" id="tc-econfig-submit">Guardar cambios</button>
+                  </div>
+                </form>
               </div>
-            </div>
-            <div class="alert alert-info" role="alert">
-              Activa solo una configuración económica a la vez. Al guardar una nueva versión, las anteriores quedarán
-              inactivas automáticamente.
-            </div>
-            <form id="tc-econfig-form" class="row g-3" autocomplete="off">
-              <div class="col-12 col-md-4">
-                <label for="tc-econfig-moneda" class="form-label">Moneda por defecto <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="tc-econfig-moneda" maxlength="3" required />
-              </div>
-              <div class="col-12 col-md-4">
-                <label for="tc-econfig-decimales" class="form-label">Decimales <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="tc-econfig-decimales" min="0" max="6" required />
-              </div>
-              <div class="col-12 col-md-4">
-                <label for="tc-econfig-regla" class="form-label">Regla de redondeo</label>
-                <select id="tc-econfig-regla" class="form-select">
-                  <option value="dos_decimales">Dos decimales</option>
-                  <option value="a_0_05">Múltiplo 0.05</option>
-                  <option value="entero_superior">Entero superior</option>
-                </select>
-              </div>
-              <div class="col-12">
-                <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" role="switch" id="tc-econfig-activo" checked />
-                  <label class="form-check-label" for="tc-econfig-activo">Configuración activa</label>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <label for="tc-econfig-preview" class="form-label">Previsualización de redondeo</label>
-                <div class="input-group">
-                  <input type="number" class="form-control" id="tc-econfig-preview" step="0.01" placeholder="Importe base" />
-                  <span class="input-group-text" id="tc-econfig-preview-result">—</span>
-                </div>
-                <small class="text-muted">Introduce un importe para ver cómo se aplica la regla actual.</small>
-              </div>
-              <div class="col-12 d-flex justify-content-end gap-2">
-                <button type="submit" class="btn btn-primary" id="tc-econfig-submit">Guardar cambios</button>
-              </div>
-            </form>
+            </section>
           </div>
-        </section>
+        </div>
       </div>
     </div>
   `;
@@ -997,6 +1002,8 @@ function cacheDom() {
     modeGroup: document.getElementById('tc-econfig-mode-group'),
     modeButtons: document.querySelectorAll('#tc-econfig-mode-group [data-econfig-mode]'),
     submit: document.getElementById('tc-econfig-submit'),
+    summary: document.getElementById('tc-econfig-summary'),
+    previewSamples: document.getElementById('tc-econfig-preview-samples') || null,
   };
 
   state.dom = dom;
@@ -1056,17 +1063,14 @@ function renderHelpBanner() {
   const url = DOCS_TARIFAS_URL;
   banner.innerHTML = `
     <a
-      class="alert alert-info d-flex flex-column flex-lg-row align-items-lg-center gap-3 text-decoration-none"
+      class="alert alert-info d-flex align-items-center justify-content-between gap-3 text-decoration-none"
       href="${escapeAttribute(url)}"
       target="_blank"
       rel="noopener noreferrer"
     >
-      <div class="flex-grow-1 text-dark">
-        <div class="fw-semibold">Impuestos: puedes registrar y editar impuestos. Solo uno puede estar activo a la vez.</div>
-        <div>Config. económica: crea y modifica reglas. La previsualización muestra el redondeo real según <code>dos_decimales</code> y los decimales definidos.</div>
-      </div>
-      <span class="ms-lg-auto text-primary fw-semibold d-flex align-items-center gap-2">
-        Ver documentación
+      <span class="fw-semibold text-dark">Ver documentación de impuestos y configuración económica</span>
+      <span class="text-primary fw-semibold d-flex align-items-center gap-2">
+        Abrir guía
         <i class="bi bi-box-arrow-up-right"></i>
       </span>
     </a>
@@ -1842,7 +1846,10 @@ async function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
     if (service.nombre) parts.push(service.nombre);
     if (service.codigo && service.codigo !== service.nombre) parts.push(service.codigo);
     const label = parts.length ? parts.join(' · ') : `ID ${service.id}`;
-    const suffix = service.activo === false ? ' (inactivo)' : '';
+    const suffixParts = [];
+    if (service.activo === false) suffixParts.push('servicio inactivo');
+    if (service.__assignmentActivo === false) suffixParts.push('vinculación inactiva');
+    const suffix = suffixParts.length ? ` (${suffixParts.join(' · ')})` : '';
     option.textContent = `${label}${suffix}`;
     select.appendChild(option);
   });
@@ -1861,10 +1868,13 @@ function getServicesForPlan(planId) {
   if (!(state.catalogs.planAssignments instanceof Map)) return [];
   const assignments = state.catalogs.planAssignments.get(targetId) || [];
   return assignments
-    .filter((assignment) => assignment && assignment.activo !== false)
+    .filter(Boolean)
     .map((assignment) => {
-      if (assignment.servicio) return assignment.servicio;
-      return findServiceById(assignment.servicio_id) || sanitizeService({ id: assignment.servicio_id });
+      const base = assignment.servicio
+        || findServiceById(assignment.servicio_id)
+        || sanitizeService({ id: assignment.servicio_id });
+      if (!base) return null;
+      return { ...base, __assignmentActivo: assignment.activo !== false };
     })
     .filter(Boolean);
 }
@@ -2680,6 +2690,7 @@ function renderEconconfig() {
   econconfig.moneda.classList.remove('is-invalid');
   econconfig.decimales.classList.remove('is-invalid');
   updateEconfigModeUi();
+  renderEconfigSummary();
   updateEconfigPreview();
 }
 
@@ -2731,6 +2742,101 @@ function updateEconfigModeUi() {
   }
 }
 
+function renderEconfigSummary() {
+  const { econconfig } = state.dom;
+  if (!econconfig?.summary) return;
+  const container = econconfig.summary;
+  const config = state.quick.econconfig;
+
+  if (!config) {
+    container.innerHTML = `
+      <div class="alert alert-light border text-muted mb-0">
+        No existe una configuración económica activa. Usa el formulario para crear una nueva regla.
+      </div>
+    `;
+    econconfig.previewSamples = container.querySelector('#tc-econfig-preview-samples');
+    return;
+  }
+
+  const moneda = escapeHtml(config.moneda_defecto || state.monedaFallback);
+  const decimales = Number.isFinite(Number(config.decimales)) ? Number(config.decimales) : 2;
+  const regla = config.regla_redondeo || 'dos_decimales';
+  const statusBadge = config.activo === false
+    ? '<span class="badge text-bg-secondary">Inactiva</span>'
+    : '<span class="badge text-bg-success">Activa</span>';
+  const actualizado = config.actualizado_el ? escapeHtml(formatExactDate(config.actualizado_el)) : '—';
+
+  container.innerHTML = `
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <tbody>
+          <tr>
+            <th scope="row" class="text-muted">Estado</th>
+            <td>${statusBadge}</td>
+          </tr>
+          <tr>
+            <th scope="row" class="text-muted">Moneda</th>
+            <td class="fw-semibold">${moneda}</td>
+          </tr>
+          <tr>
+            <th scope="row" class="text-muted">Decimales</th>
+            <td>${decimales}</td>
+          </tr>
+          <tr>
+            <th scope="row" class="text-muted">Regla de redondeo</th>
+            <td>${escapeHtml(roundingRuleLabel(regla))}</td>
+          </tr>
+          <tr>
+            <th scope="row" class="text-muted">Última actualización</th>
+            <td>${actualizado}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-3">
+      <div class="fw-semibold small mb-1">Comparativa de redondeo</div>
+      <div class="text-muted small mb-2">El resultado depende del importe ingresado en la previsualización.</div>
+      <div class="d-flex flex-column gap-2" id="tc-econfig-preview-samples"></div>
+    </div>
+  `;
+
+  econconfig.previewSamples = container.querySelector('#tc-econfig-preview-samples');
+  renderEconfigPreviewSamples();
+}
+
+function renderEconfigPreviewSamples(value) {
+  const { econconfig } = state.dom;
+  if (!econconfig?.previewSamples) return;
+  const currentValue = Number.isFinite(value)
+    ? value
+    : Number(econconfig.previewInput?.value);
+  if (!Number.isFinite(currentValue)) {
+    econconfig.previewSamples.innerHTML = '<div class="text-muted small">Ingresa un importe para ver ejemplos de redondeo.</div>';
+    return;
+  }
+
+  const moneda = econconfig.moneda?.value || state.monedaFallback;
+  const decimales = Number.isFinite(Number(econconfig.decimales?.value))
+    ? Number(econconfig.decimales.value)
+    : state.quick.econconfig?.decimales ?? 2;
+  const rules = ['dos_decimales', 'a_0_05', 'entero_superior'];
+
+  econconfig.previewSamples.innerHTML = rules
+    .map((rule) => {
+      const label = escapeHtml(roundingRuleLabel(rule));
+      const rounded = applyRoundingRule(currentValue, rule, decimales);
+      const digits = determinePreviewDigits(rule, decimales);
+      const formatted = escapeHtml(formatCurrency(rounded, moneda, digits));
+      return `
+        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2">
+          <span class="fw-semibold">${label}</span>
+          <span>${formatted}</span>
+        </div>
+      `;
+    })
+    .join('');
+}
+
 function updateEconfigPreview() {
   const { econconfig } = state.dom;
   if (!econconfig?.previewResult) return;
@@ -2738,6 +2844,7 @@ function updateEconfigPreview() {
   const value = Number(raw);
   if (!Number.isFinite(value)) {
     econconfig.previewResult.textContent = '—';
+    renderEconfigPreviewSamples(Number.NaN);
     return;
   }
   const moneda = econconfig.moneda.value || state.monedaFallback;
@@ -2748,6 +2855,7 @@ function updateEconfigPreview() {
   const rounded = applyRoundingRule(value, regla, decimales);
   const displayDigits = determinePreviewDigits(regla, decimales);
   econconfig.previewResult.textContent = formatCurrency(rounded, moneda, displayDigits);
+  renderEconfigPreviewSamples(value);
 }
 
 async function submitEconfigForm(event) {
@@ -3207,6 +3315,18 @@ function determinePreviewDigits(regla, decimales) {
     case 'dos_decimales':
     default:
       return Number.isInteger(decimales) && decimales >= 0 ? decimales : 2;
+  }
+}
+
+function roundingRuleLabel(rule) {
+  switch (rule) {
+    case 'a_0_05':
+      return 'Múltiplo de 0.05';
+    case 'entero_superior':
+      return 'Entero superior';
+    case 'dos_decimales':
+    default:
+      return 'Dos decimales (0.00)';
   }
 }
 
