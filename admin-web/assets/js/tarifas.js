@@ -34,6 +34,10 @@ const SCOPE_TYPES = {
   PLAN: 'plan',
 };
 
+const DOCS_TARIFAS_URL =
+  (typeof window !== 'undefined' && window.LEGALBOT_DOCS_TARIFAS_URL) ||
+  'https://docs.legalbot.app/admin/tarifas-y-comisiones';
+
 const state = {
   ready: false,
   monedaFallback: 'PEN',
@@ -75,11 +79,20 @@ const state = {
     impuestos: [],
     econconfig: null,
   },
+  econconfigForm: {
+    mode: 'update',
+  },
   catalogs: {
     planes: [],
     servicios: [],
     planServicios: [],
+    planAssignments: new Map(),
     ready: false,
+    loading: {
+      planes: null,
+      servicios: null,
+      planAssignments: new Map(),
+    },
   },
   dom: {},
 };
@@ -416,12 +429,22 @@ function setupLayout() {
       <div data-lb-view="econconfig" class="d-none">
         <section class="card shadow-sm border-0">
           <div class="card-body">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-              <div>
+            <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-4">
+              <div class="flex-grow-1">
                 <h5 class="card-title mb-0">Configuración económica</h5>
                 <p class="text-muted small mb-0">Define moneda por defecto, decimales y reglas de redondeo.</p>
               </div>
-              <div class="text-muted small" id="tc-econfig-actualizado">&nbsp;</div>
+              <div class="d-flex flex-column align-items-lg-end gap-2">
+                <div class="btn-group" role="group" id="tc-econfig-mode-group">
+                  <button type="button" class="btn btn-outline-primary active" data-econfig-mode="update">
+                    Editar configuración activa
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" data-econfig-mode="create">
+                    Nueva configuración
+                  </button>
+                </div>
+                <div class="text-muted small text-lg-end" id="tc-econfig-actualizado">&nbsp;</div>
+              </div>
             </div>
             <div class="alert alert-info" role="alert">
               Activa solo una configuración económica a la vez. Al guardar una nueva versión, las anteriores quedarán
@@ -459,7 +482,7 @@ function setupLayout() {
                 <small class="text-muted">Introduce un importe para ver cómo se aplica la regla actual.</small>
               </div>
               <div class="col-12 d-flex justify-content-end gap-2">
-                <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                <button type="submit" class="btn btn-primary" id="tc-econfig-submit">Guardar cambios</button>
               </div>
             </form>
           </div>
@@ -971,6 +994,9 @@ function cacheDom() {
     previewInput: document.getElementById('tc-econfig-preview'),
     previewResult: document.getElementById('tc-econfig-preview-result'),
     updatedLabel: document.getElementById('tc-econfig-actualizado'),
+    modeGroup: document.getElementById('tc-econfig-mode-group'),
+    modeButtons: document.querySelectorAll('#tc-econfig-mode-group [data-econfig-mode]'),
+    submit: document.getElementById('tc-econfig-submit'),
   };
 
   state.dom = dom;
@@ -1027,16 +1053,23 @@ function renderTabs() {
 function renderHelpBanner() {
   const banner = state.dom.helpBanner;
   if (!banner) return;
+  const url = DOCS_TARIFAS_URL;
   banner.innerHTML = `
-    <div class="alert alert-info d-flex flex-column flex-lg-row align-items-lg-center gap-3">
-      <div>
-        <strong>Impuestos:</strong> puedes registrar y editar impuestos. Solo uno puede estar activo a la vez.
+    <a
+      class="alert alert-info d-flex flex-column flex-lg-row align-items-lg-center gap-3 text-decoration-none"
+      href="${escapeAttribute(url)}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <div class="flex-grow-1 text-dark">
+        <div class="fw-semibold">Impuestos: puedes registrar y editar impuestos. Solo uno puede estar activo a la vez.</div>
+        <div>Config. económica: crea y modifica reglas. La previsualización muestra el redondeo real según <code>dos_decimales</code> y los decimales definidos.</div>
       </div>
-      <div class="ms-lg-auto text-lg-end">
-        <strong>Config. económica:</strong> crea y modifica reglas. La previsualización muestra el redondeo real según
-        <code>${state.quick.econconfig?.regla_redondeo || 'dos_decimales'}</code> y los decimales definidos.
-      </div>
-    </div>
+      <span class="ms-lg-auto text-primary fw-semibold d-flex align-items-center gap-2">
+        Ver documentación
+        <i class="bi bi-box-arrow-up-right"></i>
+      </span>
+    </a>
   `;
 }
 
@@ -1256,7 +1289,7 @@ function handleTarifasTableChange(event) {
   }
 }
 
-function openTarifaForm(mode, id) {
+async function openTarifaForm(mode, id) {
   const form = state.dom.tarifas.form;
   const modalElement = state.dom.tarifas.formModal;
   if (!form || !modalElement) return;
@@ -1266,15 +1299,15 @@ function openTarifaForm(mode, id) {
   state.tarifas.form.data =
     mode === 'edit' ? state.tarifas.items.find((item) => item.id === id) : null;
 
-  populateTarifaForm();
+  await populateTarifaForm();
   modal.show();
 }
 
-function populateTarifaForm() {
+async function populateTarifaForm() {
   const { form, formModal } = state.dom.tarifas;
   if (!form) return;
   const data = state.tarifas.form.data || getDefaultTarifa();
-  prepareScopeOptions('tarifas', data);
+  await prepareScopeOptions('tarifas', data);
   form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="valor"]').value = (data.valor ?? '').toString();
   form.querySelector('[name="incluye_impuesto"]').checked = !!data.incluye_impuesto;
@@ -1414,7 +1447,7 @@ async function persistTarifa(payload, formState) {
     const saved = await response.json();
     upsertTarifa(saved);
     state.dom.tarifas.form.reset();
-    prepareScopeOptions('tarifas', getDefaultTarifa());
+    await prepareScopeOptions('tarifas', getDefaultTarifa());
     getBootstrapModal(state.dom.tarifas.formModal).hide();
     renderTarifas();
   } catch (error) {
@@ -1566,13 +1599,17 @@ function initScopeControls(formKey) {
   scope.options?.forEach((btn) => {
     btn.addEventListener('click', () => {
       const type = btn.dataset.scopeValue || '';
-      selectScope(formKey, type);
+      selectScope(formKey, type).catch((error) => {
+        console.error('Error seleccionando ámbito', error);
+      });
     });
   });
 
   scope.planSelect?.addEventListener('change', () => {
     scope.planSelect.classList.remove('is-invalid');
-    updateScopeServiceOptions(formKey, null);
+    updateScopeServiceOptions(formKey, null).catch((error) => {
+      console.error('Error actualizando servicios del ámbito', error);
+    });
     if (scope.servicioSelect && scope.hidden?.value === SCOPE_TYPES.PLAN_SERVICIO) {
       scope.servicioSelect.value = '';
       scope.servicioSelect.classList.remove('is-invalid');
@@ -1592,7 +1629,7 @@ function getScopeDom(formKey) {
   return null;
 }
 
-function selectScope(formKey, type, options = {}) {
+async function selectScope(formKey, type, options = {}) {
   const scope = getScopeDom(formKey);
   if (!scope) return;
 
@@ -1619,8 +1656,13 @@ function selectScope(formKey, type, options = {}) {
   if (scope.planSelect) {
     if (showPlan) {
       scope.planSelect.setAttribute('required', '');
+      if (!options.skipPlanPopulate) {
+        await ensurePlanCatalogs();
+        populatePlanOptions(scope.planSelect);
+      }
     } else {
       scope.planSelect.removeAttribute('required');
+      scope.planSelect.value = '';
     }
   }
 
@@ -1629,11 +1671,12 @@ function selectScope(formKey, type, options = {}) {
       scope.servicioSelect.setAttribute('required', '');
     } else {
       scope.servicioSelect.removeAttribute('required');
+      scope.servicioSelect.value = '';
     }
   }
 
   if (!options.skipServiceUpdate) {
-    updateScopeServiceOptions(formKey);
+    await updateScopeServiceOptions(formKey, options.selectedServiceId);
   }
 
   clearScopeError(formKey);
@@ -1646,7 +1689,7 @@ function toggleScopeGroup(element, visible) {
   element.classList.toggle('d-none', !visible);
 }
 
-function prepareScopeOptions(formKey, data) {
+async function prepareScopeOptions(formKey, data) {
   const scope = getScopeDom(formKey);
   if (!scope) return;
 
@@ -1654,13 +1697,22 @@ function prepareScopeOptions(formKey, data) {
   const servicioId = normalizeId(data?.servicio_id ?? data?.servicio?.id);
   const scopeType = determineScopeType(planId, servicioId, data?.ambito);
 
-  populatePlanOptions(scope.planSelect, planId, data?.plan);
   if (scope.planSelect) {
+    try {
+      await ensurePlanCatalogs();
+    } catch (error) {
+      console.error('Error cargando planes para el ámbito', error);
+    }
+    populatePlanOptions(scope.planSelect, planId, data?.plan);
     scope.planSelect.value = planId ? String(planId) : '';
   }
 
-  selectScope(formKey, scopeType, { skipServiceUpdate: true });
-  updateScopeServiceOptions(formKey, servicioId, data?.servicio);
+  await selectScope(formKey, scopeType, {
+    skipServiceUpdate: true,
+    skipPlanPopulate: true,
+    selectedServiceId: servicioId,
+  });
+  await updateScopeServiceOptions(formKey, servicioId, data?.servicio);
   if (scope.servicioSelect) {
     scope.servicioSelect.value = servicioId ? String(servicioId) : '';
   }
@@ -1675,8 +1727,9 @@ function populatePlanOptions(select, selectedId, fallbackPlan) {
   const source = [...(state.catalogs.planes || [])];
   const targetId = normalizeId(selectedId);
   const fallbackId = normalizeId(fallbackPlan?.id);
-  if (fallbackPlan && fallbackId && !source.some((plan) => plan.id === fallbackId)) {
-    source.push(fallbackPlan);
+  const fallbackNormalized = sanitizePlan(fallbackPlan);
+  if (fallbackNormalized && fallbackId && !source.some((plan) => plan.id === fallbackId)) {
+    source.push(fallbackNormalized);
   }
   const existing = targetId ? findPlanById(targetId) : null;
   if (existing && !source.some((plan) => plan.id === existing.id)) {
@@ -1711,7 +1764,7 @@ function populatePlanOptions(select, selectedId, fallbackPlan) {
   }
 }
 
-function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
+async function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
   const scope = getScopeDom(formKey);
   if (!scope?.servicioSelect) return;
   const select = scope.servicioSelect;
@@ -1721,22 +1774,42 @@ function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
   let disable = false;
   let placeholder = 'Selecciona un servicio';
 
-  if (scopeType === SCOPE_TYPES.PLAN_SERVICIO) {
-    if (planId) {
-      services = getServicesForPlan(planId);
+  select.innerHTML = '<option value="">Cargando servicios...</option>';
+  select.disabled = true;
+
+  try {
+    if (scopeType === SCOPE_TYPES.PLAN_SERVICIO) {
+      if (planId) {
+        await ensurePlanCatalogs();
+        await ensureServiceCatalogs();
+        await ensurePlanAssignments(planId);
+        services = getServicesForPlan(planId);
+        placeholder = services.length
+          ? 'Selecciona un servicio'
+          : 'No hay servicios vinculados al plan';
+        disable = services.length === 0;
+      } else {
+        disable = true;
+        placeholder = 'Selecciona un plan para ver servicios';
+      }
+    } else if (scopeType === SCOPE_TYPES.SERVICIO) {
+      await ensureServiceCatalogs();
+      services = [...(state.catalogs.servicios || [])];
+      placeholder = services.length ? 'Selecciona un servicio' : 'No hay servicios disponibles';
+      disable = services.length === 0;
     } else {
       disable = true;
-      placeholder = 'Selecciona un plan para ver servicios';
+      placeholder = 'Selecciona un ámbito para continuar';
     }
-  } else if (scopeType === SCOPE_TYPES.SERVICIO) {
-    services = [...(state.catalogs.servicios || [])];
-  } else {
+  } catch (error) {
+    console.error('Error actualizando catálogo de servicios', error);
+    services = [];
     disable = true;
-    placeholder = 'Selecciona un ámbito para continuar';
+    placeholder = 'No se pudieron cargar los servicios';
   }
 
   const desiredId = normalizeId(selectedId ?? select.value);
-  const fallback = fallbackService && normalizeId(fallbackService.id) ? fallbackService : null;
+  const fallback = fallbackService && normalizeId(fallbackService.id) ? sanitizeService(fallbackService) : null;
   if (fallback && fallback.id && services.every((svc) => svc.id !== fallback.id)) {
     services.push(fallback);
   }
@@ -1748,13 +1821,18 @@ function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
   }
 
   const seen = new Set();
-  const unique = services
-    .filter((svc) => svc && !seen.has(svc.id) && seen.add(svc.id) === true)
-    .sort((a, b) => {
-      const labelA = (a.nombre || a.codigo || '').toString();
-      const labelB = (b.nombre || b.codigo || '').toString();
-      return labelA.localeCompare(labelB, 'es', { sensitivity: 'base' });
-    });
+  const unique = [];
+  services.forEach((service) => {
+    if (!service || seen.has(service.id)) return;
+    seen.add(service.id);
+    unique.push(service);
+  });
+
+  unique.sort((a, b) => {
+    const labelA = (a.nombre || a.codigo || '').toString();
+    const labelB = (b.nombre || b.codigo || '').toString();
+    return labelA.localeCompare(labelB, 'es', { sensitivity: 'base' });
+  });
 
   select.innerHTML = `<option value="">${placeholder}</option>`;
   unique.forEach((service) => {
@@ -1770,7 +1848,7 @@ function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
   });
 
   select.disabled = disable;
-  if (desiredId && !disable) {
+  if (!disable && desiredId) {
     select.value = String(desiredId);
   } else {
     select.value = '';
@@ -1780,10 +1858,14 @@ function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
 function getServicesForPlan(planId) {
   const targetId = normalizeId(planId);
   if (!targetId) return [];
-  const assignments = state.catalogs.planServicios || [];
+  if (!(state.catalogs.planAssignments instanceof Map)) return [];
+  const assignments = state.catalogs.planAssignments.get(targetId) || [];
   return assignments
-    .filter((assignment) => assignment.plan_id === targetId && assignment.activo !== false)
-    .map((assignment) => findServiceById(assignment.servicio_id))
+    .filter((assignment) => assignment && assignment.activo !== false)
+    .map((assignment) => {
+      if (assignment.servicio) return assignment.servicio;
+      return findServiceById(assignment.servicio_id) || sanitizeService({ id: assignment.servicio_id });
+    })
     .filter(Boolean);
 }
 
@@ -1963,7 +2045,7 @@ function handleComisionesTableChange(event) {
   }
 }
 
-function openComisionForm(mode, id) {
+async function openComisionForm(mode, id) {
   const form = state.dom.comisiones.form;
   const modalElement = state.dom.comisiones.formModal;
   if (!form || !modalElement) return;
@@ -1973,15 +2055,15 @@ function openComisionForm(mode, id) {
   state.comisiones.form.data =
     mode === 'edit' ? state.comisiones.items.find((item) => item.id === id) : null;
 
-  populateComisionForm();
+  await populateComisionForm();
   modal.show();
 }
 
-function populateComisionForm() {
+async function populateComisionForm() {
   const { form, formModal } = state.dom.comisiones;
   if (!form) return;
   const data = state.comisiones.form.data || getDefaultComision();
-  prepareScopeOptions('comisiones', data);
+  await prepareScopeOptions('comisiones', data);
   form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="rol_aplica"]').value = data.rol_aplica || 'cliente';
   form.querySelector('[name="porcentaje"]').value = (data.porcentaje ?? '').toString();
@@ -2132,7 +2214,7 @@ async function persistComision(payload, formState) {
     const saved = await response.json();
     upsertComision(saved);
     state.dom.comisiones.form.reset();
-    prepareScopeOptions('comisiones', getDefaultComision());
+    await prepareScopeOptions('comisiones', getDefaultComision());
     getBootstrapModal(state.dom.comisiones.formModal).hide();
     renderComisiones();
   } catch (error) {
@@ -2554,6 +2636,14 @@ function bindEconconfigEvents() {
   ['moneda', 'decimales', 'regla'].forEach((key) => {
     econconfig[key]?.addEventListener('change', updateEconfigPreview);
   });
+  econconfig.modeButtons?.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-econfig-mode');
+      if (mode) {
+        setEconfigMode(mode);
+      }
+    });
+  });
 }
 
 async function loadEconconfig() {
@@ -2564,9 +2654,17 @@ async function loadEconconfig() {
       body && Object.prototype.hasOwnProperty.call(body, 'config') ? body.config : body;
     state.quick.econconfig = config || null;
     state.monedaFallback = config?.moneda_defecto || state.monedaFallback;
+    if (config) {
+      if (state.econconfigForm.mode !== 'create') {
+        state.econconfigForm.mode = 'update';
+      }
+    } else {
+      state.econconfigForm.mode = 'create';
+    }
   } catch (error) {
     console.error('Error obteniendo econconfig', error);
     state.quick.econconfig = null;
+    state.econconfigForm.mode = 'create';
   }
 }
 
@@ -2581,10 +2679,56 @@ function renderEconconfig() {
   econconfig.activo.checked = config.activo !== false;
   econconfig.moneda.classList.remove('is-invalid');
   econconfig.decimales.classList.remove('is-invalid');
-  econconfig.updatedLabel.textContent = config.actualizado_el
-    ? `Actualizado el ${formatExactDate(config.actualizado_el)}`
-    : 'Sin actualizar';
+  updateEconfigModeUi();
   updateEconfigPreview();
+}
+
+function setEconfigMode(nextMode) {
+  const hasConfig = !!state.quick.econconfig;
+  const normalized = nextMode === 'create' ? 'create' : 'update';
+  state.econconfigForm.mode = normalized === 'update' && !hasConfig ? 'create' : normalized;
+  updateEconfigModeUi();
+}
+
+function updateEconfigModeUi() {
+  const { econconfig } = state.dom;
+  if (!econconfig) return;
+
+  const hasConfig = !!state.quick.econconfig;
+  const mode = state.econconfigForm.mode === 'create' || !hasConfig ? 'create' : 'update';
+  state.econconfigForm.mode = mode;
+
+  econconfig.modeButtons?.forEach((btn) => {
+    const btnMode = btn.getAttribute('data-econfig-mode');
+    const isCreateButton = btnMode === 'create';
+    const isActive = btnMode === mode || (!hasConfig && isCreateButton);
+    btn.classList.toggle('active', isActive);
+    btn.classList.toggle('btn-primary', isActive);
+    btn.classList.toggle('btn-outline-secondary', !isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+    if (!hasConfig && !isCreateButton) {
+      btn.setAttribute('disabled', '');
+    } else {
+      btn.removeAttribute('disabled');
+    }
+  });
+
+  if (econconfig.submit) {
+    econconfig.submit.textContent =
+      mode === 'create' ? 'Guardar nueva configuración' : 'Actualizar configuración';
+  }
+
+  if (econconfig.updatedLabel) {
+    if (mode === 'create') {
+      econconfig.updatedLabel.textContent = 'Se creará una nueva configuración al guardar.';
+    } else if (state.quick.econconfig?.actualizado_el) {
+      econconfig.updatedLabel.textContent = `Actualizado el ${formatExactDate(
+        state.quick.econconfig.actualizado_el
+      )}`;
+    } else {
+      econconfig.updatedLabel.textContent = 'Sin actualizar';
+    }
+  }
 }
 
 function updateEconfigPreview() {
@@ -2602,7 +2746,8 @@ function updateEconfigPreview() {
     : state.quick.econconfig?.decimales ?? 2;
   const regla = econconfig.regla.value || state.quick.econconfig?.regla_redondeo || 'dos_decimales';
   const rounded = applyRoundingRule(value, regla, decimales);
-  econconfig.previewResult.textContent = formatCurrency(rounded, moneda, decimales);
+  const displayDigits = determinePreviewDigits(regla, decimales);
+  econconfig.previewResult.textContent = formatCurrency(rounded, moneda, displayDigits);
 }
 
 async function submitEconfigForm(event) {
@@ -2632,15 +2777,21 @@ async function submitEconfigForm(event) {
   };
 
   try {
-    const headers = {};
-    if (state.quick.econconfig?.actualizado_el) {
-      headers['If-Unmodified-Since'] = state.quick.econconfig.actualizado_el;
+    const mode =
+      state.econconfigForm.mode === 'create' || !state.quick.econconfig ? 'create' : 'update';
+    if (mode === 'update' && state.quick.econconfig?.id) {
+      payload.id = state.quick.econconfig.id;
     }
+
     let response;
-    if (state.quick.econconfig) {
-      response = await apiPut('/econconfig', payload, headers);
-    } else {
+    if (mode === 'create') {
       response = await apiPost('/econconfig', payload);
+    } else {
+      const headers = {};
+      if (state.quick.econconfig?.actualizado_el) {
+        headers['If-Unmodified-Since'] = state.quick.econconfig.actualizado_el;
+      }
+      response = await apiPut('/econconfig', payload, headers);
     }
     const body = await response.json();
     const saved =
@@ -2650,6 +2801,7 @@ async function submitEconfigForm(event) {
     }
     state.quick.econconfig = saved;
     state.monedaFallback = saved.moneda_defecto || state.monedaFallback;
+    state.econconfigForm.mode = 'update';
     renderEconconfig();
   } catch (error) {
     console.error('Error guardando configuración económica', error);
@@ -2668,17 +2820,245 @@ async function loadTarifaCatalogs() {
   try {
     const response = await apiGet('/tarifas/catalogs');
     const data = await response.json();
-    state.catalogs.planes = data.planes || [];
-    state.catalogs.servicios = data.servicios || [];
-    state.catalogs.planServicios = data.planServicios || [];
+    mergePlanCatalog(data.planes || [], { replace: true });
+    mergeServiceCatalog(data.servicios || [], { replace: true });
+    const planServicios = Array.isArray(data.planServicios) ? data.planServicios : [];
+    state.catalogs.planServicios = planServicios.map((item) => ({ ...item }));
+    state.catalogs.planAssignments = buildPlanAssignmentsMap(planServicios);
+    state.catalogs.loading.planAssignments = new Map();
     state.catalogs.ready = true;
   } catch (error) {
     console.error('Error cargando catálogos de tarifas', error);
     state.catalogs.planes = [];
     state.catalogs.servicios = [];
     state.catalogs.planServicios = [];
+    state.catalogs.planAssignments = new Map();
+    state.catalogs.loading.planAssignments = new Map();
     state.catalogs.ready = false;
   }
+}
+
+function sanitizePlan(plan) {
+  if (!plan || plan.id == null) return null;
+  const id = Number(plan.id);
+  if (!Number.isInteger(id)) return null;
+  return {
+    id,
+    nombre: plan.nombre || `ID ${id}`,
+    activo: plan.activo !== false,
+  };
+}
+
+function sanitizeService(service) {
+  if (!service || service.id == null) return null;
+  const id = Number(service.id);
+  if (!Number.isInteger(id)) return null;
+  return {
+    id,
+    nombre: service.nombre || '',
+    codigo: service.codigo || '',
+    activo: service.activo !== false,
+  };
+}
+
+function mergePlanCatalog(entries, options = {}) {
+  const list = Array.isArray(entries) ? entries : [];
+  const sanitized = list.map(sanitizePlan).filter(Boolean);
+  if (options.replace) {
+    state.catalogs.planes = sanitized;
+    return;
+  }
+  const existing = new Map((state.catalogs.planes || []).map((plan) => [plan.id, plan]));
+  sanitized.forEach((plan) => {
+    const current = existing.get(plan.id) || {};
+    existing.set(plan.id, { ...current, ...plan });
+  });
+  state.catalogs.planes = Array.from(existing.values());
+}
+
+function mergeServiceCatalog(entries, options = {}) {
+  const list = Array.isArray(entries) ? entries : [];
+  const sanitized = list.map(sanitizeService).filter(Boolean);
+  if (options.replace) {
+    state.catalogs.servicios = sanitized;
+    return;
+  }
+  const existing = new Map((state.catalogs.servicios || []).map((svc) => [svc.id, svc]));
+  sanitized.forEach((svc) => {
+    const current = existing.get(svc.id) || {};
+    existing.set(svc.id, { ...current, ...svc });
+  });
+  state.catalogs.servicios = Array.from(existing.values());
+}
+
+function buildPlanAssignmentsMap(assignments = []) {
+  const map = new Map();
+  assignments.forEach((assignment) => {
+    if (!assignment) return;
+    const planId = Number(assignment.plan_id ?? assignment.planId);
+    const servicioId = Number(assignment.servicio_id ?? assignment.servicioId);
+    if (!Number.isInteger(planId) || !Number.isInteger(servicioId)) return;
+    const normalized = {
+      id: assignment.id,
+      plan_id: planId,
+      servicio_id: servicioId,
+      activo: assignment.activo !== false,
+    };
+    if (assignment.servicio) {
+      const service = sanitizeService(assignment.servicio);
+      if (service) {
+        normalized.servicio = service;
+        mergeServiceCatalog([service]);
+      }
+    }
+    const current = map.get(planId) || [];
+    current.push(normalized);
+    map.set(planId, current);
+  });
+  return map;
+}
+
+function storePlanAssignments(planId, assignments) {
+  const targetId = Number(planId);
+  if (!Number.isInteger(targetId)) return;
+  if (!(state.catalogs.planAssignments instanceof Map)) {
+    state.catalogs.planAssignments = new Map();
+  }
+  const normalized = (Array.isArray(assignments) ? assignments : [])
+    .map((item) => {
+      if (!item) return null;
+      const servicioId = Number(item.servicio_id ?? item.servicio?.id);
+      if (!Number.isInteger(servicioId)) return null;
+      const entry = {
+        id: item.id,
+        plan_id: targetId,
+        servicio_id: servicioId,
+        activo: item.activo !== false,
+      };
+      const service = sanitizeService(item.servicio || item.service);
+      if (service) {
+        entry.servicio = service;
+        mergeServiceCatalog([service]);
+      }
+      return entry;
+    })
+    .filter(Boolean);
+
+  state.catalogs.planAssignments.set(targetId, normalized);
+
+  const remaining = (state.catalogs.planServicios || []).filter(
+    (item) => Number(item?.plan_id) !== targetId
+  );
+  state.catalogs.planServicios = remaining.concat(
+    normalized.map(({ servicio, ...rest }) => ({ ...rest }))
+  );
+}
+
+async function ensurePlanCatalogs(force = false) {
+  if (!force && (state.catalogs.planes || []).length) {
+    return state.catalogs.planes;
+  }
+  if (state.catalogs.loading.planes) {
+    return state.catalogs.loading.planes;
+  }
+  const request = (async () => {
+    const response = await apiGet('/plans');
+    const body = await response.json();
+    const plans = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.plans)
+      ? body.plans
+      : Array.isArray(body?.planes)
+      ? body.planes
+      : [];
+    mergePlanCatalog(plans, { replace: true });
+    return state.catalogs.planes;
+  })()
+    .catch((error) => {
+      console.error('Error cargando catálogo de planes', error);
+      if (force) {
+        state.catalogs.planes = [];
+      }
+      throw error;
+    })
+    .finally(() => {
+      state.catalogs.loading.planes = null;
+    });
+  state.catalogs.loading.planes = request;
+  return request;
+}
+
+async function ensureServiceCatalogs(force = false) {
+  if (!force && (state.catalogs.servicios || []).length) {
+    return state.catalogs.servicios;
+  }
+  if (state.catalogs.loading.servicios) {
+    return state.catalogs.loading.servicios;
+  }
+  const request = (async () => {
+    const response = await apiGet('/services');
+    const body = await response.json();
+    const servicios = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.services)
+      ? body.services
+      : Array.isArray(body?.servicios)
+      ? body.servicios
+      : [];
+    mergeServiceCatalog(servicios, { replace: true });
+    return state.catalogs.servicios;
+  })()
+    .catch((error) => {
+      console.error('Error cargando catálogo de servicios', error);
+      if (force) {
+        state.catalogs.servicios = [];
+      }
+      throw error;
+    })
+    .finally(() => {
+      state.catalogs.loading.servicios = null;
+    });
+  state.catalogs.loading.servicios = request;
+  return request;
+}
+
+async function ensurePlanAssignments(planId, force = false) {
+  const targetId = Number(planId);
+  if (!Number.isInteger(targetId)) return [];
+  if (!(state.catalogs.planAssignments instanceof Map)) {
+    state.catalogs.planAssignments = new Map();
+  }
+  if (!force && state.catalogs.planAssignments.has(targetId)) {
+    return state.catalogs.planAssignments.get(targetId) || [];
+  }
+
+  if (!(state.catalogs.loading.planAssignments instanceof Map)) {
+    state.catalogs.loading.planAssignments = new Map();
+  }
+  const pendingMap = state.catalogs.loading.planAssignments;
+  if (pendingMap.has(targetId)) {
+    return pendingMap.get(targetId);
+  }
+
+  const request = (async () => {
+    const response = await apiGet(`/plans/${targetId}`);
+    const body = await response.json();
+    const plan = body?.plan || body || {};
+    const assignments = Array.isArray(plan.planservicios) ? plan.planservicios : [];
+    storePlanAssignments(targetId, assignments);
+    mergePlanCatalog([plan]);
+    return state.catalogs.planAssignments.get(targetId) || [];
+  })()
+    .catch((error) => {
+      console.error('Error cargando servicios del plan', error);
+      throw error;
+    })
+    .finally(() => {
+      pendingMap.delete(targetId);
+    });
+
+  pendingMap.set(targetId, request);
+  return request;
 }
 
 async function loadTarifas() {
@@ -2799,23 +3179,35 @@ function statusChip(item) {
 }
 
 function applyRoundingRule(value, regla, decimales) {
-  const digits = Number.isInteger(decimales) && decimales >= 0 ? decimales : 2;
   const raw = Number(value ?? 0);
   if (!Number.isFinite(raw)) return 0;
-  let rounded;
+
+  if (regla === 'a_0_05') {
+    const rounded = Math.ceil(raw * 20) / 20;
+    return Number.isFinite(rounded) ? rounded : 0;
+  }
+
+  if (regla === 'entero_superior') {
+    const rounded = Math.ceil(raw);
+    return Number.isFinite(rounded) ? rounded : 0;
+  }
+
+  const digits = Number.isInteger(decimales) && decimales >= 0 ? decimales : 2;
+  const factor = 10 ** digits;
+  const rounded = Math.round(raw * factor) / factor;
+  return Number.isFinite(rounded) ? Number(rounded.toFixed(digits)) : 0;
+}
+
+function determinePreviewDigits(regla, decimales) {
   switch (regla) {
     case 'a_0_05':
-      rounded = Math.ceil(raw / 0.05) * 0.05;
-      break;
+      return 2;
     case 'entero_superior':
-      rounded = Math.ceil(raw);
-      break;
+      return 0;
     case 'dos_decimales':
     default:
-      rounded = Math.round(raw * 10 ** digits) / 10 ** digits;
-      break;
+      return Number.isInteger(decimales) && decimales >= 0 ? decimales : 2;
   }
-  return Number(Number.isFinite(rounded) ? rounded.toFixed(digits) : 0);
 }
 
 function formatCurrency(value, currency = state.monedaFallback, fractionDigits) {
@@ -2836,6 +3228,15 @@ function formatCurrency(value, currency = state.monedaFallback, fractionDigits) 
       : digits;
     return `${currency} ${(Number(value) || 0).toFixed(fallbackDigits)}`;
   }
+}
+
+function escapeAttribute(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function formatPercentage(value) {
