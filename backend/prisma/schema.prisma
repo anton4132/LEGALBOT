@@ -367,14 +367,14 @@ model comision {
 }
 
 model impuesto {
-  id                 Int       @id @default(autoincrement())
-  codigo             String    @unique //codigo generado por backend
-  nombre             String
-  porcentaje         Decimal   @db.Decimal
-  activo             Boolean   @default(true)
-  vigencia_desde     DateTime? @db.Timestamptz(6)
-  vigencia_hasta     DateTime? @db.Timestamptz(6)
-  creado_el          DateTime  @default(now()) @db.Timestamptz(6)
+  id             Int       @id @default(autoincrement())
+  codigo         String    @unique //codigo generado por backend
+  nombre         String
+  porcentaje     Decimal   @db.Decimal
+  activo         Boolean   @default(true)
+  vigencia_desde DateTime? @db.Timestamptz(6)
+  vigencia_hasta DateTime? @db.Timestamptz(6)
+  creado_el      DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([activo])
   @@index([vigencia_desde, vigencia_hasta])
@@ -541,17 +541,16 @@ model direccion {
   @@index([departamento, provincia, distrito])
 }
 
-model role {
-  id      Int       @id @default(autoincrement()) @db.SmallInt
-  codigo  String    @unique
-  nombre  String
-  usuario usuario[]
+enum rol_usuario {
+  ADMIN
+  ABOGADO
+  CLIENTE
 }
 
 model usuario {
   id                                                Int                  @id @default(autoincrement())
   persona_id                                        Int
-  rol_id                                            Int                  @db.SmallInt
+  rol_id                                            rol_usuario
   clave                                             String // mantener nombre para no romper código actual (almacena hash a nivel app)
   telefono_verificado                               Boolean              @default(false)
   plan_id                                           Int?
@@ -573,7 +572,6 @@ model usuario {
   perfilabogado                                     perfilabogado?
   plan                                              plan?                @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  role                                              role                 @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
   recuperaciones_clave                              recuperacionclave[]
 
