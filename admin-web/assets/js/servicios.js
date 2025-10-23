@@ -48,6 +48,15 @@ function fetchWithAuth(url, options = {}) {
   return fetch(url, { ...options, headers });
 }
 
+async function parseJsonSafely(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    console.warn('No se pudo interpretar la respuesta como JSON.', error);
+    return null;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initializeServiciosPage();
   loadInitialData();
@@ -466,6 +475,7 @@ async function savePlan() {
   const nombre = document.getElementById('planNombre').value.trim();
   const almacenamientoRaw = document.getElementById('planAlmacenamiento').value.trim();
   const almacenamiento = almacenamientoRaw === '' ? null : parseInt(almacenamientoRaw, 10);
+  const saveBtn = document.getElementById('savePlanBtn');
 
   if (!nombre) {
     showAlert('El nombre del plan es obligatorio', 'danger');
@@ -488,21 +498,40 @@ async function savePlan() {
   const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
   try {
+    saveBtn?.setAttribute('disabled', '');
     const res = await fetchWithAuth(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Error guardando plan');
+    const data = await parseJsonSafely(res);
+    const errorMessage = data?.message || 'Error guardando plan';
+    if (!res.ok) throw new Error(errorMessage);
 
-    showAlert(isEdit ? 'Plan actualizado correctamente' : 'Plan creado correctamente', 'success');
+    const planData = data?.plan ? normalizePlan(data.plan) : null;
+    if (planData) {
+      const index = state.plans.findIndex(plan => plan.id === planData.id);
+      if (index >= 0) {
+        state.plans.splice(index, 1, planData);
+      } else {
+        state.plans.push(planData);
+      }
+      state.planAssignments.set(planData.id, [...(planData.planservicios || [])]);
+      state.plans.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+    } else {
+      await loadPlans();
+    }
+
+    const successMessage = data?.message || (isEdit ? 'Plan actualizado correctamente' : 'Plan creado correctamente');
+    showAlert(successMessage, 'success');
     modal.hide();
-    await loadPlans();
+    state.editingPlanId = null;
     renderPlansTable();
   } catch (error) {
     console.error('Error guardando plan:', error);
     showAlert(error.message || 'No se pudo guardar el plan', 'danger');
+  } finally {
+    saveBtn?.removeAttribute('disabled');
   }
 }
 

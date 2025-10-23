@@ -52,23 +52,59 @@ async function saveConfig(req, res) {
     const regla_redondeo = normalizeRegla(req.body.regla_redondeo);
     const activo = req.body.activo !== undefined ? !!req.body.activo : true;
 
-    const existing = await prisma.econconfig.findFirst({
-      where: { activo: true },
-      orderBy: { actualizado_el: 'desc' },
-    });
+    const requestedId = req.body.id ? Number(req.body.id) : null;
+    if (requestedId !== null && !Number.isInteger(requestedId)) {
+      return res.status(400).json({ success: false, message: 'Identificador de configuración inválido' });
+    }
 
-    let config;
-    if (existing) {
-      config = await prisma.econconfig.update({
-        where: { id: existing.id },
-        data: { moneda_defecto, decimales, regla_redondeo, activo },
-      });
-    } else {
-      config = await prisma.econconfig.create({
-        data: { moneda_defecto, decimales, regla_redondeo, activo },
+    let target = null;
+    if (requestedId) {
+      target = await prisma.econconfig.findUnique({ where: { id: requestedId } });
+      if (!target) {
+        return res.status(404).json({ success: false, message: 'Configuración económica no encontrada' });
+      }
+    } else if (req.method === 'PUT') {
+      target = await prisma.econconfig.findFirst({
+        where: { activo: true },
+        orderBy: { actualizado_el: 'desc' },
       });
     }
-    res.json({ success: true, config });
+
+    const ifUnmodifiedSince = req.get('If-Unmodified-Since');
+    if (ifUnmodifiedSince && target) {
+      const headerDate = new Date(ifUnmodifiedSince);
+      if (!Number.isNaN(headerDate.getTime()) && target.actualizado_el > headerDate) {
+        return res
+          .status(409)
+          .json({ success: false, message: 'La configuración fue actualizada por otro usuario' });
+      }
+    }
+
+    const saved = await prisma.$transaction(async (tx) => {
+      let current;
+      if (target) {
+        current = await tx.econconfig.update({
+          where: { id: target.id },
+          data: { moneda_defecto, decimales, regla_redondeo, activo },
+        });
+      } else {
+        current = await tx.econconfig.create({
+          data: { moneda_defecto, decimales, regla_redondeo, activo },
+        });
+      }
+
+      if (activo) {
+        await tx.econconfig.updateMany({
+          where: { id: { not: current.id } },
+          data: { activo: false },
+        });
+      }
+
+      return current;
+    });
+
+    const statusCode = target ? 200 : 201;
+    res.status(statusCode).json({ success: true, config: saved });
   } catch (error) {
     console.error('Error guardando econconfig:', error);
     res.status(400).json({ success: false, message: error.message || 'Error guardando configuración económica' });
