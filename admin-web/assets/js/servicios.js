@@ -64,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadInitialData() {
   await Promise.allSettled([loadPlans(), loadServices()]);
+  rehydratePlanAssignments();
   renderPlansTable();
   applyServiceFilters();
 }
@@ -329,8 +330,10 @@ async function loadPlans() {
     if (!res.ok) throw new Error('Error cargando planes');
     const data = await res.json();
     const plans = Array.isArray(data) ? data : data.plans || [];
-    state.plans = plans.map(normalizePlan);
-    state.planAssignments = new Map(state.plans.map(plan => [plan.id, [...(plan.planservicios || [])]]));
+    state.plans = plans.map(plan => normalizePlan(plan, state.services));
+    state.planAssignments = new Map(
+      state.plans.map(plan => [plan.id, (plan.planservicios || []).map(item => ({ ...item }))])
+    );
   } catch (error) {
     console.error('Error cargando planes:', error);
     showAlert(error.message || 'No se pudieron cargar los planes', 'danger');
@@ -349,9 +352,9 @@ async function loadServices() {
   }
 }
 
-function normalizePlan(plan) {
+function normalizePlan(plan, services = state.services) {
   const planservicios = Array.isArray(plan.planservicios)
-    ? plan.planservicios.map(normalizePlanServicio)
+    ? plan.planservicios.map((item) => normalizePlanServicio(item, services))
     : [];
   return {
     ...plan,
@@ -359,13 +362,61 @@ function normalizePlan(plan) {
   };
 }
 
-function normalizePlanServicio(planServicio) {
-  if (!planServicio) return planServicio;
-  const servicio = planServicio.servicio || planServicio.service || state.services.find(s => s.id === planServicio.servicio_id) || null;
+function normalizePlanServicio(planServicio, services = state.services) {
+  if (!planServicio) return null;
+  const servicioId = planServicio.servicio_id || planServicio.servicio?.id || planServicio.service?.id || null;
+  const servicio = resolveServiceForAssignment(planServicio, servicioId, services);
   return {
     ...planServicio,
+    servicio_id: servicioId ?? planServicio.servicio_id,
     servicio
   };
+}
+
+function resolveServiceForAssignment(planServicio, servicioId, services = state.services) {
+  const fallback = planServicio.servicio || planServicio.service || null;
+  const fromState = servicioId != null
+    ? services.find(service => service.id === servicioId)
+    : null;
+
+  if (fromState && fallback && fallback.id === fromState.id) {
+    return { ...fallback, ...fromState };
+  }
+
+  if (fromState) {
+    return { ...fromState };
+  }
+
+  if (fallback && fallback.id) {
+    return { ...fallback };
+  }
+
+  return fallback ?? null;
+}
+
+function rehydratePlanAssignments(planId = null) {
+  const services = state.services || [];
+
+  if (planId != null) {
+    const enriched = (state.planAssignments.get(planId) || [])
+      .map((item) => normalizePlanServicio(item, services))
+      .filter(Boolean);
+    state.planAssignments.set(planId, enriched);
+    updatePlanInState({ id: planId, planservicios: enriched });
+    return;
+  }
+
+  const updatedPlans = state.plans.map((plan) => {
+    const assignments = state.planAssignments.get(plan.id) || [];
+    const enriched = assignments.map((item) => normalizePlanServicio(item, services)).filter(Boolean);
+    state.planAssignments.set(plan.id, enriched);
+    return {
+      ...plan,
+      planservicios: enriched
+    };
+  });
+
+  state.plans = updatedPlans;
 }
 
 function renderPlansTable() {
@@ -397,7 +448,8 @@ function renderPlansTable() {
         <span class="badge rounded-pill text-bg-primary">${serviciosAsignados}</span>
       </td>
       <td>${formatDateTime(plan.actualizado_el)}</td>
-      <div class="d-flex flex-wrap gap-2 justify-content-end">
+      <td class="text-end">
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
           <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1" data-action="link-service" data-id="${plan.id}">
             <i class="bi bi-link-45deg"></i>
             <span>Vincular servicio</span>
@@ -545,11 +597,12 @@ async function deletePlan(id) {
 
   try {
     const res = await fetchWithAuth(`${API_BASE_URL}/plans/${id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Error eliminando plan');
+    const data = await parseJsonSafely(res);
+    if (!res.ok) throw new Error(data?.message || 'Error eliminando plan');
 
     showAlert('Plan eliminado correctamente', 'success');
     await loadPlans();
+    rehydratePlanAssignments();
     renderPlansTable();
   } catch (error) {
     console.error('Error eliminando plan:', error);
@@ -670,9 +723,13 @@ async function refreshPlanAssignments(planId) {
     if (!res.ok) throw new Error(data.message || 'Error obteniendo servicios del plan');
 
     const planData = data.plan || data;
-    const normalized = normalizePlan(planData);
-    state.planAssignments.set(planId, normalized.planservicios || []);
+    const normalized = normalizePlan(planData, state.services);
+    state.planAssignments.set(
+      planId,
+      (normalized.planservicios || []).map(item => ({ ...item }))
+    );
     updatePlanInState(normalized);
+    rehydratePlanAssignments(planId);
     renderPlansTable();
   } catch (error) {
     console.error('Error obteniendo vinculación plan-servicio:', error);
@@ -966,6 +1023,8 @@ async function saveService() {
     showAlert(isEditingService ? 'Servicio modificado correctamente' : 'Servicio creado correctamente', 'success');
     modal.hide();
     await loadServices();
+    rehydratePlanAssignments();
+    renderPlansTable();
     applyServiceFilters();
   } catch (err) {
     console.error('Error guardando servicio:', err);
@@ -980,23 +1039,25 @@ async function toggleService(id, activo) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activo: !activo })
     });
-    const data = await res.json();
+    const data = await parseJsonSafely(res);
     if (!res.ok) {
-      if (data.tarifas || data.planes) {
-        const force = confirm(`${data.message}. ¿Desactivar de todos modos?`);
+      if (data?.tarifas || data?.planes) {
+        const force = confirm(`${data?.message}. ¿Desactivar de todos modos?`);
         if (!force) return;
         const forceRes = await fetchWithAuth(`${API_BASE_URL}/services/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ activo: false, force: true })
         });
-        const forceData = await forceRes.json();
-        if (!forceRes.ok) throw new Error(forceData.message || 'Error actualizando servicio');
+        const forceData = await parseJsonSafely(forceRes);
+        if (!forceRes.ok) throw new Error(forceData?.message || 'Error actualizando servicio');
       } else {
-        throw new Error(data.message || 'Error actualizando servicio');
+        throw new Error(data?.message || 'Error actualizando servicio');
       }
     }
     await loadServices();
+    rehydratePlanAssignments();
+    renderPlansTable();
     applyServiceFilters();
     await refreshPlanAssignmentsAfterServiceChange(id);
     showAlert('Servicio actualizado', 'success');
