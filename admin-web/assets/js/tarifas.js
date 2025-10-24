@@ -236,9 +236,6 @@ function setupLayout() {
                 </tbody>
               </table>
             </div>
-            <div id="tarifas-empty-state" class="alert alert-info text-center m-3 d-none">
-              No se encontraron tarifas con los filtros aplicados.
-            </div>
           </div>
           <div class="card-footer bg-white border-0">
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -325,9 +322,6 @@ function setupLayout() {
                   </tr>
                 </tbody>
               </table>
-            </div>
-            <div id="comisiones-empty-state" class="alert alert-info text-center m-3 d-none">
-              No se encontraron comisiones con los filtros aplicados.
             </div>
           </div>
           <div class="card-footer bg-white border-0">
@@ -508,18 +502,8 @@ function setupLayout() {
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <form id="tarifas-form">
-              <div class="modal-body">
+              <div class="modal-body overflow-y-auto" style="max-height: 70vh;">
                 <div class="row g-3">
-                  <div class="col-12">
-                    <label for="tarifas-form-descripcion" class="form-label">Descripción</label>
-                    <input
-                      type="text"
-                      id="tarifas-form-descripcion"
-                      name="descripcion"
-                      class="form-control"
-                      placeholder="Describe la regla"
-                    />
-                  </div>
                   <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                       <label class="form-label mb-0">Ámbito de aplicación</label>
@@ -565,6 +549,16 @@ function setupLayout() {
                     <div class="invalid-feedback d-block d-none" data-scope-error="tarifa">
                       Selecciona un ámbito para continuar.
                     </div>
+                  </div>
+                  <div class="col-12">
+                    <label for="tarifas-form-descripcion" class="form-label">Descripción</label>
+                    <input
+                      type="text"
+                      id="tarifas-form-descripcion"
+                      name="descripcion"
+                      class="form-control"
+                      placeholder="Describe la regla"
+                    />
                   </div>
                   <div class="col-12 col-md-6 d-none" data-scope-plan-group="tarifa">
                     <label for="tarifas-form-plan" class="form-label">Plan</label>
@@ -716,18 +710,8 @@ function setupLayout() {
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <form id="comisiones-form">
-              <div class="modal-body">
+              <div class="modal-body overflow-y-auto" style="max-height: 70vh;">
                 <div class="row g-3">
-                  <div class="col-12">
-                    <label for="comisiones-form-descripcion" class="form-label">Descripción</label>
-                    <input
-                      type="text"
-                      id="comisiones-form-descripcion"
-                      name="descripcion"
-                      class="form-control"
-                      placeholder="Describe la comisión"
-                    />
-                  </div>
                   <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                       <label class="form-label mb-0">Ámbito de aplicación</label>
@@ -773,6 +757,16 @@ function setupLayout() {
                     <div class="invalid-feedback d-block d-none" data-scope-error="comision">
                       Selecciona un ámbito para continuar.
                     </div>
+                  </div>
+                  <div class="col-12">
+                    <label for="comisiones-form-descripcion" class="form-label">Descripción</label>
+                    <input
+                      type="text"
+                      id="comisiones-form-descripcion"
+                      name="descripcion"
+                      class="form-control"
+                      placeholder="Describe la comisión"
+                    />
                   </div>
                   <div class="col-12 col-md-6 d-none" data-scope-plan-group="comision">
                     <label for="comisiones-form-plan" class="form-label">Plan</label>
@@ -887,7 +881,6 @@ function cacheDom() {
 
   dom.tarifas = {
     tableBody: document.getElementById('tarifas-table-body'),
-    empty: document.getElementById('tarifas-empty-state'),
     filters: {
       estado: document.getElementById('tarifas-filter-estado'),
       servicio: document.getElementById('tarifas-filter-servicio'),
@@ -921,7 +914,6 @@ function cacheDom() {
 
   dom.comisiones = {
     tableBody: document.getElementById('comisiones-table-body'),
-    empty: document.getElementById('comisiones-empty-state'),
     filters: {
       estado: document.getElementById('comisiones-filter-estado'),
       servicio: document.getElementById('comisiones-filter-servicio'),
@@ -1158,19 +1150,9 @@ function renderTarifas() {
   state.tarifas.paginator.total = filtered.length;
 
   const body = state.dom.tarifas.tableBody;
-  const empty = state.dom.tarifas.empty;
 
   if (!body) return;
   body.innerHTML = '';
-
-  if (!paginated.length) {
-    empty?.classList.remove('d-none');
-    body.classList.add('d-none');
-    return;
-  }
-
-  empty?.classList.add('d-none');
-  body.classList.remove('d-none');
 
   paginated.forEach((tarifa) => {
     const tr = document.createElement('tr');
@@ -1448,7 +1430,11 @@ async function persistTarifa(payload, formState) {
     } else {
       response = await apiPost('/tarifas', payload);
     }
-    const saved = await response.json();
+    const payload = await response.json();
+    const saved = resolveEntityFromResponse(payload, 'tarifa');
+    if (!saved?.id) {
+      throw new Error('La respuesta del servidor no contiene la tarifa guardada.');
+    }
     upsertTarifa(saved);
     state.dom.tarifas.form.reset();
     await prepareScopeOptions('tarifas', getDefaultTarifa());
@@ -1922,18 +1908,8 @@ function renderComisiones() {
   state.comisiones.paginator.total = filtered.length;
 
   const body = state.dom.comisiones.tableBody;
-  const empty = state.dom.comisiones.empty;
   if (!body) return;
   body.innerHTML = '';
-
-  if (!paginated.length) {
-    empty?.classList.remove('d-none');
-    body.classList.add('d-none');
-    return;
-  }
-
-  empty?.classList.add('d-none');
-  body.classList.remove('d-none');
 
   paginated.forEach((comision) => {
     const tr = document.createElement('tr');
@@ -2221,7 +2197,11 @@ async function persistComision(payload, formState) {
     } else {
       response = await apiPost('/comisiones', payload);
     }
-    const saved = await response.json();
+    const payload = await response.json();
+    const saved = resolveEntityFromResponse(payload, 'comision');
+    if (!saved?.id) {
+      throw new Error('La respuesta del servidor no contiene la comisión guardada.');
+    }
     upsertComision(saved);
     state.dom.comisiones.form.reset();
     await prepareScopeOptions('comisiones', getDefaultComision());
@@ -3564,44 +3544,128 @@ function getBootstrapModal(element) {
   return window.bootstrap.Modal.getOrCreateInstance(element);
 }
 
+function resolveEntityFromResponse(payload, key) {
+  if (!payload) return null;
+  if (key && payload[key]) return payload[key];
+  if (payload.item) return payload.item;
+  if (Array.isArray(payload.items)) {
+    return payload.items.find((item) => item && typeof item === 'object' && 'id' in item) || null;
+  }
+  return payload;
+}
+
+function extractErrorMessageFromBody(body, fallback) {
+  if (!body) return fallback;
+  if (typeof body === 'string') {
+    const trimmed = body.trim();
+    return trimmed || fallback;
+  }
+  if (typeof body === 'object') {
+    if (body.message) return body.message;
+    if (body.error) return body.error;
+    if (Array.isArray(body.errors) && body.errors.length) {
+      const first = body.errors[0];
+      if (typeof first === 'string') return first;
+      if (first && typeof first === 'object') {
+        return first.message || first.detail || fallback;
+      }
+    }
+  }
+  return fallback;
+}
+
+async function ensureSuccessfulResponse(response) {
+  if (response.ok) return response;
+  const fallback = response.statusText || `Error ${response.status}`;
+  let raw;
+  try {
+    raw = await response.text();
+  } catch (error) {
+    throw new Error(fallback);
+  }
+  let parsed = raw;
+  try {
+    parsed = raw ? JSON.parse(raw) : raw;
+  } catch (error) {
+    parsed = raw;
+  }
+  const message = extractErrorMessageFromBody(parsed, fallback);
+  throw new Error(message);
+}
+
+function normalizeFetchError(error) {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error('No se pudo completar la solicitud.');
+}
+
 async function apiGet(path, params) {
   const query = params ? `?${new URLSearchParams(params)}` : '';
-  const response = await fetch(`${API_BASE_URL}${path}${query}`, {
-    credentials: 'include',
-  });
-  if (!response.ok) throw new Error('Error de red');
-  return response;
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}${query}`, {
+      credentials: 'include',
+    });
+    return await ensureSuccessfulResponse(response);
+  } catch (error) {
+    throw normalizeFetchError(error);
+  }
 }
 
 async function apiPost(path, body) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    credentials: 'include',
-  });
-  if (!response.ok) throw new Error('Error de red');
-  return response;
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include',
+    });
+    return await ensureSuccessfulResponse(response);
+  } catch (error) {
+    throw normalizeFetchError(error);
+  }
 }
 
 async function apiPut(path, body, extraHeaders = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...extraHeaders },
-    body: JSON.stringify(body),
-    credentials: 'include',
-  });
-  if (!response.ok) throw new Error('Error de red');
-  return response;
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...extraHeaders },
+      body: JSON.stringify(body),
+      credentials: 'include',
+    });
+    return await ensureSuccessfulResponse(response);
+  } catch (error) {
+    throw normalizeFetchError(error);
+  }
 }
 
 async function apiPatch(path, body) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    credentials: 'include',
-  });
-  if (!response.ok) throw new Error('Error de red');
-  return response;
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include',
+    });
+    return await ensureSuccessfulResponse(response);
+  } catch (error) {
+    throw normalizeFetchError(error);
+  }
+}
+
+const escapeHtml =
+  (typeof window !== 'undefined' && window.escapeHtml)
+    || function escapeHtml(value) {
+      if (value == null) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
+
+if (typeof window !== 'undefined' && !window.escapeHtml) {
+  window.escapeHtml = escapeHtml;
 }
