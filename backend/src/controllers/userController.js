@@ -13,6 +13,7 @@ function createHttpError(statusCode, message, code) {
 }
 // ========== Utiles comunes ==========
 const INVALID_DNI_SEQUENCES = ['00000000', '11111111', '12345678', '87654321'];
+const LAWYER_ROLE_CODE = 'abogado';
 
 function validateDniFormat(dni) {
   if (!/^\d{8}$/.test(dni)) return 'El DNI debe contener exactamente 8 dígitos';
@@ -856,6 +857,9 @@ const checkPersonaConflicts = async (req, res) => {
     const telefonoRaw = String(req.query.telefono || '').trim();
     const correoRaw = String(req.query.correo || '').trim();
 
+    const excludeUserIdRaw = req.query.excludeUserId;
+    const excludePersonaIdRaw = req.query.excludePersonaId;
+
     if (!dniRaw && !telefonoRaw && !correoRaw) {
       return res.status(400).json({
         success: false,
@@ -867,11 +871,32 @@ const checkPersonaConflicts = async (req, res) => {
     const normalizedTelefono = normalizeDigits(telefonoRaw);
     const normalizedCorreo = correoRaw.toLowerCase();
 
+    let personaIdToExclude = null;
+    if (excludePersonaIdRaw != null) {
+      const parsed = Number.parseInt(excludePersonaIdRaw, 10);
+      if (!Number.isNaN(parsed)) {
+        personaIdToExclude = parsed;
+      }
+    }
+
+    if (!personaIdToExclude && excludeUserIdRaw != null) {
+      const parsedUserId = Number.parseInt(excludeUserIdRaw, 10);
+      if (!Number.isNaN(parsedUserId)) {
+        const userRow = await prisma.usuario.findUnique({
+          where: { id: parsedUserId },
+          select: { persona_id: true },
+        });
+        if (userRow?.persona_id) {
+          personaIdToExclude = userRow.persona_id;
+        }
+      }
+    }
+
     const conflicts = {};
 
     if (normalizedDni) {
       const personaByDni = await prisma.persona.findUnique({ where: { dni: normalizedDni } });
-      conflicts.dni = Boolean(personaByDni);
+      conflicts.dni = Boolean(personaByDni && personaByDni.id !== personaIdToExclude);
     }
 
     if (normalizedTelefono) {
@@ -880,6 +905,7 @@ const checkPersonaConflicts = async (req, res) => {
         FROM persona
         WHERE telefono IS NOT NULL
           AND regexp_replace(telefono, '\\D', '', 'g') = ${normalizedTelefono}
+          AND (${personaIdToExclude} IS NULL OR id <> ${personaIdToExclude})
         LIMIT 1;
       `;
       conflicts.telefono = Array.isArray(telefonoMatch) && telefonoMatch.length > 0;
@@ -889,7 +915,7 @@ const checkPersonaConflicts = async (req, res) => {
       const personaByCorreo = await prisma.persona.findFirst({
         where: { correo: { equals: normalizedCorreo, mode: 'insensitive' } },
       });
-      conflicts.correo = Boolean(personaByCorreo);
+      conflicts.correo = Boolean(personaByCorreo && personaByCorreo.id !== personaIdToExclude);
     }
 
     return res.json({
@@ -1209,6 +1235,21 @@ const createUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'rol_id y clave son requeridos' });
     }
 
+    const parsedRoleId = Number.parseInt(rol_id, 10);
+    if (Number.isNaN(parsedRoleId)) {
+      return res.status(400).json({ success: false, message: 'rol_id inválido' });
+    }
+
+    const roleRecord = await prisma.role.findUnique({ where: { id: parsedRoleId } });
+    if (!roleRecord) {
+      return res.status(404).json({ success: false, message: 'Rol no encontrado' });
+    }
+
+    const roleCode = (roleRecord.codigo || '').toLowerCase();
+    if (roleCode === LAWYER_ROLE_CODE) {
+      return res.status(403).json({ success: false, message: 'No se pueden crear cuentas de abogado desde el panel administrativo' });
+    }
+
     // ---------------------------
     // MODO 1: Adjuntar a persona existente
     // ---------------------------
@@ -1243,7 +1284,7 @@ const createUser = async (req, res) => {
       const result = await prisma.$transaction(async (tx) => {
         // Evitar duplicar el mismo rol para la persona
         const dup = await tx.usuario.findUnique({
-          where: { persona_id_rol_id: { persona_id: personaExist.id, rol_id: parseInt(rol_id, 10) } }
+          where: { persona_id_rol_id: { persona_id: personaExist.id, rol_id: parsedRoleId } }
         });
         if (dup) {
           throw new Error('La persona ya tiene una cuenta con ese rol');
@@ -1252,16 +1293,14 @@ const createUser = async (req, res) => {
         const usuarioCreated = await tx.usuario.create({
           data: {
             persona_id: personaExist.id,
-            rol_id: parseInt(rol_id, 10),
+            rol_id: parsedRoleId,
             clave, // IMPORTANTE: hashear a nivel de servicio
             telefono_verificado: false,
             activo: true
           }
         });
 
-        // Si no es abogado o no mandan info, retornar básico
-        const rol = await tx.role.findUnique({ where: { id: parseInt(rol_id, 10) } });
-        if (!rol || rol.codigo !== 'abogado' || !abogado_info) {
+        if (!abogado_info) {
           return tx.usuario.findUnique({
             where: { id: usuarioCreated.id },
             include: { persona: true, role: true }
@@ -1449,10 +1488,26 @@ const createUser = async (req, res) => {
     }
     const personaExistente = personaByDni || personaByCorreo;
 
+    if (!personaExistente && telefono) {
+      const normalizedPhone = normalizeDigits(telefono);
+      if (normalizedPhone) {
+        const telefonoMatch = await prisma.$queryRaw`
+          SELECT id
+          FROM persona
+          WHERE telefono IS NOT NULL
+            AND regexp_replace(telefono, '\\D', '', 'g') = ${normalizedPhone}
+          LIMIT 1;
+        `;
+        if (Array.isArray(telefonoMatch) && telefonoMatch.length > 0) {
+          return res.status(409).json({ success: false, message: 'El teléfono ya está registrado por otra persona' });
+        }
+      }
+    }
+
     // Si existe, validar que no tenga ya el mismo rol
     if (personaExistente) {
       const existingUserRole = await prisma.usuario.findFirst({
-        where: { persona_id: personaExistente.id, rol_id: parseInt(rol_id, 10) }
+        where: { persona_id: personaExistente.id, rol_id: parsedRoleId }
       });
       if (existingUserRole) {
         return res.status(409).json({ success: false, message: 'La persona ya posee un usuario con ese rol' });
@@ -1466,7 +1521,7 @@ const createUser = async (req, res) => {
       } else {
         const personaData = {
           dni: normalizedDni,
-          telefono: telefono || null,
+          telefono: telefono ? (normalizeDigits(telefono) || null) : null,
           correo,
           primer_nombre,
           segundo_nombre: segundo_nombre || null,
@@ -1493,16 +1548,14 @@ const createUser = async (req, res) => {
       const usuarioCreated = await tx.usuario.create({
         data: {
           persona_id: personaId,
-          rol_id: parseInt(rol_id, 10),
+          rol_id: parsedRoleId,
           clave, // IMPORTANTE: hashear a nivel de servicio
           telefono_verificado: false,
           activo: true
         }
       });
 
-      // Si no es abogado, termina aquí
-      const rol = await tx.role.findUnique({ where: { id: parseInt(rol_id, 10) } });
-      if (!rol || rol.codigo !== 'abogado' || !abogado_info) {
+      if (!abogado_info) {
         return tx.usuario.findUnique({
           where: { id: usuarioCreated.id },
           include: { persona: true, role: true }
@@ -1682,6 +1735,28 @@ const updateUser = async (req, res) => {
     });
     if (!usuarioActual) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
+    const currentRoleCode = (usuarioActual.role?.codigo || '').toLowerCase();
+    let parsedRoleId = null;
+    let targetRole = usuarioActual.role;
+
+    if (rol_id !== undefined && rol_id !== null) {
+      parsedRoleId = Number.parseInt(rol_id, 10);
+      if (Number.isNaN(parsedRoleId)) {
+        return res.status(400).json({ success: false, message: 'rol_id inválido' });
+      }
+      if (parsedRoleId !== usuarioActual.rol_id) {
+        targetRole = await prisma.role.findUnique({ where: { id: parsedRoleId } });
+        if (!targetRole) {
+          return res.status(404).json({ success: false, message: 'Rol no encontrado' });
+        }
+      }
+    }
+
+    const targetRoleCode = (targetRole?.codigo || currentRoleCode).toLowerCase();
+    if (currentRoleCode === LAWYER_ROLE_CODE || targetRoleCode === LAWYER_ROLE_CODE) {
+      return res.status(403).json({ success: false, message: 'Las cuentas de abogado no pueden gestionarse desde este panel' });
+    }
+
     if (clave !== undefined && !trimmedClave) {
       return res.status(400).json({ success: false, message: 'La contraseña no puede estar vacía' });
     }
@@ -1719,11 +1794,13 @@ const updateUser = async (req, res) => {
     }
 
     // Si cambian de rol, validar que no exista otro usuario de la misma persona con ese rol
-    if (rol_id && parseInt(rol_id, 10) !== usuarioActual.rol_id) {
+    const effectiveRoleId = parsedRoleId ?? usuarioActual.rol_id;
+
+    if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
       const roleTaken = await prisma.usuario.findFirst({
         where: {
           persona_id: usuarioActual.persona_id,
-          rol_id: parseInt(rol_id, 10),
+          rol_id: parsedRoleId,
           id: { not: userId }
         }
       });
@@ -1733,12 +1810,12 @@ const updateUser = async (req, res) => {
     }
     const updated = await prisma.$transaction(async (tx) => {
       // Actualizar usuario/rol
-      if (rol_id && Number(rol_id) !== usuarioActual.rol_id) {
+      if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
         const dup = await tx.usuario.findUnique({
           where: {
             persona_id_rol_id: {
               persona_id: usuarioActual.persona_id,
-              rol_id: Number(rol_id)
+              rol_id: parsedRoleId
             }
           }
         });
@@ -1748,10 +1825,10 @@ const updateUser = async (req, res) => {
         }
       }
 
-      if (rol_id) {
+      if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
         await tx.usuario.update({
           where: { id: userId },
-          data: { rol_id: parseInt(rol_id, 10) }
+          data: { rol_id: parsedRoleId }
         });
       }
 
@@ -1817,7 +1894,7 @@ const updateUser = async (req, res) => {
       }
 
       // Rol final (si no enviaron, usa el actual)
-      const rol = await tx.role.findUnique({ where: { id: parseInt(rol_id || usuarioActual.rol_id, 10) } });
+      const rol = targetRole || await tx.role.findUnique({ where: { id: effectiveRoleId } });
       const isAbogado = rol?.codigo === 'abogado';
 
       if (isAbogado && abogado_info) {

@@ -4,7 +4,6 @@ let especialidades = [];
 let currentUserId = null;
 let isEditing = false;
 let currentAvailability = [];
-let pendingDisponibilidad = [];
 let currentVerificationUserId = null;
 let currentVerificationPersonaId = null;
 let verificationModalInstance = null;
@@ -108,6 +107,7 @@ function personaNombreCompleto(persona = {}) {
     .join(' ');
 }
 const LAWYER_ROLE_CODE = 'abogado';
+const PANEL_ALLOWED_ROLE_CODES = new Set(['cliente', 'admin']);
 
 function normalizeArchivoRecord(record) {
   if (!record) return null;
@@ -349,7 +349,6 @@ function setupEventListeners() {
   document.getElementById('filterType')?.addEventListener('change', filterUsers);
   document.getElementById('userForm')?.addEventListener('submit', (e) => { e.preventDefault(); saveUser(); });
   document.getElementById('dni')?.addEventListener('blur', handleDniLookup);
-  document.getElementById('rol')?.addEventListener('change', toggleAbogadoFields);
 
   document.getElementById('verificacionAprobarBtn')?.addEventListener('click', () => handleVerificationAction('APROBADA'));
   document.getElementById('verificacionRechazarBtn')?.addEventListener('click', () => handleVerificationAction('RECHAZADA'));
@@ -357,10 +356,6 @@ function setupEventListeners() {
 
   document.getElementById('verificacionDisableLawyerBtn')?.addEventListener('click', handleDisableLawyerFromModal);
   // Estudio: búsqueda de existentes
-  document.getElementById('buscarEstudio')?.addEventListener('input', debounce(handleBuscarEstudio, 250));
-
-  // Disponibilidad: botón añadir del modal de disponibilidad
-  // (en tu HTML, addDisponibilidad() está en el botón; aquí no añadimos otro listener)
 }
 
 /* ----------------- Data loaders ---------------- */
@@ -390,24 +385,12 @@ async function loadRoles() {
 async function loadEspecialidades() {
   const data = await apiFetch('/especialidades'); // [{id, nombre}]
   especialidades = Array.isArray(data) ? data : (data.items ?? []);
-  populateEspecialidadesSelect();
 }
 
 /* ----------------- Poblar selects -------------- */
 function populateRoleSelects() {
-  const roleSelect   = document.getElementById('rol');
   const filterSelect = document.getElementById('filterType');
-
-  if (roleSelect) {
-    roleSelect.innerHTML = '<option value="">Seleccionar tipo</option>';
-    roles.forEach(role => {
-      const option = document.createElement('option');
-      option.value = role.id;
-      option.textContent = role.nombre;
-      option.dataset.codigo = role.codigo;
-      roleSelect.appendChild(option);
-    });
-  }
+  configureUserRoleSelect();
   if (filterSelect) {
     filterSelect.innerHTML = '<option value="">Todos los tipos</option>';
     roles.forEach(role => {
@@ -419,10 +402,52 @@ function populateRoleSelects() {
   }
 }
 
-function populateEspecialidadesSelect() {
-  const select = document.getElementById('especialidadesSelect');
+function configureUserRoleSelect({ selectedRoleId = null } = {}) {
+  const select = document.getElementById('rol');
   if (!select) return;
-  select.innerHTML = especialidades.map(e => `<option value="${e.id}">${e.nombre}</option>`).join('');
+
+  const resolvedSelectedId = selectedRoleId != null
+    ? Number(selectedRoleId)
+    : (select.value ? Number(select.value) : null);
+
+  const selectedRole = resolvedSelectedId != null
+    ? roles.find(r => Number(r.id) === resolvedSelectedId)
+    : null;
+  const selectedRoleCode = (selectedRole?.codigo || '').toLowerCase();
+
+  select.innerHTML = '<option value="">Seleccionar tipo</option>';
+  roles.forEach(role => {
+    const code = (role.codigo || '').toLowerCase();
+    if (!PANEL_ALLOWED_ROLE_CODES.has(code) && role.id !== resolvedSelectedId) {
+      return;
+    }
+    const option = document.createElement('option');
+    option.value = role.id;
+    option.textContent = role.nombre;
+    option.dataset.codigo = role.codigo;
+    if (!PANEL_ALLOWED_ROLE_CODES.has(code)) {
+      option.disabled = true;
+    }
+    select.appendChild(option);
+  });
+
+  if (resolvedSelectedId != null) {
+    select.value = String(resolvedSelectedId);
+  } else {
+    select.value = '';
+  }
+
+  select.disabled = selectedRoleCode === LAWYER_ROLE_CODE;
+}
+
+function getSelectedRoleCode() {
+  const select = document.getElementById('rol');
+  const option = select?.options[select.selectedIndex];
+  return (option?.dataset?.codigo || '').toLowerCase();
+}
+
+function shouldRunPersonaValidations(roleCode = getSelectedRoleCode()) {
+  return PANEL_ALLOWED_ROLE_CODES.has((roleCode || '').toLowerCase());
 }
 
 /* ----------------- Render/filters -------------- */
@@ -467,6 +492,10 @@ function renderUsersTable(usersToRender) {
       ? `<button class="btn btn-sm btn-outline-success me-1" title="Revisar verificación" onclick="openVerificacionModal(${user.id})"><i class="bi bi-patch-check"></i></button>`
       : '';
 
+    const editButton = isLawyer
+      ? `<button class="btn btn-sm btn-outline-secondary me-1" title="Las cuentas de abogado se gestionan desde la app del profesional" disabled><i class="bi bi-pencil"></i></button>`
+      : `<button class="btn btn-sm btn-warning me-1" title="Editar" onclick="editUser(${user.id})"><i class="bi bi-pencil"></i></button>`;
+
     const deleteReason = getDeleteRestrictionReason(user);
     const deleteButton = deleteReason
       ? `<button class="btn btn-sm btn-outline-secondary" title="${escapeHtml(deleteReason)}" disabled><i class="bi bi-trash"></i></button>`
@@ -483,7 +512,7 @@ function renderUsersTable(usersToRender) {
         <td>${user.creado_el ? formatDate(user.creado_el) : ''}</td>
         <td class="text-center">
           <div class="btn-group">
-            <button class="btn btn-sm btn-warning me-1" title="Editar" onclick="editUser(${user.id})"><i class="bi bi-pencil"></i></button>
+            ${editButton}
             ${verificationButton}${abogadoActions}
             ${deleteButton}
           </div>
@@ -510,6 +539,7 @@ function filterUsers() {
 
 /* ----------------- DNI lookup ------------------ */
 async function handleDniLookup() {
+  if (!shouldRunPersonaValidations()) return;
   const dni = this.value.trim();
   if (!isDNI(dni)) return;
   try {
@@ -538,7 +568,7 @@ function openUserModal() {
   document.getElementById('change-password-button')?.classList.add('d-none');
   document.getElementById('clave') && (document.getElementById('clave').required = true);
   document.getElementById('confirmarClave') && (document.getElementById('confirmarClave').required = true);
-  toggleAbogadoFields();
+  configureUserRoleSelect({ selectedRoleId: null });
 }
 
 async function editUser(userId) {
@@ -565,14 +595,7 @@ async function editUser(userId) {
     setValue('direccion', p.direccion);
 
     // rol
-    const rolSelect = document.getElementById('rol');
-    if (rolSelect) {
-      rolSelect.value = user.rol_id;
-      rolSelect.dispatchEvent(new Event('change'));
-    }
-
-    // perfil abogado (si lo hay)
-    await maybeLoadPerfilAbogadoIntoForm(userId, user);
+    configureUserRoleSelect({ selectedRoleId: user.rol_id });
 
     // contraseña: ocultar en edición
     document.getElementById('password-fields')?.classList.add('d-none');
@@ -590,36 +613,6 @@ function setValue(id, val) {
   const el = document.getElementById(id);
   if (el == null) return;
   el.value = (val ?? '').toString();
-}
-
-async function maybeLoadPerfilAbogadoIntoForm(userId, user) {
-  const rolCodigo = user.role?.codigo || roles.find(r => r.id === user.rol_id)?.codigo;
-  const esAbog = rolCodigo === 'abogado';
-  toggleAbogadoFields();
-
-  if (!esAbog) return;
-
-  try {
-    // intenta usar lo que ya viene; si no, consulta endpoint perfil
-    const perfil = user.perfilabogado ?? (await apiFetch(`/users/${userId}/perfil`).catch(() => null));
-    if (!perfil) return;
-
-    setValue('tarifaBase', perfil.tarifa_base);
-    setValue('duracionMinutos', perfil.duracion_minutos ?? 60);
-    setValue('direccionAtencion', perfil.direccion_atencion);
-    setValue('bio', perfil.bio);
-  } catch (e) {
-    // no bloquear la edición si falla
-    console.warn('No se pudo cargar perfil abogado:', e);
-  }
-}
-
-function toggleAbogadoFields() {
-  const rolSelect = document.getElementById('rol');
-  const selectedOption = rolSelect?.options[rolSelect.selectedIndex];
-  const esAbogado = selectedOption?.dataset.codigo === 'abogado';
-  const cont = document.getElementById('perfilAbogadoFields');
-  if (cont) cont.style.display = esAbogado ? 'block' : 'none';
 }
 
 /* ----------------- Guardar usuario -------------- */
@@ -646,12 +639,16 @@ async function saveUser() {
 
   const rolSelect = document.getElementById('rol');
   const rolId = parseInt(rolSelect?.value || '', 10);
-  const rolCodigo = rolSelect?.options[rolSelect.selectedIndex]?.dataset?.codigo || '';
+  const rolCodigo = (rolSelect?.options[rolSelect.selectedIndex]?.dataset?.codigo || '').toLowerCase();
   if (!rolId || Number.isNaN(rolId)) return showAlert('Selecciona un rol válido.', 'danger');
+  if (!shouldRunPersonaValidations(rolCodigo)) {
+    return showAlert('Solo se pueden gestionar cuentas de clientes o administradores desde este panel.', 'danger');
+  }
 
+  const telefonoNormalizado = trimOrUndefined(onlyDigits(document.getElementById('telefono')?.value));
   const personaPayload = {
-    dni: dni,
-    telefono: trimOrUndefined(onlyDigits(document.getElementById('telefono')?.value)),
+    dni,
+    telefono: telefonoNormalizado,
     correo: email,
     primer_nombre: trimOrUndefined(document.getElementById('primerNombre')?.value),
     segundo_nombre: trimOrUndefined(document.getElementById('segundoNombre')?.value),
@@ -663,21 +660,30 @@ async function saveUser() {
   const payloadUser = { persona: personaPayload, rol_id: rolId };
   if (claveToSend) payloadUser.clave = claveToSend;
 
+  const currentUser = isEditing ? users.find(u => u.id === currentUserId) : null;
+  const excludePersonaId = currentUser?.persona_id ?? currentUser?.persona?.id ?? null;
+
   try {
+    if (shouldRunPersonaValidations(rolCodigo)) {
+      const conflictMessage = await ensureNoPersonaConflicts({
+        dni,
+        telefono: telefonoNormalizado,
+        correo: email,
+        excludeUserId: isEditing ? currentUserId : null,
+        excludePersonaId,
+      });
+      if (conflictMessage) {
+        showAlert(conflictMessage, 'danger');
+        return;
+      }
+    }
+
     let saved;
     if (isEditing && currentUserId != null) {
       saved = await apiFetch(`/users/${currentUserId}`, { method: 'PUT', body: JSON.stringify(payloadUser) });
     } else {
       saved = await apiFetch('/users', { method: 'POST', body: JSON.stringify(payloadUser) });
       currentUserId = saved?.id ?? saved?.user?.id ?? currentUserId;
-    }
-
-    // Si es abogado, upsert del perfil con los campos del form (no especialidades ni estudio aquí)
-    if (rolCodigo === 'abogado' && currentUserId != null) {
-      const perfilPayload = collectPerfilAbogado();
-      if (Object.values(perfilPayload).some(v => v !== undefined && v !== null && v !== '')) {
-        await apiFetch(`/users/${currentUserId}/perfil`, { method: 'PUT', body: JSON.stringify(perfilPayload) });
-      }
     }
 
     showAlert(isEditing ? 'Usuario actualizado con éxito.' : 'Usuario creado con éxito.', 'success');
@@ -688,13 +694,32 @@ async function saveUser() {
   }
 }
 
-function collectPerfilAbogado() {
-  const tarifaRaw = document.getElementById('tarifaBase')?.value?.trim();
-  return {
-    tarifa_base: tarifaRaw === '' ? undefined : Number(tarifaRaw),
-    direccion_atencion: trimOrUndefined(document.getElementById('direccionAtencion')?.value),
-    bio: trimOrUndefined(document.getElementById('bio')?.value)
-  };
+async function ensureNoPersonaConflicts({ dni, telefono, correo, excludeUserId = null, excludePersonaId = null }) {
+  const params = new URLSearchParams();
+  if (dni) params.set('dni', dni);
+  if (telefono) params.set('telefono', telefono);
+  if (correo) params.set('correo', correo);
+  if (excludeUserId != null) params.set('excludeUserId', excludeUserId);
+  if (excludePersonaId != null) params.set('excludePersonaId', excludePersonaId);
+
+  if (!params.toString()) return null;
+
+  const response = await apiFetch(`/users/persona/conflicts?${params.toString()}`);
+  const conflicts = response?.conflicts || {};
+
+  const conflictDescriptions = [];
+  if (conflicts.dni) conflictDescriptions.push('el DNI ingresado');
+  if (conflicts.telefono) conflictDescriptions.push('el teléfono ingresado');
+  if (conflicts.correo) conflictDescriptions.push('el correo electrónico ingresado');
+
+  if (!conflictDescriptions.length) return null;
+
+  if (conflictDescriptions.length === 1) {
+    return `Ya existe un usuario registrado con ${conflictDescriptions[0]}.`;
+  }
+
+  const last = conflictDescriptions.pop();
+  return `Ya existe un usuario registrado con ${conflictDescriptions.join(', ')} y ${last}.`;
 }
 
 /* ----------------- Especialidades --------------- */
@@ -706,51 +731,25 @@ async function openEspecialidadesModal(userId) {
     const ids = Array.isArray(data)
       ? data.map(e => e.especialidad_id ?? e.id)
       : (data.ids ?? []);
-    renderEspecialidadesChips(ids);
-    // preselección no obligatoria; el usuario puede añadir desde el múltiple
+    renderEspecialidadesReadOnly(ids);
     bootstrap.Modal.getOrCreateInstance(document.getElementById('especialidadesModal')).show();
   } catch (e) {
     showAlert(`No se pudieron cargar especialidades: ${e.message}`, 'danger');
   }
 }
 
-function renderEspecialidadesChips(ids) {
+function renderEspecialidadesReadOnly(ids) {
   const cont = document.getElementById('especialidadesActuales');
   if (!cont) return;
+  if (!ids.length) {
+    cont.innerHTML = '<span class="text-muted">Sin especialidades registradas.</span>';
+    return;
+  }
   cont.innerHTML = ids.map(id => {
     const esp = especialidades.find(e => e.id === id);
-    const nombre = esp ? esp.nombre : `ID ${id}`;
-    return `<span class="badge bg-secondary me-2 mb-2">${nombre}
-      <button class="btn btn-sm btn-light ms-2 py-0" onclick="removeEspecialidad(${id})">&times;</button>
-    </span>`;
+    const nombre = esp ? escapeHtml(esp.nombre) : `ID ${escapeHtml(String(id))}`;
+    return `<span class="badge bg-secondary me-2 mb-2">${nombre}</span>`;
   }).join('');
-  cont.dataset.ids = JSON.stringify(ids);
-}
-
-function removeEspecialidad(id) {
-  const cont = document.getElementById('especialidadesActuales');
-  const now = new Set(JSON.parse(cont.dataset.ids || '[]'));
-  now.delete(id);
-  renderEspecialidadesChips([...now]);
-}
-
-async function saveEspecialidades() {
-  if (currentUserId == null) return showAlert('Usuario no seleccionado.', 'danger');
-  const cont = document.getElementById('especialidadesActuales');
-  const curr = new Set(JSON.parse(cont.dataset.ids || '[]'));
-  const selected = Array.from(document.getElementById('especialidadesSelect').selectedOptions).map(o => parseInt(o.value, 10));
-  selected.forEach(id => curr.add(id));
-  try {
-    // idempotente: PUT con arreglo de IDs finales
-    await apiFetch(`/users/${currentUserId}/especialidades`, {
-      method: 'PUT',
-      body: JSON.stringify({ ids: [...curr] })
-    });
-    showAlert('Especialidades actualizadas.', 'success');
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('especialidadesModal')).hide();
-  } catch (e) {
-    showAlert(`Error guardando especialidades: ${e.message}`, 'danger');
-  }
 }
 
 /* ----------------- Estudio + vínculo ------------- */
@@ -762,18 +761,36 @@ function openEstudioModal(userId) {
   ['buscarEstudio','estudioRuc','estudioNombre','estudioPais','estudioCiudad','estudioCorreo','estudioTelefono','estudioDireccion','rolEnEstudio']
     .forEach(id => setValue(id, ''));
   const chk = document.getElementById('estudioPrincipal'); if (chk) chk.checked = false;
-  document.getElementById('sugerenciasEstudio') && (document.getElementById('sugerenciasEstudio').innerHTML = '');
+  const sugerencias = document.getElementById('sugerenciasEstudio');
+  if (sugerencias) sugerencias.innerHTML = '';
 
-  // intenta precargar vínculo actual principal (si el backend tiene endpoint)
   apiFetch(`/users/${userId}/estudios`).then(list => {
     const arr = Array.isArray(list) ? list : (list.items ?? []);
-    renderEstudiosActuales(arr);
+    if (sugerencias) {
+      if (!arr.length) {
+        sugerencias.innerHTML = '<div class="list-group-item text-muted">Sin estudios registrados</div>';
+      } else {
+        sugerencias.innerHTML = arr.map(v => {
+          const estudio = v.estudio ?? {};
+          const nombre = escapeHtml(estudio.nombre_comercial ?? `ID ${v.estudio_id}`);
+          const rol = v.rol_en_estudio ? ` – ${escapeHtml(v.rol_en_estudio)}` : '';
+          const principalBadge = v.principal ? '<span class="badge bg-primary ms-2">Principal</span>' : '';
+          return `<div class="list-group-item d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">${nombre}${rol}</div>
+              <small class="text-muted">RUC: ${escapeHtml(estudio.ruc ?? 'N/A')}</small>
+            </div>
+            ${principalBadge}
+          </div>`;
+        }).join('');
+      }
+    }
+
     const principal = arr.find(v => v.principal) ?? arr[0];
     if (principal) {
       setValue('estudioId', principal.estudio_id);
       setValue('rolEnEstudio', principal.rol_en_estudio ?? '');
       const chk2 = document.getElementById('estudioPrincipal'); if (chk2) chk2.checked = !!principal.principal;
-      // si devuelve datos del estudio:
       const est = principal.estudio ?? {};
       setValue('estudioRuc', est.ruc);
       setValue('estudioNombre', est.nombre_comercial);
@@ -783,117 +800,14 @@ function openEstudioModal(userId) {
       setValue('estudioTelefono', est.telefono);
       setValue('estudioDireccion', est.direccion);
     }
-  }).catch(() => { /* opcional */ });
+  }).catch(() => {
+    if (sugerencias) {
+      sugerencias.innerHTML = '<div class="list-group-item text-muted">No se pudo cargar la información del estudio.</div>';
+    }
+  });
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('estudioModal')).show();
 }
-
-function renderEstudiosActuales(estudios = []) {
-    const cont = document.getElementById('estudiosActuales');
-    if (!cont) return;
-    if (!estudios.length) {
-      cont.innerHTML = '<li class="list-group-item">Sin estudios registrados</li>';
-      return;
-    }
-    cont.innerHTML = estudios.map(v => {
-      const nombre = escapeHtml(v.estudio?.nombre_comercial ?? `ID ${v.estudio_id}`);
-      const rol = v.rol_en_estudio ? ` - ${escapeHtml(v.rol_en_estudio)}` : '';
-      const badge = v.principal ? ' <span class="badge bg-primary ms-2">Principal</span>' : '';
-      return `<li class="list-group-item d-flex justify-content-between align-items-center">${nombre}${rol}${badge}</li>`;
-    }).join('');
-}
-
-async function handleBuscarEstudio(e) {
-  const term = e.target.value.trim();
-  const cont = document.getElementById('sugerenciasEstudio');
-  if (!cont) return;
-  cont.innerHTML = '';
-  if (term.length < 2) return;
-
-  try {
-    const res = await apiFetch(`/estudios?search=${encodeURIComponent(term)}`);
-    const arr = Array.isArray(res) ? res : (res.items ?? []);
-    if (!arr.length) return;
-    cont.innerHTML = arr.map(est => `
-      <a href="#" class="list-group-item list-group-item-action" onclick="seleccionarEstudio(${est.id}, '${escapeHtml(est.nombre_comercial ?? '')}', '${est.ruc ?? ''}', '${escapeHtml(est.pais ?? '')}', '${escapeHtml(est.ciudad ?? '')}', '${escapeHtml(est.correo_contacto ?? '')}', '${est.telefono ?? ''}', '${escapeHtml(est.direccion ?? '')}')">
-        ${est.nombre_comercial ?? '(sin nombre)'} — RUC: ${est.ruc ?? 'N/A'}
-      </a>
-    `).join('');
-  } catch (e2) {
-    console.warn('Buscar estudio falló', e2);
-  }
-}
-
-function seleccionarEstudio(id, nombre, ruc, pais, ciudad, correo, telefono, direccion) {
-  setValue('estudioId', id);
-  setValue('estudioNombre', unescapeHtml(nombre));
-  setValue('estudioRuc', ruc);
-  setValue('estudioPais', unescapeHtml(pais));
-  setValue('estudioCiudad', unescapeHtml(ciudad));
-  setValue('estudioCorreo', unescapeHtml(correo));
-  setValue('estudioTelefono', telefono);
-  setValue('estudioDireccion', unescapeHtml(direccion));
-  const cont = document.getElementById('sugerenciasEstudio'); if (cont) cont.innerHTML = '';
-}
-
-async function saveEstudio() {
-  if (currentUserId == null) return showAlert('Usuario no seleccionado.', 'danger');
-
-  // vínculo
-  const rolEnEstudio = trimOrUndefined(document.getElementById('rolEnEstudio')?.value);
-  const principal = !!document.getElementById('estudioPrincipal')?.checked;
-
-  // estudio seleccionado o nuevo
-  let estudioId = document.getElementById('estudioId')?.value?.trim();
-  if (!estudioId) {
-    // crear nuevo estudio con campos del form
-    const ruc  = trimOrUndefined(document.getElementById('estudioRuc')?.value);
-    const nom  = trimOrUndefined(document.getElementById('estudioNombre')?.value);
-    const pais = trimOrUndefined(document.getElementById('estudioPais')?.value);
-    const ciu  = trimOrUndefined(document.getElementById('estudioCiudad')?.value);
-    const corr = trimOrUndefined(document.getElementById('estudioCorreo')?.value);
-    const tel  = trimOrUndefined(onlyDigits(document.getElementById('estudioTelefono')?.value));
-    const dir  = trimOrUndefined(document.getElementById('estudioDireccion')?.value);
-
-    // Validaciones mínimas si tu negocio las exige
-    if (ruc && !isRUC(ruc)) return showAlert('RUC inválido (11 dígitos).', 'danger');
-    if (corr && !isEmail(corr)) return showAlert('Correo de estudio inválido.', 'danger');
-
-    try {
-      const created = await apiFetch('/estudios', {
-        method: 'POST',
-        body: JSON.stringify({
-          ruc: ruc ?? null,
-          nombre_comercial: nom ?? null,
-          pais: pais ?? null,
-          ciudad: ciu ?? null,
-          correo_contacto: corr ?? null,
-          telefono: tel ?? null,
-          direccion: dir ?? null
-        })
-      });
-      estudioId = created?.id ?? created?.estudio?.id;
-      if (!estudioId) throw new Error('No se pudo obtener ID del estudio creado');
-    } catch (e) {
-      return showAlert(`Error creando estudio: ${e.message}`, 'danger');
-    }
-  }
-
-  try {
-    // Crea/actualiza el vínculo
-    await apiFetch(`/users/${currentUserId}/estudios`, {
-      method: 'POST',
-      body: JSON.stringify({
-        estudio_id: Number(estudioId),
-        principal,
-        rol_en_estudio: rolEnEstudio
-      })
-    });
-    showAlert('Estudio guardado correctamente.', 'success');
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('estudioModal')).hide();
-  } catch (e) {
-    showAlert(`Error guardando vínculo con estudio: ${e.message}`, 'danger');
-  }
 }
 
 /* ----------------- Disponibilidad ---------------- */
@@ -903,7 +817,6 @@ async function openDisponibilidadModal(userId) {
     const data = await apiFetch(`/users/${userId}/disponibilidad`);
 
     currentAvailability = Array.isArray(data) ? data : (data.items ?? []);
-    pendingDisponibilidad = [];
     renderSchedule(currentAvailability);
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('disponibilidadModal')).show();
@@ -915,6 +828,10 @@ async function openDisponibilidadModal(userId) {
 function renderSchedule(availability = []) {
   const container = document.getElementById('schedule-container');
   if (!container) return;
+  if (!availability.length) {
+    container.innerHTML = '<div class="text-muted p-3">Sin horarios registrados.</div>';
+    return;
+  }
 
   const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
   const hours = Array.from({length: 14}, (_, i) => 8 + i); // 08:00 a 21:00
@@ -925,90 +842,27 @@ function renderSchedule(availability = []) {
   });
   container.innerHTML = html;
 
-  // pintar bloques
-  const combined = availability.concat(pendingDisponibilidad.map((s, idx) => ({ ...s, id: `tmp-${idx}` })));
-  combined.forEach(slot => {
-    const d = Number(slot.dia_semana);
+  availability.forEach(slot => {
+    const day = Number(slot.dia_semana);
     const start = fromTimeDB(slot.hora_inicio);
     const end   = fromTimeDB(slot.hora_fin);
+    if (!start || !end || Number.isNaN(day)) return;
+
     const [sh, sm] = start.split(':').map(Number);
     const [eh, em] = end.split(':').map(Number);
-    const durationHours = (eh + em/60) - (sh + sm/60);
-    const cell = document.getElementById(`slot-${d}-${sh}`);
+    if (Number.isNaN(sh) || Number.isNaN(eh)) return;
+
+    const durationHours = (eh + (em || 0)/60) - (sh + (sm || 0)/60);
+    const cell = document.getElementById(`slot-${day}-${sh}`);
     if (cell && durationHours > 0) {
       const block = document.createElement('div');
-      block.className = 'availability-block'+ (String(slot.id).startsWith('tmp-') ? ' pending-block' : '');
-
-      block.style.top = `${(sm / 60) * 100}%`;
+      block.className = 'availability-block';
+      block.style.top = `${((sm || 0) / 60) * 100}%`;
       block.style.height = `${durationHours * 100}%`;
-      const idStr = slot.id;
-      block.innerHTML = `
-        ${start} - ${end}
-        <button class="delete-slot-btn" onclick="deleteDisponibilidad('${idStr}')" title="Eliminar"><i class="bi bi-x-circle-fill"></i></button>`;
+      block.textContent = `${start} - ${end}`;
       cell.appendChild(block);
     }
   });
-}
-
-async function addDisponibilidad() {
-  if (currentUserId == null) return showAlert('Usuario no seleccionado.', 'danger');
-  const dia  = parseInt(document.getElementById('dispDia')?.value ?? '1', 10);
-  const ini  = document.getElementById('dispInicio')?.value;
-  const fin  = document.getElementById('dispFin')?.value;
-
-  if (!ini || !fin) return showAlert('Debes ingresar inicio y fin.', 'danger');
-  if (fin <= ini)   return showAlert('La hora de fin debe ser mayor que la de inicio.', 'danger');
-
-  // normalizar a HH:mm:00
-  const inicioDB = toTimeDB(ini);
-  const finDB    = toTimeDB(fin);
-  pendingDisponibilidad.push({ dia_semana: dia, hora_inicio: inicioDB, hora_fin: finDB });
-  renderSchedule(currentAvailability);
-  document.getElementById('dispInicio').value = '';
-  document.getElementById('dispFin').value = '';
-  }
-  
-  async function saveDisponibilidad() {
-  if (currentUserId == null) return showAlert('Usuario no seleccionado.', 'danger');
-  if (!pendingDisponibilidad.length) {
-    return showAlert('No hay horarios nuevos para guardar.', 'info');
-  }
-  try {
-    for (const slot of pendingDisponibilidad) {
-      await apiFetch(`/users/${currentUserId}/disponibilidad`, {
-        method: 'POST',
-        body: JSON.stringify(slot)
-      });
-    }
-    showAlert('Disponibilidad guardada.', 'success');
-    const data = await apiFetch(`/users/${currentUserId}/disponibilidad`);
-    currentAvailability = Array.isArray(data) ? data : (data.items ?? []);
-    pendingDisponibilidad = [];
-    renderSchedule(currentAvailability);
-  } catch (e) {
-    showAlert(`Error guardando disponibilidad: ${e.message}`, 'danger');
-  }
-}
-
-async function deleteDisponibilidad(slotId) {
-  if (slotId == null) return;
-  const idStr = String(slotId);
-  if (idStr.startsWith('tmp-')) {
-    const idx = parseInt(idStr.split('-')[1], 10);
-    pendingDisponibilidad.splice(idx, 1);
-    renderSchedule(currentAvailability);
-    return;
-  }
-  if (currentUserId == null) return;
-  try {
-    await apiFetch(`/users/${currentUserId}/disponibilidad/${slotId}`, { method: 'DELETE' });
-    showAlert('Horario eliminado.', 'success');
-    const data = await apiFetch(`/users/${currentUserId}/disponibilidad`);
-    currentAvailability = Array.isArray(data) ? data : (data.items ?? []);
-    renderSchedule(currentAvailability);
-  } catch (e) {
-    showAlert(`Error eliminando disponibilidad: ${e.message}`, 'danger');
-  }
 }
 
 
