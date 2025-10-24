@@ -826,7 +826,6 @@ async function validateDni(dni) {
   }
   return null;
 }
-
 // ========== Endpoints auxiliares ==========
 const lookupDni = async (req, res) => {
   try {
@@ -852,6 +851,22 @@ const lookupDni = async (req, res) => {
 
 const normalizeDigits = (value) => (value || '').replace(/\D/g, '');
 
+function toSafeIntegerOrNull(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'bigint') {
+    const asNumber = Number(value);
+    return Number.isSafeInteger(asNumber) ? asNumber : null;
+  }
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : toSafeIntegerOrNull(parsed);
+  }
+  return null;
+}
+
 const checkPersonaConflicts = async (req, res) => {
   try {
     const dniRaw = String(req.query.dni || '').trim();
@@ -872,23 +887,18 @@ const checkPersonaConflicts = async (req, res) => {
     const normalizedTelefono = normalizeDigits(telefonoRaw);
     const normalizedCorreo = correoRaw.toLowerCase();
 
-    let personaIdToExclude = null;
-    if (excludePersonaIdRaw != null) {
-      const parsed = Number.parseInt(excludePersonaIdRaw, 10);
-      if (!Number.isNaN(parsed)) {
-        personaIdToExclude = parsed;
-      }
-    }
+    let personaIdToExclude = toSafeIntegerOrNull(excludePersonaIdRaw);
 
-    if (!personaIdToExclude && excludeUserIdRaw != null) {
-      const parsedUserId = Number.parseInt(excludeUserIdRaw, 10);
-      if (!Number.isNaN(parsedUserId)) {
+    if (personaIdToExclude == null && excludeUserIdRaw != null) {
+      const parsedUserId = toSafeIntegerOrNull(excludeUserIdRaw);
+      if (parsedUserId != null) {
         const userRow = await prisma.usuario.findUnique({
           where: { id: parsedUserId },
           select: { persona_id: true },
         });
-        if (userRow?.persona_id) {
-          personaIdToExclude = userRow.persona_id;
+        const personaFromUser = toSafeIntegerOrNull(userRow?.persona_id);
+        if (personaFromUser != null) {
+          personaIdToExclude = personaFromUser;
         }
       }
     }
@@ -901,14 +911,27 @@ const checkPersonaConflicts = async (req, res) => {
     }
 
     if (normalizedTelefono) {
-      const telefonoMatch = await prisma.$queryRaw`
-        SELECT id
-        FROM persona
-        WHERE telefono IS NOT NULL
-          AND regexp_replace(telefono, '\\D', '', 'g') = ${normalizedTelefono}
-          AND (${personaIdToExclude} IS NULL OR id <> ${personaIdToExclude})
-        LIMIT 1;
-      `;
+      // Nota: separamos la cláusula de exclusión cuando hay ID válido para evitar enviar
+      // parámetros nulos a Postgres (error 42P18) conservando la detección de duplicados.
+      let telefonoMatch;
+      if (Number.isInteger(personaIdToExclude)) {
+        telefonoMatch = await prisma.$queryRaw`
+          SELECT id
+          FROM persona
+          WHERE telefono IS NOT NULL
+            AND regexp_replace(telefono, '\\D', '', 'g') = ${normalizedTelefono}
+            AND id <> ${personaIdToExclude}
+          LIMIT 1;
+        `;
+      } else {
+        telefonoMatch = await prisma.$queryRaw`
+          SELECT id
+          FROM persona
+          WHERE telefono IS NOT NULL
+            AND regexp_replace(telefono, '\\D', '', 'g') = ${normalizedTelefono}
+          LIMIT 1;
+        `;
+      }
       conflicts.telefono = Array.isArray(telefonoMatch) && telefonoMatch.length > 0;
     }
 
