@@ -541,16 +541,17 @@ model direccion {
   @@index([departamento, provincia, distrito])
 }
 
-enum rol_usuario {
-  ADMIN
-  ABOGADO
-  CLIENTE
+model role { 
+  id Int @id @default(autoincrement()) @db.SmallInt 
+  codigo String @unique 
+  nombre String 
+  usuario usuario[] 
 }
 
 model usuario {
   id                                                Int                  @id @default(autoincrement())
   persona_id                                        Int
-  rol_id                                            rol_usuario
+  role_id                                           Int                  @db.SmallInt
   clave                                             String // mantener nombre para no romper código actual (almacena hash a nivel app)
   telefono_verificado                               Boolean              @default(false)
   plan_id                                           Int?
@@ -575,9 +576,11 @@ model usuario {
   abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
   recuperaciones_clave                              recuperacionclave[]
 
-  @@unique([persona_id, rol_id])
+  role role @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([persona_id, role_id])
   @@index([persona_id])
-  @@index([rol_id])
+  @@index([role_id])
   @@index([plan_id])
   @@index([creado_el])
   @@index([activo])
