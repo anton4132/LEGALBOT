@@ -550,16 +550,6 @@ function setupLayout() {
                       Selecciona un ámbito para continuar.
                     </div>
                   </div>
-                  <div class="col-12">
-                    <label for="tarifas-form-descripcion" class="form-label">Descripción</label>
-                    <input
-                      type="text"
-                      id="tarifas-form-descripcion"
-                      name="descripcion"
-                      class="form-control"
-                      placeholder="Describe la regla"
-                    />
-                  </div>
                   <div class="col-12 col-md-6 d-none" data-scope-plan-group="tarifa">
                     <label for="tarifas-form-plan" class="form-label">Plan</label>
                     <select id="tarifas-form-plan" name="plan_id" class="form-select">
@@ -571,6 +561,16 @@ function setupLayout() {
                     <select id="tarifas-form-servicio" name="servicio_id" class="form-select" disabled>
                       <option value="">Selecciona un servicio</option>
                     </select>
+                  </div>
+                  <div class="col-12">
+                    <label for="tarifas-form-descripcion" class="form-label">Descripción</label>
+                    <input
+                      type="text"
+                      id="tarifas-form-descripcion"
+                      name="descripcion"
+                      class="form-control"
+                      placeholder="Describe la regla"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
                     <label for="tarifas-form-valor" class="form-label">Valor</label>
@@ -758,16 +758,6 @@ function setupLayout() {
                       Selecciona un ámbito para continuar.
                     </div>
                   </div>
-                  <div class="col-12">
-                    <label for="comisiones-form-descripcion" class="form-label">Descripción</label>
-                    <input
-                      type="text"
-                      id="comisiones-form-descripcion"
-                      name="descripcion"
-                      class="form-control"
-                      placeholder="Describe la comisión"
-                    />
-                  </div>
                   <div class="col-12 col-md-6 d-none" data-scope-plan-group="comision">
                     <label for="comisiones-form-plan" class="form-label">Plan</label>
                     <select id="comisiones-form-plan" name="plan_id" class="form-select">
@@ -779,6 +769,16 @@ function setupLayout() {
                     <select id="comisiones-form-servicio" name="servicio_id" class="form-select" disabled>
                       <option value="">Selecciona un servicio</option>
                     </select>
+                  </div>
+                  <div class="col-12">
+                    <label for="comisiones-form-descripcion" class="form-label">Descripción</label>
+                    <input
+                      type="text"
+                      id="comisiones-form-descripcion"
+                      name="descripcion"
+                      class="form-control"
+                      placeholder="Describe la comisión"
+                    />
                   </div>
                   <div class="col-12 col-md-6">
                     <label for="comisiones-form-rol" class="form-label">Rol aplica</label>
@@ -1139,6 +1139,13 @@ function bindTarifasEvents() {
     btn.addEventListener('click', () => resolveTarifaConflict(btn.dataset.conflictAction))
   );
 
+  if (tarifas.conflictModal) {
+    tarifas.conflictModal.addEventListener('hidden.bs.modal', () => {
+      const modal = getBootstrapModal(tarifas.conflictModal);
+      clearConflictContext(tarifas.conflictModal, modal);
+    });
+  }
+
   initScopeControls('tarifas');
 }
 
@@ -1430,8 +1437,8 @@ async function persistTarifa(payload, formState) {
     } else {
       response = await apiPost('/tarifas', payload);
     }
-    const payload = await response.json();
-    const saved = resolveEntityFromResponse(payload, 'tarifa');
+    const responseBody = await response.json();
+    const saved = resolveEntityFromResponse(responseBody, 'tarifa');
     if (!saved?.id) {
       throw new Error('La respuesta del servidor no contiene la tarifa guardada.');
     }
@@ -1470,23 +1477,27 @@ function findTarifaConflict(tarifa, ignoreId) {
 }
 
 function showTarifaConflictModal(conflict, payload) {
-  const modal = getBootstrapModal(state.dom.tarifas.conflictModal);
+  const modalElement = state.dom.tarifas.conflictModal;
+  const modal = getBootstrapModal(modalElement);
   if (!modal) return;
-  modal.relatedPayload = payload;
-  modal.relatedConflict = conflict;
+  assignConflictContext(modalElement, modal, conflict, payload);
   modal.show();
 }
 
 async function resolveTarifaConflict(action) {
   const modalElement = state.dom.tarifas.conflictModal;
   const modal = getBootstrapModal(modalElement);
-  const payload = modal?.relatedPayload;
-  const conflict = modal?.relatedConflict;
+  const context = readConflictContext(modalElement, modal);
+  const payload = context?.payload;
+  const conflict = context?.conflict;
   if (!modal || !payload || !conflict) return;
 
   modal.hide();
 
-  if (action === 'cancelar') return;
+  if (action === 'cancelar') {
+    clearConflictContext(modalElement, modal);
+    return;
+  }
 
   try {
     if (action === 'desactivar') {
@@ -1500,6 +1511,7 @@ async function resolveTarifaConflict(action) {
       conflict.vigencia_hasta = cierre;
     }
     await persistTarifa(payload, state.tarifas.form);
+    clearConflictContext(modalElement, modal);
   } catch (error) {
     console.error('Error resolviendo conflicto', error);
     window.alert('No se pudo resolver el conflicto.');
@@ -1578,6 +1590,13 @@ function bindComisionesEvents() {
   state.dom.comisiones.conflictResolveButtons.forEach((btn) =>
     btn.addEventListener('click', () => resolveComisionConflict(btn.dataset.conflictAction))
   );
+
+  if (comisiones.conflictModal) {
+    comisiones.conflictModal.addEventListener('hidden.bs.modal', () => {
+      const modal = getBootstrapModal(comisiones.conflictModal);
+      clearConflictContext(comisiones.conflictModal, modal);
+    });
+  }
 
   initScopeControls('comisiones');
 }
@@ -2151,22 +2170,26 @@ function findComisionConflict(comision, ignoreId) {
 }
 
 function showComisionConflictModal(conflict, payload) {
-  const modal = getBootstrapModal(state.dom.comisiones.conflictModal);
+  const modalElement = state.dom.comisiones.conflictModal;
+  const modal = getBootstrapModal(modalElement);
   if (!modal) return;
-  modal.relatedPayload = payload;
-  modal.relatedConflict = conflict;
+  assignConflictContext(modalElement, modal, conflict, payload);
   modal.show();
 }
 
 async function resolveComisionConflict(action) {
   const modalElement = state.dom.comisiones.conflictModal;
   const modal = getBootstrapModal(modalElement);
-  const payload = modal?.relatedPayload;
-  const conflict = modal?.relatedConflict;
+  const context = readConflictContext(modalElement, modal);
+  const payload = context?.payload;
+  const conflict = context?.conflict;
   if (!modal || !payload || !conflict) return;
 
   modal.hide();
-  if (action === 'cancelar') return;
+  if (action === 'cancelar') {
+    clearConflictContext(modalElement, modal);
+    return;
+  }
 
   try {
     if (action === 'desactivar') {
@@ -2180,9 +2203,58 @@ async function resolveComisionConflict(action) {
       conflict.vigencia_hasta = cierre;
     }
     await persistComision(payload, state.comisiones.form);
+    clearConflictContext(modalElement, modal);
   } catch (error) {
     console.error('Error resolviendo conflicto', error);
     window.alert('No se pudo resolver el conflicto.');
+  }
+}
+
+function assignConflictContext(modalElement, modalInstance, conflict, payload) {
+  if (!modalInstance) return;
+  const safePayload = cloneConflictPayload(payload);
+  modalInstance.relatedPayload = safePayload;
+  modalInstance.relatedConflict = conflict || null;
+  if (modalElement) {
+    modalElement.__lbConflictContext = { payload: safePayload, conflict: conflict || null };
+  }
+}
+
+function readConflictContext(modalElement, modalInstance) {
+  if (modalInstance?.relatedPayload && modalInstance?.relatedConflict) {
+    return { payload: modalInstance.relatedPayload, conflict: modalInstance.relatedConflict };
+  }
+  const stored = modalElement?.__lbConflictContext;
+  if (stored?.payload && stored?.conflict) {
+    return stored;
+  }
+  return null;
+}
+
+function clearConflictContext(modalElement, modalInstance) {
+  if (modalInstance) {
+    modalInstance.relatedPayload = null;
+    modalInstance.relatedConflict = null;
+  }
+  if (modalElement && modalElement.__lbConflictContext) {
+    delete modalElement.__lbConflictContext;
+  }
+}
+
+function cloneConflictPayload(source) {
+  if (source == null) return source ?? null;
+  if (typeof source !== 'object') return source;
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(source);
+    } catch (error) {
+      // Fallback if structuredClone fails
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(source));
+  } catch (error) {
+    return { ...source };
   }
 }
 
@@ -2197,8 +2269,8 @@ async function persistComision(payload, formState) {
     } else {
       response = await apiPost('/comisiones', payload);
     }
-    const payload = await response.json();
-    const saved = resolveEntityFromResponse(payload, 'comision');
+    const responseBody = await response.json();
+    const saved = resolveEntityFromResponse(responseBody, 'comision');
     if (!saved?.id) {
       throw new Error('La respuesta del servidor no contiene la comisión guardada.');
     }
