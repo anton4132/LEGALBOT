@@ -1250,6 +1250,13 @@ const createUser = async (req, res) => {
       return res.status(403).json({ success: false, message: 'No se pueden crear cuentas de abogado desde el panel administrativo' });
     }
 
+    if (abogado_info) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este endpoint no admite datos de abogado. Utiliza los servicios específicos de gestión de abogados.',
+      });
+    }
+
     // ---------------------------
     // MODO 1: Adjuntar a persona existente
     // ---------------------------
@@ -1300,155 +1307,12 @@ const createUser = async (req, res) => {
           }
         });
 
-        if (!abogado_info) {
-          return tx.usuario.findUnique({
-            where: { id: usuarioCreated.id },
-            include: { persona: true, role: true }
-          });
-        }
-
-        // === PERFIL ABOGADO ===
-        await tx.perfilabogado.create({
-          data: {
-            usuario_id: usuarioCreated.id,
-            tarifa_base: abogado_info.tarifabase ?? null,
-            direccion_atencion: abogado_info.direccionAtencion || null,
-            bio: abogado_info.biografia || null
-          }
-        });
-
-        // === ESPECIALIDADES ===
-        const nombresEspecialidades = Array.isArray(abogado_info.especialidades)
-          ? abogado_info.especialidades
-          : (abogado_info.especialidad ? [abogado_info.especialidad] : []);
-        if (nombresEspecialidades.length) {
-          const especialidadRows = await Promise.all(
-            nombresEspecialidades
-              .map(n => n && n.trim())
-              .filter(Boolean)
-              .map(nombre =>
-                tx.especialidad.upsert({
-                  where: { nombre },
-                  update: {},
-                  create: { nombre }
-                })
-              )
-          );
-          await tx.perfilabogado_especialidad.createMany({
-            data: especialidadRows.map(esp => ({
-              perfilabogado_id: usuarioCreated.id,
-              especialidad_id: esp.id
-            })),
-            skipDuplicates: true
-          });
-        }
-
-        // === ESTUDIO + vínculo abogadoestudio ===
-        const e = abogado_info.estudio || {};
-        if (Object.keys(e).length) {
-          let estudioRow;
-          if (e.ruc && e.ruc.trim() !== '') {
-            estudioRow = await tx.estudio.upsert({
-              where: { ruc: e.ruc },
-              update: {
-                nombre_comercial: e.nombre || null,
-                pais: e.pais || null,
-                ciudad: e.ciudad || null,
-                correo_contacto: e.correo || null,
-                telefono: e.telefono || null,
-                direccion: e.direccion || null,
-                activo: e.activo ?? false
-              },
-              create: {
-                ruc: e.ruc,
-                nombre_comercial: e.nombre || null,
-                pais: e.pais || null,
-                ciudad: e.ciudad || null,
-                correo_contacto: e.correo || null,
-                telefono: e.telefono || null,
-                direccion: e.direccion || null,
-                activo: e.activo ?? false
-              }
-            });
-          } else {
-            estudioRow = await tx.estudio.create({
-              data: {
-                nombre_comercial: e.nombre || null,
-                pais: e.pais || null,
-                ciudad: e.ciudad || null,
-                correo_contacto: e.correo || null,
-                telefono: e.telefono || null,
-                direccion: e.direccion || null,
-                activo: e.activo ?? false
-              }
-            });
-          }
-
-          await tx.abogadoestudio.create({
-            data: {
-              usuario_id: usuarioCreated.id,
-              estudio_id: estudioRow.id,
-              principal: true,
-              rol_en_estudio: e.rol || null,
-              activo: true
-            }
-          });
-        }
-
-        // === DISPONIBILIDAD ===
-        const disp = (abogado_info.disponibilidad || [])
-          .map(s => {
-            const dia = dayNameToNum(s.dia);
-            const ini = hhmmToTimeDate(s.hora_inicio);
-            const fin = hhmmToTimeDate(s.hora_fin);
-            if (!dia || !ini || !fin) return null;
-            return { dia, ini, fin };
-          })
-          .filter(Boolean);
-
-        if (disp.length) {
-          await tx.disponibilidadabogado.createMany({
-            data: disp.map(s => ({
-              abogado_id: usuarioCreated.id,
-              dia_semana: s.dia,
-              hora_inicio: s.ini,
-              hora_fin: s.fin
-            })),
-            skipDuplicates: true
-          });
-        }
-
         return tx.usuario.findUnique({
           where: { id: usuarioCreated.id },
-          include: {
-            persona: true,
-            role: true,
-            perfilabogado: {
-              include: {
-                disponibilidadabogado: true,
-                especialidades: { include: { especialidad: true } },
-                avatar: true,              }
-            },
-            abogadoestudios: {
-              include: { estudio: { include: { direccion: true } } },
-              where: { activo: true },
-              orderBy: { principal: 'desc' }
-            }
-          }
+          include: { persona: true, role: true }
         });
       });
-      const { perfilabogado, ...rest } = result || {};
-      const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
-      if (perfilMapped) {
-        perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
-      }
-
-      const user = result?.perfilabogado
-      ? { ...rest, perfilabogado: perfilMapped }
-
-        : result;
-
-      return res.status(201).json({ success: true, message: 'Cuenta agregada a persona existente', user });
+      return res.status(201).json({ success: true, message: 'Cuenta agregada a persona existente', user: result });
     }
 
     // ---------------------------
@@ -1555,156 +1419,12 @@ const createUser = async (req, res) => {
         }
       });
 
-      if (!abogado_info) {
-        return tx.usuario.findUnique({
-          where: { id: usuarioCreated.id },
-          include: { persona: true, role: true }
-        });
-      }
-
-      // === PERFIL ABOGADO ===
-      await tx.perfilabogado.create({
-        data: {
-          usuario_id: usuarioCreated.id,
-          tarifa_base: abogado_info.tarifabase ?? null,
-          direccion_atencion: abogado_info.direccionAtencion || null,
-          bio: abogado_info.biografia || null
-        }
-      });
-
-      // === ESPECIALIDADES ===
-      const nombresEspecialidades = Array.isArray(abogado_info.especialidades)
-        ? abogado_info.especialidades
-        : (abogado_info.especialidad ? [abogado_info.especialidad] : []);
-      if (nombresEspecialidades.length) {
-        const especialidadRows = await Promise.all(
-          nombresEspecialidades
-            .map(n => n && n.trim())
-            .filter(Boolean)
-            .map(nombre =>
-              tx.especialidad.upsert({
-                where: { nombre },
-                update: {},
-                create: { nombre }
-              })
-            )
-        );
-        await tx.perfilabogado_especialidad.createMany({
-          data: especialidadRows.map(esp => ({
-            perfilabogado_id: usuarioCreated.id,
-            especialidad_id: esp.id
-          })),
-          skipDuplicates: true
-        });
-      }
-
-      // === ESTUDIO + vínculo abogadoestudio ===
-      const e = abogado_info.estudio || {};
-      if (Object.keys(e).length) {
-        let estudioRow;
-        if (e.ruc && e.ruc.trim() !== '') {
-          estudioRow = await tx.estudio.upsert({
-            where: { ruc: e.ruc },
-            update: {
-              nombre_comercial: e.nombre || null,
-              pais: e.pais || null,
-              ciudad: e.ciudad || null,
-              correo_contacto: e.correo || null,
-              telefono: e.telefono || null,
-              direccion: e.direccion || null,
-              activo: e.activo ?? false
-            },
-            create: {
-              ruc: e.ruc,
-              nombre_comercial: e.nombre || null,
-              pais: e.pais || null,
-              ciudad: e.ciudad || null,
-              correo_contacto: e.correo || null,
-              telefono: e.telefono || null,
-              direccion: e.direccion || null,
-              activo: e.activo ?? false
-            }
-          });
-        } else {
-          estudioRow = await tx.estudio.create({
-            data: {
-              nombre_comercial: e.nombre || null,
-              pais: e.pais || null,
-              ciudad: e.ciudad || null,
-              correo_contacto: e.correo || null,
-              telefono: e.telefono || null,
-              direccion: e.direccion || null,
-              activo: e.activo ?? false
-            }
-          });
-        }
-
-        await tx.abogadoestudio.create({
-          data: {
-            usuario_id: usuarioCreated.id,
-            estudio_id: estudioRow.id,
-            principal: true,
-            rol_en_estudio: e.rol || null,
-            activo: true
-          }
-        });
-      }
-
-      // === DISPONIBILIDAD ===
-      const disp = (abogado_info.disponibilidad || [])
-        .map(s => {
-          const dia = dayNameToNum(s.dia);
-          const ini = hhmmToTimeDate(s.hora_inicio);
-          const fin = hhmmToTimeDate(s.hora_fin);
-          if (!dia || !ini || !fin) return null;
-          return { dia, ini, fin };
-        })
-        .filter(Boolean);
-
-      if (disp.length) {
-        await tx.disponibilidadabogado.createMany({
-          data: disp.map(s => ({
-            abogado_id: usuarioCreated.id,
-            dia_semana: s.dia,
-            hora_inicio: s.ini,
-            hora_fin: s.fin
-          })),
-          skipDuplicates: true
-        });
-      }
-
       return tx.usuario.findUnique({
         where: { id: usuarioCreated.id },
-        include: {
-          persona: true,
-          role: true,
-          perfilabogado: {
-            include: {
-              disponibilidadabogado: true,
-              especialidades: { include: { especialidad: true } },
-              avatar: true,            }
-          },
-          abogadoestudios: {
-            include: { estudio: { include: { direccion: true } } },
-            where: { activo: true },
-            orderBy: { principal: 'desc' }
-          }
-        }
+        include: { persona: true, role: true }
       });
     });
-    const { perfilabogado, ...rest } = result || {};
-    const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
-    if (perfilMapped) {
-      perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
-    }
-
-
-    const user = result?.perfilabogado
-    ? { ...rest, perfilabogado: perfilMapped }
-
-      : result;
-
-    res.status(201).json({ success: true, message: 'Usuario creado exitosamente', user });
+    res.status(201).json({ success: true, message: 'Usuario creado exitosamente', user: result });
   } catch (error) {
     if (String(error.message || '').includes('ya tiene una cuenta con ese rol')) {
       return res.status(409).json({ success: false, message: error.message });
@@ -1757,6 +1477,13 @@ const updateUser = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Las cuentas de abogado no pueden gestionarse desde este panel' });
     }
 
+    if (abogado_info) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este endpoint no admite actualización de datos de abogado. Utiliza los servicios dedicados.',
+      });
+    }
+
     if (clave !== undefined && !trimmedClave) {
       return res.status(400).json({ success: false, message: 'La contraseña no puede estar vacía' });
     }
@@ -1794,8 +1521,6 @@ const updateUser = async (req, res) => {
     }
 
     // Si cambian de rol, validar que no exista otro usuario de la misma persona con ese rol
-    const effectiveRoleId = parsedRoleId ?? usuarioActual.rol_id;
-
     if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
       const roleTaken = await prisma.usuario.findFirst({
         where: {
@@ -1809,30 +1534,25 @@ const updateUser = async (req, res) => {
       }
     }
     const updated = await prisma.$transaction(async (tx) => {
-      // Actualizar usuario/rol
       if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
         const dup = await tx.usuario.findUnique({
           where: {
             persona_id_rol_id: {
               persona_id: usuarioActual.persona_id,
-              rol_id: parsedRoleId
-            }
-          }
+              rol_id: parsedRoleId,
+            },
+          },
         });
         if (dup) {
-          // Lanzamos un error controlado para capturarlo fuera
           throw new Error('DUP_ROLE');
         }
-      }
 
-      if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
         await tx.usuario.update({
           where: { id: userId },
-          data: { rol_id: parsedRoleId }
+          data: { rol_id: parsedRoleId },
         });
       }
 
-      // Actualizar persona
       if (persona) {
         const {
           dni,
@@ -1846,6 +1566,7 @@ const updateUser = async (req, res) => {
           direccion_id: direccionIdRaw,
           linea_exacta_direccion: lineaExactaDireccionRaw,
         } = persona;
+
         const personaUpdateData = {
           dni: dni ?? undefined,
           primer_nombre: primer_nombre ?? undefined,
@@ -1853,7 +1574,6 @@ const updateUser = async (req, res) => {
           apellido_paterno: apellido_paterno ?? undefined,
           apellido_materno: apellido_materno ?? undefined,
         };
-
 
         if (hasOwn(persona, 'correo')) {
           const correoTrimmed = typeof correo === 'string' ? correo.trim() : correo;
@@ -1880,9 +1600,10 @@ const updateUser = async (req, res) => {
         if (hasOwn(persona, 'direccion_id')) {
           personaUpdateData.direccion_id = normalizeOptionalStringInput(direccionIdRaw);
         }
+
         await tx.persona.update({
           where: { id: usuarioActual.persona_id },
-          data: personaUpdateData
+          data: personaUpdateData,
         });
       }
 
@@ -1893,196 +1614,13 @@ const updateUser = async (req, res) => {
         });
       }
 
-      // Rol final (si no enviaron, usa el actual)
-      const rol = targetRole || await tx.role.findUnique({ where: { id: effectiveRoleId } });
-      const isAbogado = rol?.codigo === 'abogado';
-
-      if (isAbogado && abogado_info) {
-        const avatarArchivoRaw = abogado_info.avatarArchivo ?? abogado_info.avatar_archivo ?? null;
-        const avatarArchivoIdRaw = abogado_info.avatar_archivo_id ?? abogado_info.avatarArchivoId;
-        const avatarIdProvided = hasOwn(abogado_info, 'avatar_archivo_id') || hasOwn(abogado_info, 'avatarArchivoId') || hasOwn(abogado_info, 'avatarArchivo');
-        const parsedAvatarId = avatarIdProvided ? parseAvatarId(avatarArchivoIdRaw) : undefined;
-        const { avatarId, shouldCleanup } = await resolveAvatarArchivo(tx, userId, avatarArchivoRaw, parsedAvatarId, avatarIdProvided);        // Upsert perfil (sin columnas inexistentes)
-        await tx.perfilabogado.upsert({
-          
-          where: { usuario_id: userId },
-          update: {
-            tarifa_base: abogado_info.tarifabase ?? null,
-            direccion_atencion: abogado_info.direccionAtencion || null,
-            bio: abogado_info.biografia || null,
-            place_id_api: abogado_info.placeIdApi || null,
-            ...(avatarId !== undefined ? { avatar_archivo_id: avatarId } : {}),          },
-          create: {
-            usuario_id: userId,
-            tarifa_base: abogado_info.tarifabase ?? null,
-            direccion_atencion: abogado_info.direccionAtencion || null,
-            bio: abogado_info.biografia || null,
-            place_id_api: abogado_info.placeIdApi || null,
-            avatar_archivo_id: avatarId ?? null,          }
-        });
-        if (shouldCleanup) {
-          await cleanupOldAvatarArchivos(tx, userId, avatarId ?? null);
-        }
-
-        // Especialidades (sync)
-        await tx.perfilabogado_especialidad.deleteMany({ where: { perfilabogado_id: userId } });
-        const nombresEspecialidades = Array.isArray(abogado_info.especialidades)
-          ? abogado_info.especialidades
-          : (abogado_info.especialidad ? [abogado_info.especialidad] : []);
-        if (nombresEspecialidades.length) {
-          const especialidadRows = await Promise.all(
-            nombresEspecialidades
-              .map(n => n && n.trim())
-              .filter(Boolean)
-              .map(nombre =>
-                tx.especialidad.upsert({
-                  where: { nombre },
-                  update: {},
-                  create: { nombre }
-                })
-              )
-          );
-          await tx.perfilabogado_especialidad.createMany({
-            data: especialidadRows.map(esp => ({
-              perfilabogado_id: userId,
-              especialidad_id: esp.id
-            })),
-            skipDuplicates: true
-          });
-        }
-
-        // Estudio (vínculo abogadoestudio)
-        const e = abogado_info.estudio || {};
-        if (Object.keys(e).length) {
-          let estudioRow;
-          if (e.ruc && e.ruc.trim() !== '') {
-            estudioRow = await tx.estudio.upsert({
-              where: { ruc: e.ruc },
-              update: {
-                nombre_comercial: e.nombre || null,
-                pais: e.pais || null,
-                ciudad: e.ciudad || null,
-                correo_contacto: e.correo || null,
-                telefono: e.telefono || null,
-                direccion: e.direccion || null,
-                activo: e.activo ?? false
-              },
-              create: {
-                ruc: e.ruc,
-                nombre_comercial: e.nombre || null,
-                pais: e.pais || null,
-                ciudad: e.ciudad || null,
-                correo_contacto: e.correo || null,
-                telefono: e.telefono || null,
-                direccion: e.direccion || null,
-                activo: e.activo ?? false
-              }
-            });
-          } else if (usuarioActual.abogadoestudios?.[0]) {
-            estudioRow = await tx.estudio.update({
-              where: { id: usuarioActual.abogadoestudios[0].estudio_id },
-              data: {
-                nombre_comercial: e.nombre || null,
-                pais: e.pais || null,
-                ciudad: e.ciudad || null,
-                correo_contacto: e.correo || null,
-                telefono: e.telefono || null,
-                direccion: e.direccion || null,
-                activo: e.activo ?? false
-              }
-            });
-          } else {
-            estudioRow = await tx.estudio.create({
-              data: {
-                nombre_comercial: e.nombre || null,
-                pais: e.pais || null,
-                ciudad: e.ciudad || null,
-                correo_contacto: e.correo || null,
-                telefono: e.telefono || null,
-                direccion: e.direccion || null,
-                activo: e.activo ?? false
-              }
-            });
-          }
-
-          await tx.abogadoestudio.deleteMany({ where: { usuario_id: userId } });
-          await tx.abogadoestudio.create({
-            data: {
-              usuario_id: userId,
-              estudio_id: estudioRow.id,
-              principal: true,
-              rol_en_estudio: e.rol || null,
-              activo: true
-            }
-          });
-        }
-
-        // Reemplazar disponibilidad
-        await tx.disponibilidadabogado.deleteMany({ where: { abogado_id: userId } });
-        const disp = (abogado_info.disponibilidad || [])
-          .map(s => {
-            const dia = dayNameToNum(s.dia);
-            const ini = hhmmToTimeDate(s.hora_inicio);
-            const fin = hhmmToTimeDate(s.hora_fin);
-            if (!dia || !ini || !fin) return null;
-            return { dia, ini, fin };
-          })
-          .filter(Boolean);
-
-        if (disp.length) {
-          await tx.disponibilidadabogado.createMany({
-            data: disp.map(s => ({
-              abogado_id: userId,
-              dia_semana: s.dia,
-              hora_inicio: s.ini,
-              hora_fin: s.fin
-            })),
-            skipDuplicates: true
-          });
-        }
-      } else {
-        // Si dejó de ser abogado: limpia perfil, especialidades, disponibilidad y estudios
-        await tx.disponibilidadabogado.deleteMany({ where: { abogado_id: userId } });
-        await tx.perfilabogado_especialidad.deleteMany({ where: { perfilabogado_id: userId } });
-        await tx.abogadoestudio.updateMany({
-          where: { usuario_id: userId },
-          data: { activo: false, principal: false }
-        });
-        if (usuarioActual.perfilabogado) {
-          await tx.perfilabogado.delete({ where: { usuario_id: userId } });
-        }
-      }
-
       return tx.usuario.findUnique({
         where: { id: userId },
-        include: {
-          persona: true,
-          role: true,
-          perfilabogado: {
-            include: {
-              disponibilidadabogado: true,
-              especialidades: { include: { especialidad: true } },
-              avatar: true,            }
-          },
-          abogadoestudios: {
-            include: { estudio: { include: { direccion: true } } },
-            where: { activo: true },
-            orderBy: { principal: 'desc' }
-          }
-        }
+        include: { persona: true, role: true },
       });
     });
-    
-    const { perfilabogado, ...rest } = updated || {};
-    const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
-    if (perfilMapped) {
-      perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
-    }
 
-    const user = { ...rest, perfilabogado: perfilMapped };
-
-
-    res.json({ success: true, message: 'Usuario actualizado exitosamente', user });
+    res.json({ success: true, message: 'Usuario actualizado exitosamente', user: updated });
   } catch (error) {
     if (error?.message === 'DUP_ROLE') {
       return res.status(409).json({ success: false, message: 'La persona ya tiene ese rol' });

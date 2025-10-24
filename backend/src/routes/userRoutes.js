@@ -189,42 +189,6 @@ const userController = require('../controllers/userController');
  *             apellido_paterno: { type: string, example: "Pérez" }
  *             apellido_materno: { type: string, nullable: true, example: "García" }
  *             direccion: { type: string, nullable: true, example: "Av. 123" }
- *         abogado_info:
- *           description: En caso de rol "abogado"
- *           type: object
- *           properties:
- *             tarifabase: { type: number, example: 150 }
- *             duracionMinutos: { type: integer, example: 60 }
- *             direccionAtencion: { type: string, example: "Calle Falsa 123" }
- *             biografia: { type: string, example: "Abogado civil." }
- *             especialidades:
- *               type: array
- *               items: { type: string }
- *               example: ["Derecho Civil", "Familia"]
- *             especialidad:
- *               type: string
- *               description: Alternativa legacy de una sola especialidad
- *               example: "Derecho Civil"
- *             estudio:
- *               type: object
- *               properties:
- *                 ruc: { type: string, example: "20601234567" }
- *                 nombre: { type: string, example: "Estudio Legal Rivera" }
- *                 pais: { type: string, example: "Perú" }
- *                 ciudad: { type: string, example: "Lima" }
- *                 correo: { type: string, example: "contacto@riveralegal.pe" }
- *                 telefono: { type: string, example: "+51 1 555-1234" }
- *                 direccion: { type: string, example: "Av. Principal 123" }
- *                 activo: { type: boolean, example: true }
- *                 rol: { type: string, example: "Socio" }
- *             disponibilidad:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   dia: { type: string, example: "Lunes" }
- *                   hora_inicio: { type: string, example: "09:00" }
- *                   hora_fin: { type: string, example: "12:00" }
  *
  *     UpdateUserRequest:
  *       type: object
@@ -232,8 +196,6 @@ const userController = require('../controllers/userController');
  *         rol_id: { type: integer, example: 1 }
  *         persona:
  *           $ref: '#/components/schemas/Persona'
- *         abogado_info:
- *           $ref: '#/components/schemas/CreateUserRequest/properties/abogado_info'
  *
  *     UpdatePerfilRequest:
  *       type: object
@@ -302,7 +264,7 @@ const userController = require('../controllers/userController');
  *     description: |
  *       - Si `attachToExisting=true`, se adjunta una nueva cuenta (rol) a una persona existente (buscando por DNI/correo).
  *       - Si `attachToExisting=false`, crea persona + usuario.
- *       - Si el rol es **abogado** y se envía `abogado_info`, se crea perfil, especialidades, estudio principal y disponibilidad.
+ *       - El panel administrativo no acepta payloads de abogado en este recurso; cualquier campo relacionado a perfil de abogado será rechazado.
  *     tags: [Users]
  *     # security:
  *     #   - BearerAuth: []
