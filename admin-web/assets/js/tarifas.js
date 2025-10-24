@@ -3152,7 +3152,14 @@ async function ensurePlanAssignments(planId, force = false) {
     const response = await apiGet(`/plans/${targetId}`);
     const body = await response.json();
     const plan = body?.plan || body || {};
-    const assignments = Array.isArray(plan.planservicios) ? plan.planservicios : [];
+  const assignmentsSource = [
+      plan.planservicio,
+      plan.planservicios,
+      plan.planServicios,
+      plan.plan_servicios,
+      plan.planServices,
+    ].find((value) => Array.isArray(value));
+    const assignments = Array.isArray(assignmentsSource) ? assignmentsSource : [];
     storePlanAssignments(targetId, assignments);
     mergePlanCatalog([plan]);
     return state.catalogs.planAssignments.get(targetId) || [];

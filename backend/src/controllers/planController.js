@@ -149,7 +149,7 @@ const deletePlan = async (req, res) => {
     const existing = await prisma.plan.findUnique({
       where: { id: planId },
       include: {
-        planservicios: true,
+        planservicio: true,
         tarifas: { where: { activo: true } },
       },
     });
@@ -158,7 +158,14 @@ const deletePlan = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Plan no encontrado' });
     }
 
-    if ((existing.planservicios || []).length > 0) {
+ const assignments = Array.isArray(existing.planservicio)
+      ? existing.planservicio
+      : Array.isArray(existing.planservicios)
+      ? existing.planservicios
+      : [];
+
+    if (assignments.length > 0) {
+      
       return res.status(400).json({
         success: false,
         message: 'El plan tiene servicios vinculados. Elimina las vinculaciones antes de borrar el plan',

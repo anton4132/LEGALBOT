@@ -83,52 +83,79 @@ const createService = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error creando servicio' });
   }
 };
-
 // Actualizar servicio
 const updateService = async (req, res) => {
   try {
     const { id } = req.params;
     const { codigo, nombre, descripcion, activo, force } = req.body;
-    const serviceId = parseInt(id);
+    const serviceId = Number.parseInt(id, 10);
+    if (Number.isNaN(serviceId)) {
+      return res.status(400).json({ success: false, message: 'Identificador de servicio inválido' });
+    }
     const previous = await prisma.servicio.findUnique({ where: { id: serviceId } });
     if (!previous) {
       return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
     }
     if (activo === false) {
       const now = new Date();
-      const activeTariffs = await prisma.tarifacomision.count({
-        where: {
-          servicio_id: serviceId,
-          activo: true,
-          OR: [
-            { vigencia_hasta: null },
-            { vigencia_hasta: { gte: now } }
-          ]
-        }
-      });
-      const activePlans = await prisma.planservicio.count({
-        where: {
-          servicio_id: serviceId,
-          activo: true,
-          OR: [
-            { vigencia_hasta: null },
-            { vigencia_hasta: { gte: now } }
-          ]
-        }
-      });
-      if ((activeTariffs > 0 || activePlans > 0) && !force) {
+      const [activeTariffs, activeCommissions, activePlans] = await Promise.all([
+        prisma.tarifa.count({
+          where: {
+            servicio_id: serviceId,
+            activo: true,
+            OR: [
+              { vigencia_hasta: null },
+              { vigencia_hasta: { gte: now } }
+            ]
+          }
+        }),
+        prisma.comision.count({
+          where: {
+            servicio_id: serviceId,
+            activo: true,
+            OR: [
+              { vigencia_hasta: null },
+              { vigencia_hasta: { gte: now } }
+            ]
+          }
+        }),
+        prisma.planservicio.count({
+          where: {
+            servicio_id: serviceId,
+            activo: true,
+            OR: [
+              { vigencia_hasta: null },
+              { vigencia_hasta: { gte: now } }
+            ]
+          }
+        })
+      ]);
+      const totalPricingRules = activeTariffs + activeCommissions;
+      if ((totalPricingRules > 0 || activePlans > 0) && !force) {
         return res.status(400).json({
           success: false,
-          message: 'El servicio tiene tarifas o planes vigentes',
-          tarifas: activeTariffs,
-          planes: activePlans
+          message: 'El servicio tiene tarifas, comisiones o planes vigentes',
+          tarifas: totalPricingRules,
+          planes: activePlans,
+          comisiones: activeCommissions
         });
       }
     }
+    const data = {};
+    if (codigo !== undefined) data.codigo = codigo;
+    if (nombre !== undefined) data.nombre = nombre;
+    if (descripcion !== undefined) data.descripcion = descripcion;
+    if (activo !== undefined) data.activo = activo;
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ success: false, message: 'No se proporcionaron cambios para el servicio' });
+    }
+
     const service = await prisma.servicio.update({
-        where: { id: serviceId },
-      data: { codigo, nombre, descripcion, activo }
+      where: { id: serviceId },
+      data,
     });
+
     //await logAudit('servicio', serviceId, 'update', previous, service);
     let message = 'Servicio modificado correctamente';
     if (previous.activo && activo === false) {

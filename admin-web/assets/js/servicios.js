@@ -359,6 +359,7 @@ async function loadServices() {
 function extractPlanServicios(plan) {
   if (!plan) return [];
   const candidates = [
+    plan.planservicio,
     plan.planservicios,
     plan.planServicios,
     plan.plan_servicios,
