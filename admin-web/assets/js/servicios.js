@@ -145,6 +145,7 @@ function setupLayout() {
                 <th style="min-width: 120px;">Código</th>
                 <th style="min-width: 200px;">Nombre</th>
                 <th>Descripción</th>
+                <th style="min-width: 200px;">Planes vinculados</th>
                 <th style="min-width: 100px;">Activo</th>
                 <th style="min-width: 150px;">Creado</th>
                 <th style="min-width: 150px;">Modificado</th>
@@ -152,7 +153,7 @@ function setupLayout() {
               </tr>
             </thead>
             <tbody id="servicesTableBody">
-              <tr><td colspan="7" class="text-center py-4 text-muted">Cargando servicios...</td></tr>
+              <tr><td colspan="8" class="text-center py-4 text-muted">Cargando servicios...</td></tr>
             </tbody>
           </table>
         </div>
@@ -434,7 +435,8 @@ function rehydratePlanAssignments(planId = null) {
   state.plans = updatedPlans;
 }
 
-function renderPlansTable() {
+function renderPlansTable(options = {}) {
+  const { refreshServices = false } = options;
   const tbody = document.getElementById('plansTableBody');
   if (!tbody) return;
 
@@ -503,6 +505,10 @@ function renderPlansTable() {
     `;
     tbody.appendChild(row);
   });
+
+  if (refreshServices) {
+    applyServiceFilters();
+  }
 }
 
 function handlePlansTableAction(event) {
@@ -618,7 +624,7 @@ async function savePlan() {
     showAlert(successMessage, 'success');
     modal.hide();
     state.editingPlanId = null;
-    renderPlansTable();
+    renderPlansTable({ refreshServices: true });
   } catch (error) {
     console.error('Error guardando plan:', error);
     showAlert(error.message || 'No se pudo guardar el plan', 'danger');
@@ -644,7 +650,7 @@ async function deletePlan(id) {
     state.planAssignments.delete(id);
     await loadPlans();
     rehydratePlanAssignments();
-    renderPlansTable();
+    renderPlansTable({ refreshServices: true });
   } catch (error) {
     console.error('Error eliminando plan:', error);
     showAlert(error.message || 'No se pudo eliminar el plan', 'danger');
@@ -666,7 +672,7 @@ async function openPlanServiceModal(planId) {
   document.getElementById('planServiceModalLabel').textContent = `Servicios del plan: ${plan.nombre}`;
   document.getElementById('planServiceFormTitle').textContent = 'Agregar servicio';
 
-  await refreshPlanAssignments(planId);
+  await refreshPlanAssignments(planId, { refreshServices: false });
   populatePlanServiceOptions();
   renderPlanServicesTable(planId);
 
@@ -784,7 +790,8 @@ function renderPlanServicesTable(planId) {
     });
 }
 
-async function refreshPlanAssignments(planId) {
+async function refreshPlanAssignments(planId, options = {}) {
+  const { refreshServices = true } = options;
   try {
     const res = await fetchWithAuth(`${API_BASE_URL}/plans/${planId}`);
     const data = await res.json();
@@ -798,7 +805,7 @@ async function refreshPlanAssignments(planId) {
     );
     updatePlanInState(normalized);
     rehydratePlanAssignments(planId);
-    renderPlansTable();
+    renderPlansTable({ refreshServices });
   } catch (error) {
     console.error('Error obteniendo vinculación plan-servicio:', error);
     showAlert(error.message || 'No se pudieron obtener los servicios del plan', 'danger');
@@ -987,16 +994,33 @@ function renderServicesTable(list) {
   tbody.innerHTML = '';
 
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No se encontraron servicios.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No se encontraron servicios.</td></tr>';
     return;
   }
 
+  const plansByService = collectPlansByService();
+
   list.forEach(service => {
+    const serviceKey = service?.id != null ? String(service.id) : null;
+    const linkedPlans = serviceKey ? plansByService.get(serviceKey) || [] : [];
+    const planBadges = linkedPlans.length
+      ? `<div class="d-flex flex-wrap gap-1">${linkedPlans.map(plan => {
+          const tooltipParts = [plan.label];
+          if (plan.codigo && plan.codigo !== plan.label) {
+            tooltipParts.push(`Código: ${plan.codigo}`);
+          }
+          const tooltip = escapeHtml(tooltipParts.join(' · '));
+          const badgeText = escapeHtml(plan.label);
+          return `<span class="badge rounded-pill text-bg-light text-truncate" style="max-width: 180px;" title="${tooltip}">${badgeText}</span>`;
+        }).join('')}</div>`
+      : '<span class="text-muted small">Sin planes vinculados</span>';
+
     const row = document.createElement('tr');
     row.innerHTML = `
       <td class="fw-semibold">${escapeHtml(service.codigo)}</td>
       <td>${escapeHtml(service.nombre)}</td>
       <td>${escapeHtml(service.descripcion || '')}</td>
+      <td>${planBadges}</td>
       <td>${service.activo ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
       <td>${formatDateTime(service.fecha_creada)}</td>
       <td>${formatDateTime(service.fecha_modificada)}</td>
@@ -1013,6 +1037,42 @@ function renderServicesTable(list) {
     `;
     tbody.appendChild(row);
   });
+}
+
+function collectPlansByService() {
+  const plansById = new Map(state.plans.map(plan => [plan.id, plan]));
+  const servicePlans = new Map();
+
+  state.planAssignments.forEach((assignments, planId) => {
+    if (!Array.isArray(assignments) || !assignments.length) return;
+    const plan = plansById.get(planId) || null;
+    const label = plan?.nombre || plan?.codigo || `Plan #${planId}`;
+
+    assignments.forEach(item => {
+      const rawServiceId = item?.servicio_id ?? item?.servicio?.id ?? item?.service?.id;
+      if (rawServiceId == null) return;
+      const key = String(rawServiceId);
+
+      if (!servicePlans.has(key)) {
+        servicePlans.set(key, []);
+      }
+
+      const planList = servicePlans.get(key);
+      if (planList.some(entry => entry.planId === planId)) return;
+
+      planList.push({
+        planId,
+        label,
+        codigo: plan?.codigo || null
+      });
+    });
+  });
+
+  servicePlans.forEach(planList => {
+    planList.sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+  });
+
+  return servicePlans;
 }
 
 function handleServicesTableAction(event) {
@@ -1137,13 +1197,25 @@ async function toggleService(id, activo) {
 
 async function refreshPlanAssignmentsAfterServiceChange(servicioId) {
   const affected = [];
+  const servicioKey = servicioId != null ? String(servicioId) : null;
+  if (!servicioKey) {
+    applyServiceFilters();
+    return;
+  }
   state.planAssignments.forEach((assignments, planId) => {
-    if (assignments.some(item => item.servicio_id === servicioId)) {
+    if (assignments.some(item => {
+      const assignmentServiceId = item?.servicio_id ?? item?.servicio?.id ?? item?.service?.id;
+      return assignmentServiceId != null && String(assignmentServiceId) === servicioKey;
+    })) {
       affected.push(planId);
     }
   });
-  if (!affected.length) return;
-  await Promise.all(affected.map(planId => refreshPlanAssignments(planId)));
+  if (!affected.length) {
+    applyServiceFilters();
+    return;
+  }
+  await Promise.all(affected.map(planId => refreshPlanAssignments(planId, { refreshServices: false })));
+  applyServiceFilters();
   if (state.currentPlanForLink && affected.includes(state.currentPlanForLink)) {
     renderPlanServicesTable(state.currentPlanForLink);
     populatePlanServiceOptions();
