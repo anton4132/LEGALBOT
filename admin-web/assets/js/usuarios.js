@@ -109,6 +109,10 @@ function personaNombreCompleto(persona = {}) {
 const LAWYER_ROLE_CODE = 'abogado';
 const PANEL_ALLOWED_ROLE_CODES = new Set(['cliente', 'admin']);
 
+function getPanelAllowedRoles() {
+  return roles.filter((role) => PANEL_ALLOWED_ROLE_CODES.has((role?.codigo || '').toLowerCase()));
+}
+
 function normalizeArchivoRecord(record) {
   if (!record) return null;
 
@@ -391,9 +395,14 @@ async function loadEspecialidades() {
 function populateRoleSelects() {
   const filterSelect = document.getElementById('filterType');
   configureUserRoleSelect();
+  const allowedRoles = getPanelAllowedRoles().sort((a, b) => {
+    const nameA = String(a?.nombre ?? '').toLowerCase();
+    const nameB = String(b?.nombre ?? '').toLowerCase();
+    return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+  });
   if (filterSelect) {
     filterSelect.innerHTML = '<option value="">Todos los tipos</option>';
-    roles.forEach(role => {
+    allowedRoles.forEach(role => {
       const option = document.createElement('option');
       option.value = role.codigo;
       option.textContent = role.nombre;
@@ -410,22 +419,23 @@ function configureUserRoleSelect({ selectedRoleId = null } = {}) {
     ? Number(selectedRoleId)
     : (select.value ? Number(select.value) : null);
 
-  const selectedRole = resolvedSelectedId != null
-    ? roles.find(r => Number(r.id) === resolvedSelectedId)
-    : null;
-  const selectedRoleCode = (selectedRole?.codigo || '').toLowerCase();
+  const allowedRoles = getPanelAllowedRoles();
+  const options = [...allowedRoles];
+
+  options.sort((a, b) => {
+    const nameA = String(a?.nombre ?? '').toLowerCase();
+    const nameB = String(b?.nombre ?? '').toLowerCase();
+    return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+  });
 
   select.innerHTML = '<option value="">Seleccionar tipo</option>';
-  roles.forEach(role => {
-    const code = (role.codigo || '').toLowerCase();
-    if (!PANEL_ALLOWED_ROLE_CODES.has(code) && role.id !== resolvedSelectedId) {
-      return;
-    }
+  options.forEach((role) => {
+    if (!role) return;
     const option = document.createElement('option');
     option.value = role.id;
     option.textContent = role.nombre;
     option.dataset.codigo = role.codigo;
-    if (!PANEL_ALLOWED_ROLE_CODES.has(code)) {
+    if (!PANEL_ALLOWED_ROLE_CODES.has((role.codigo || '').toLowerCase())) {
       option.disabled = true;
     }
     select.appendChild(option);
@@ -437,7 +447,7 @@ function configureUserRoleSelect({ selectedRoleId = null } = {}) {
     select.value = '';
   }
 
-  select.disabled = selectedRoleCode === LAWYER_ROLE_CODE;
+  select.disabled = false;
 }
 
 function getSelectedRoleCode() {
@@ -639,7 +649,7 @@ async function saveUser() {
 
   const rolSelect = document.getElementById('rol');
   const rolId = parseInt(rolSelect?.value || '', 10);
-  const rolCodigo = (rolSelect?.options[rolSelect.selectedIndex]?.dataset?.codigo || '').toLowerCase();
+  const rolCodigo = getSelectedRoleCode();
   if (!rolId || Number.isNaN(rolId)) return showAlert('Selecciona un rol válido.', 'danger');
   if (!shouldRunPersonaValidations(rolCodigo)) {
     return showAlert('Solo se pueden gestionar cuentas de clientes o administradores desde este panel.', 'danger');

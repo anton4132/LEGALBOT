@@ -14,6 +14,7 @@ function createHttpError(statusCode, message, code) {
 // ========== Utiles comunes ==========
 const INVALID_DNI_SEQUENCES = ['00000000', '11111111', '12345678', '87654321'];
 const LAWYER_ROLE_CODE = 'abogado';
+const PANEL_ALLOWED_ROLE_CODES = new Set(['cliente', 'admin']);
 
 function validateDniFormat(dni) {
   if (!/^\d{8}$/.test(dni)) return 'El DNI debe contener exactamente 8 dígitos';
@@ -1246,8 +1247,12 @@ const createUser = async (req, res) => {
     }
 
     const roleCode = (roleRecord.codigo || '').toLowerCase();
-    if (roleCode === LAWYER_ROLE_CODE) {
-      return res.status(403).json({ success: false, message: 'No se pueden crear cuentas de abogado desde el panel administrativo' });
+    if (!PANEL_ALLOWED_ROLE_CODES.has(roleCode)) {
+      const message =
+        roleCode === LAWYER_ROLE_CODE
+          ? 'Las cuentas de abogado no pueden gestionarse desde este panel.'
+          : 'Solo se pueden crear usuarios con rol CLIENTE o ADMINISTRADOR desde el panel administrativo.';
+      return res.status(403).json({ success: false, message });
     }
 
     if (abogado_info) {
@@ -1473,8 +1478,15 @@ const updateUser = async (req, res) => {
     }
 
     const targetRoleCode = (targetRole?.codigo || currentRoleCode).toLowerCase();
-    if (currentRoleCode === LAWYER_ROLE_CODE || targetRoleCode === LAWYER_ROLE_CODE) {
-      return res.status(403).json({ success: false, message: 'Las cuentas de abogado no pueden gestionarse desde este panel' });
+    const currentAllowed = PANEL_ALLOWED_ROLE_CODES.has(currentRoleCode);
+    const targetAllowed = PANEL_ALLOWED_ROLE_CODES.has(targetRoleCode);
+    if (!currentAllowed || !targetAllowed) {
+      const offendingCode = !targetAllowed ? targetRoleCode : currentRoleCode;
+      const message =
+        offendingCode === LAWYER_ROLE_CODE
+          ? 'Las cuentas de abogado no pueden gestionarse desde este panel.'
+          : 'Solo se pueden gestionar usuarios con rol CLIENTE o ADMINISTRADOR desde el panel administrativo.';
+      return res.status(403).json({ success: false, message });
     }
 
     if (abogado_info) {
