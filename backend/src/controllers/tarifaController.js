@@ -42,45 +42,93 @@ function decimalToNumber(value) {
 
 function serializeTarifa(tarifa) {
   if (!tarifa) return null;
-  const {
-    servicio,
-    plan,
-    valor,
-    parametros,
-    vigencia_desde,
-    vigencia_hasta,
-    ...rest
-  } = tarifa;
+  const vigenciaDesde = tarifa.vigencia_desde
+    ? tarifa.vigencia_desde.toISOString().slice(0, 10)
+    : null;
+  const vigenciaHasta = tarifa.vigencia_hasta
+    ? tarifa.vigencia_hasta.toISOString().slice(0, 10)
+    : null;
+  const actualizado = tarifa.actualizado_el
+    ? tarifa.actualizado_el.toISOString()
+    : null;
+  const creado = tarifa.creado_el ? tarifa.creado_el.toISOString() : null;
   return {
-    ...rest,
-    servicio,
-    plan,
-    valor: decimalToNumber(valor),
-    parametros: parametros ?? null,
-    vigencia_desde: vigencia_desde ? vigencia_desde.toISOString() : null,
-    vigencia_hasta: vigencia_hasta ? vigencia_hasta.toISOString() : null,
+    id: tarifa.id,
+    codigo: tarifa.codigo,
+    descripcion: tarifa.descripcion,
+    tipo: tarifa.tipo,
+    rol_aplica: tarifa.rol_aplica,
+    plan_id: tarifa.plan_id,
+    plan: tarifa.plan || null,
+    servicio_id: tarifa.servicio_id,
+    servicio: tarifa.servicio || null,
+    moneda: tarifa.moneda,
+    metodo_pago: tarifa.metodo_pago,
+    ambito_region: tarifa.ambito_region,
+    tipo_calculo: tarifa.tipo_calculo,
+    valor: decimalToNumber(tarifa.valor),
+    incluye_impuesto: tarifa.incluye_impuesto,
+    parametros: tarifa.parametros ?? {},
+    vigencia_desde: vigenciaDesde,
+    vigencia_hasta: vigenciaHasta,
+    prioridad: tarifa.prioridad,
+    activo: tarifa.activo,
+    ambito: tarifa.ambito,
+    referencia_id: tarifa.referencia_id,
+    creado_el: creado,
+    actualizado_el: actualizado,
   };
 }
 
+function normalizeJsonField(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return JSON.parse(trimmed);
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  throw new Error('INVALID_JSON');
+}
+
 function mapTarifaData(payload) {
+  let parametros = null;
+  try {
+    parametros = normalizeJsonField(payload.parametros);
+  } catch (error) {
+    if (error.message === 'INVALID_JSON') {
+      const invalid = new Error('Los parámetros deben ser un JSON válido');
+      invalid.statusCode = 400;
+      throw invalid;
+    }
+    throw error;
+  }
+  const prioridadValue =
+    payload.prioridad === '' || payload.prioridad === undefined
+      ? null
+      : Number(payload.prioridad);
   return {
-    codigo: payload.codigo?.trim(),
     descripcion: payload.descripcion?.trim() || null,
-    servicio_id: parseIntOrNull(payload.servicio_id),
     plan_id: parseIntOrNull(payload.plan_id),
-    rol_aplica: payload.rol_aplica,
-    moneda: payload.moneda?.trim() || null,
-    tipo_calculo: payload.tipo_calculo,
+    servicio_id: parseIntOrNull(payload.servicio_id),
     valor: toDecimal(payload.valor),
-    parametros: payload.parametros ?? null,
-    incluye_impuesto: payload.incluye_impuesto ?? false,
+    tipo_calculo: payload.tipo_calculo,
+    parametros,
+    incluye_impuesto: payload.incluye_impuesto === undefined ? false : !!payload.incluye_impuesto,
     vigencia_desde: parseDate(payload.vigencia_desde),
     vigencia_hasta: parseDate(payload.vigencia_hasta),
-    prioridad: payload.prioridad === '' || payload.prioridad === undefined ? null : Number(payload.prioridad),
-    ambito_region: payload.ambito_region?.trim() || null,
-    metodo_pago: payload.metodo_pago?.trim() || null,
     activo: payload.activo ?? true,
+    codigo: payload.codigo?.trim(),
+    rol_aplica: payload.rol_aplica ?? null,
+    moneda: payload.moneda?.trim() || null,
+    metodo_pago: payload.metodo_pago?.trim() || null,
+    ambito_region: payload.ambito_region?.trim() || null,
+    prioridad: Number.isNaN(prioridadValue) ? null : prioridadValue,
     tipo: payload.tipo?.trim() || 'tarifa',
+    ambito: payload.ambito ?? null,
+    referencia_id: payload.referencia_id ?? null,
   };
 }
 
@@ -372,6 +420,9 @@ async function createTarifa(req, res) {
     res.status(201).json({ success: true, tarifa: serializeTarifa(created) });
   } catch (error) {
     console.error('Error creando tarifa:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error.code === 'P2002') {
       return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
     }
@@ -409,6 +460,9 @@ async function updateTarifa(req, res) {
     res.json({ success: true, tarifa: serializeTarifa(updated) });
   } catch (error) {
     console.error('Error actualizando tarifa:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error.code === 'P2002') {
       return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
     }
@@ -456,6 +510,9 @@ async function cloneTarifa(req, res) {
     res.status(201).json({ success: true, tarifa: serializeTarifa(created) });
   } catch (error) {
     console.error('Error clonando tarifa:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error.code === 'P2002') {
       return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
     }
