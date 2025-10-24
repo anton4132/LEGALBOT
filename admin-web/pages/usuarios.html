@@ -88,16 +88,6 @@
                             <div class="row" id="password-fields"><div class="col-md-6 mb-3"><label for="clave" class="form-label">Contraseña *</label><input type="password" class="form-control" id="clave" required></div><div class="col-md-6 mb-3"><label for="confirmarClave" class="form-label">Confirmar Contraseña *</label><input type="password" class="form-control" id="confirmarClave" required></div></div>
                             <div id="change-password-button" class="d-none mb-3"><button type="button" class="btn btn-outline-secondary">Cambiar Contraseña</button></div>
                         </div>
-                        <!-- NUEVOS CAMPOS: Perfil de Abogado (condicional) -->
-                        <div id="perfilAbogadoFields" class="border-top pt-3 mt-3" style="display:none;">
-                          <h6 class="fw-bold mb-3">Perfil de Abogado</h6>
-                          <div class="row">
-                            <div class="col-md-4 mb-3"><label class="form-label">Tarifa base (S/.)</label><input type="number" step="0.01" min="0" class="form-control" id="tarifaBase"></div>
-                            <div class="col-md-4 mb-3"><label class="form-label">Duración por cita (min)</label><input type="number" min="15" max="240" class="form-control" id="duracionMinutos" value="60"></div>
-                            <div class="col-md-12 mb-3"><label class="form-label">Dirección de atención</label><input type="text" class="form-control" id="direccionAtencion"></div>
-                            <div class="col-md-12 mb-3"><label class="form-label">Bio / Presentación</label><textarea class="form-control" id="bio" rows="3"></textarea></div>
-                          </div>
-                        </div>
                     </form>
                 </div>
                 <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" onclick="saveUser()">Guardar Usuario</button></div>
@@ -180,54 +170,54 @@
     </div>
 
     
-    <!-- NUEVO MODAL: Gestionar Estudio del Abogado (MEJORADO) -->
+    <!-- MODAL: Información del Estudio del Abogado -->
     <div class="modal fade" id="estudioModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                  <h5 class="modal-title" id="estudioModalLabel">Gestionar Estudio / Despacho</h5>
+                  <h5 class="modal-title" id="estudioModalLabel">Estudio / Despacho</h5>
                   <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
                     <form id="estudioForm">
                         <input type="hidden" id="estudioUserId">
                         <input type="hidden" id="estudioId">
-                        
-                        <div class="mb-3"><label class="form-label">Seleccionar estudio existente (opcional)</label><input type="text" class="form-control" id="buscarEstudio" placeholder="Buscar por RUC o nombre..."><div id="sugerenciasEstudio" class="list-group mt-2"></div></div>
+
+                        <div class="mb-3"><label class="form-label">Seleccionar estudio existente (opcional)</label><input type="text" class="form-control" id="buscarEstudio" placeholder="Buscar por RUC o nombre..." readonly><div id="sugerenciasEstudio" class="list-group mt-2"></div></div>
                         <h6 class="fw-bold mb-3">Datos del Estudio</h6>
                         <div class="row">
-                            <div class="col-md-6 mb-3"><label class="form-label">RUC</label><input type="text" class="form-control" id="estudioRuc"></div>
-                            <div class="col-md-6 mb-3"><label class="form-label">Nombre del Estudio</label><input type="text" class="form-control" id="estudioNombre"></div>
-                            <div class="col-md-6 mb-3"><label class="form-label">País</label><input type="text" class="form-control" id="estudioPais"></div>
-                            <div class="col-md-6 mb-3"><label class="form-label">Ciudad</label><input type="text" class="form-control" id="estudioCiudad"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">RUC</label><input type="text" class="form-control" id="estudioRuc" readonly></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Nombre del Estudio</label><input type="text" class="form-control" id="estudioNombre" readonly></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">País</label><input type="text" class="form-control" id="estudioPais" readonly></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Ciudad</label><input type="text" class="form-control" id="estudioCiudad" readonly></div>
                             <div class="col-md-6 mb-3">
                               <label class="form-label">Correo de Contacto</label>
-                              <input type="email" class="form-control" id="estudioCorreo">
+                              <input type="email" class="form-control" id="estudioCorreo" readonly>
                             </div>
                             <div class="col-md-6 mb-3">
                               <label class="form-label">Teléfono</label>
-                              <input type="tel" class="form-control" id="estudioTelefono" pattern="^\d{7,15}$" inputmode="numeric">
+                              <input type="tel" class="form-control" id="estudioTelefono" pattern="^\d{7,15}$" inputmode="numeric" readonly>
                             </div>
                             <div class="col-md-12 mb-3">
                               <label class="form-label">Dirección del Estudio</label>
-                              <input type="text" class="form-control" id="estudioDireccion">
+                              <input type="text" class="form-control" id="estudioDireccion" readonly>
                             </div>
                           </div>
                         <!-- NUEVOS CAMPOS: Vínculo con Estudio -->
                         <div class="border-top pt-3 mt-3">
                           <h6 class="fw-bold mb-2">Vínculo con el Estudio</h6>
                           <div class="row">
-                            <div class="col-md-6 mb-3"><label class="form-label">Rol en estudio</label><input type="text" class="form-control" id="rolEnEstudio" placeholder="Asociado, Of Counsel, etc."></div>
-                            <div class="col-md-6 mb-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="estudioPrincipal"><label class="form-check-label" for="estudioPrincipal">Estudio principal</label></div></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Rol en estudio</label><input type="text" class="form-control" id="rolEnEstudio" placeholder="Asociado, Of Counsel, etc." readonly></div>
+                            <div class="col-md-6 mb-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="estudioPrincipal" disabled><label class="form-check-label" for="estudioPrincipal">Estudio principal</label></div></div>
                           </div>
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button><button type="button" class="btn btn-primary" onclick="saveEstudio()">Guardar Cambios</button></div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button></div>
             </div>
         </div>
     </div>
 
-    <!-- NUEVO MODAL: Gestionar Especialidades del Abogado -->
+    <!-- MODAL: Especialidades del Abogado -->
     <div class="modal fade" id="especialidadesModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
@@ -235,69 +225,33 @@
           <div class="modal-body">
             <input type="hidden" id="especialidadesUserId">
             <div class="mb-3">
-              <label class="form-label">Especialidades asignadas</label>
+              <label class="form-label">Especialidades registradas</label>
               <div id="especialidadesActuales" class="border p-2 rounded bg-light" style="min-height: 40px;"></div>
             </div>
-            <div class="mb-3">
-              <label for="especialidadesSelect" class="form-label">Añadir especialidades</label>
-              <select id="especialidadesSelect" class="form-select" multiple size="6"></select>
-              <small class="text-muted">Usa Ctrl/Cmd para seleccionar múltiples.</small>
-            </div>
           </div>
-          <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button><button class="btn btn-primary" onclick="saveEspecialidades()">Guardar Especialidades</button></div>
+          <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button></div>
         </div>
       </div>
     </div>
-    
-    <!-- Modal de Disponibilidad (sin cambios) -->
+
+    <!-- Modal de Disponibilidad -->
     <div class="modal fade" id="disponibilidadModal" tabindex="-1" aria-hidden="true">
 
       <div class="modal-dialog modal-xl">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Gestionar Disponibilidad</h5>
+            <h5 class="modal-title">Disponibilidad del Abogado</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
             <input type="hidden" id="disponibilidadUserId">
-            <div class="row">
-              <div class="col-md-4 border-end">
-                <h6 class="fw-bold">Añadir Nuevo Horario</h6>
-                <form id="disponibilidadForm">
-                  <div class="mb-3">
-                    <label class="form-label">Día</label>
-                    <select id="dispDia" class="form-select">
-                      <option value="1">Lunes</option>
-                      <option value="2">Martes</option>
-                      <option value="3">Miércoles</option>
-                      <option value="4">Jueves</option>
-                      <option value="5">Viernes</option>
-                      <option value="6">Sábado</option>
-                      <option value="7">Domingo</option>
-                    </select>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">Hora Inicio</label>
-                    <input type="time" id="dispInicio" class="form-control" required>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">Hora Fin</label>
-                    <input type="time" id="dispFin" class="form-control" required>
-                  </div>
-                  <button type="button" class="btn btn-success w-100" onclick="addDisponibilidad()">
-                    <i class="bi bi-plus-circle"></i> Añadir
-                  </button>
-                </form>
-              </div>
-              <div class="col-md-8">
-                <h6 class="fw-bold">Horario Semanal</h6>
-                <div id="schedule-container" class="schedule-grid"></div>
-              </div>
+            <div>
+              <h6 class="fw-bold">Horario Semanal</h6>
+              <div id="schedule-container" class="schedule-grid"></div>
             </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-            <button type="button" class="btn btn-primary" onclick="saveDisponibilidad()">Guardar</button>
           </div>
         </div>
       </div>
