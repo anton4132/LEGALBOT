@@ -80,6 +80,24 @@ const createPlanService = async (req, res) => {
   try {
     await ensurePlanAndServiceExist(planId, serviceId);
 
+    const existingAssignment = await prisma.planservicio.findUnique({
+      where: {
+        plan_id_servicio_id: {
+          plan_id: planId,
+          servicio_id: serviceId,
+        },
+      },
+      include: includeAssignmentRelations,
+    });
+
+    if (existingAssignment) {
+      return res.status(400).json({
+        success: false,
+        message: 'El servicio ya está vinculado a este plan',
+        planServicio: existingAssignment,
+      });
+    }
+
     const assignment = await prisma.planservicio.create({
       data: {
         plan_id: planId,
@@ -160,6 +178,24 @@ const updatePlanService = async (req, res) => {
     const finalServiceId = serviceId ?? existing.servicio_id;
 
     await ensurePlanAndServiceExist(finalPlanId, finalServiceId);
+
+    const conflictingAssignment = await prisma.planservicio.findUnique({
+      where: {
+        plan_id_servicio_id: {
+          plan_id: finalPlanId,
+          servicio_id: finalServiceId,
+        },
+      },
+      include: includeAssignmentRelations,
+    });
+
+    if (conflictingAssignment && conflictingAssignment.id !== assignmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ya existe una vinculación entre el plan y el servicio seleccionados',
+        planServicio: conflictingAssignment,
+      });
+    }
 
     const assignment = await prisma.planservicio.update({
       where: { id: assignmentId },
