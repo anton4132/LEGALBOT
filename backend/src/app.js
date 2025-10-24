@@ -49,9 +49,9 @@ app.get('/usuarios', (req, res) => {
   res.sendFile(path.join(__dirname, '../../admin-web/pages/usuarios.html'));
 });
 
-// Ruta para servir Tarifas.html
-app.get('/Tarifas', (req, res) => {
-  console.log('Accediendo a /Tarifas');
+// Ruta para servir Tarifas.html (acepta /tarifas y mantiene /Tarifas como alias)
+app.get(['/tarifas', '/Tarifas'], (req, res) => {
+  console.log('Accediendo a', req.path);
   res.sendFile(path.join(__dirname, '../../admin-web/pages/Tarifas.html'));
 });
 
