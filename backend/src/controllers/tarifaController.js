@@ -94,6 +94,7 @@ function buildListWhere(query) {
   const moneda = query.moneda?.trim();
   const region = query.ambito_region?.trim();
   const fecha = parseDate(query.fecha);
+  const tipo = query.tipo?.trim();
 
   const search = query.search?.trim();
   const vigencia = query.vigencia?.trim();
@@ -119,6 +120,9 @@ function buildListWhere(query) {
   }
   if (region) {
     where.ambito_region = region;
+  }
+  if (tipo) {
+    where.tipo = tipo;
   }
   if (fecha) {
     andClauses.push({
@@ -191,6 +195,7 @@ function buildOverlapWhere(data, excludeId) {
     'ambito_region',
     'metodo_pago',
     'moneda',
+    'tipo',
   ];
   eqFields.forEach((field) => {
     if (data[field] !== undefined) {
@@ -225,7 +230,7 @@ async function findConflicts(data, excludeId) {
   return overlaps.map((item) => serializeTarifa(item));
 }
 function sameScope(a, b) {
-  const fields = ['servicio_id', 'plan_id', 'rol_aplica', 'ambito_region', 'metodo_pago', 'moneda'];
+  const fields = ['servicio_id', 'plan_id', 'rol_aplica', 'ambito_region', 'metodo_pago', 'moneda', 'tipo'];
   return fields.every((field) => {
     const valueA = a[field] ?? null;
     const valueB = b[field] ?? null;
@@ -409,6 +414,108 @@ async function updateTarifa(req, res) {
     res.json({ success: true, tarifa: serializeTarifa(updated) });
   } catch (error) {
     console.error('Error actualizando tarifa:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
+    }
+    res.status(500).json({ success: false, message: 'Error actualizando tarifa' });
+  }
+}
+
+async function partialUpdateTarifa(req, res) {
+  try {
+    const id = parseIntOrNull(req.params.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Identificador inválido' });
+    }
+
+    const payload = req.body || {};
+    const has = (key) => Object.prototype.hasOwnProperty.call(payload, key);
+    const data = {};
+
+    if (has('codigo')) {
+      const codigo = payload.codigo?.trim();
+      if (!codigo) {
+        return res.status(400).json({ success: false, message: 'El código es obligatorio' });
+      }
+      data.codigo = codigo;
+    }
+    if (has('descripcion')) {
+      data.descripcion = payload.descripcion?.trim() || null;
+    }
+    if (has('valor')) {
+      data.valor = toDecimal(payload.valor);
+    }
+    if (has('incluye_impuesto')) {
+      data.incluye_impuesto = !!payload.incluye_impuesto;
+    }
+    if (has('tipo_calculo')) {
+      data.tipo_calculo = payload.tipo_calculo;
+    }
+    if (has('parametros')) {
+      data.parametros = payload.parametros ?? null;
+    }
+    if (has('vigencia_desde')) {
+      data.vigencia_desde = parseDate(payload.vigencia_desde);
+    }
+    if (has('vigencia_hasta')) {
+      data.vigencia_hasta = parseDate(payload.vigencia_hasta);
+    }
+    if (has('activo')) {
+      data.activo = !!payload.activo;
+    }
+    if (has('plan_id')) {
+      data.plan_id = parseIntOrNull(payload.plan_id);
+    }
+    if (has('servicio_id')) {
+      data.servicio_id = parseIntOrNull(payload.servicio_id);
+    }
+    if (has('rol_aplica')) {
+      data.rol_aplica = payload.rol_aplica;
+    }
+    if (has('ambito_region')) {
+      data.ambito_region = payload.ambito_region?.trim() || null;
+    }
+    if (has('metodo_pago')) {
+      data.metodo_pago = payload.metodo_pago?.trim() || null;
+    }
+    if (has('moneda')) {
+      const moneda = payload.moneda?.trim();
+      data.moneda = moneda ? moneda.toUpperCase() : null;
+    }
+    if (has('prioridad')) {
+      if (payload.prioridad === '' || payload.prioridad === undefined || payload.prioridad === null) {
+        data.prioridad = null;
+      } else {
+        data.prioridad = Number(payload.prioridad);
+      }
+    }
+    if (has('tipo')) {
+      const tipo = payload.tipo?.trim();
+      if (tipo) {
+        data.tipo = tipo;
+      }
+    }
+
+    if (!Object.keys(data).length) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'No se proporcionaron campos para actualizar' });
+    }
+
+    const updated = await prisma.tarifacomision.update({
+      where: { id },
+      data,
+      include: {
+        servicio: { select: { id: true, codigo: true, nombre: true } },
+        plan: { select: { id: true, nombre: true } },
+      },
+    });
+    res.json({ success: true, tarifa: serializeTarifa(updated) });
+  } catch (error) {
+    console.error('Error actualizando tarifa parcialmente:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
+    }
     if (error.code === 'P2002') {
       return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
     }
@@ -802,6 +909,7 @@ module.exports = {
   getTarifa,
   createTarifa,
   updateTarifa,
+  partialUpdateTarifa,
   cloneTarifa,
   toggleTarifa,
   getCatalogs,
