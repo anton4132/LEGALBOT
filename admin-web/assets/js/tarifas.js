@@ -510,37 +510,6 @@ function setupLayout() {
             <form id="tarifas-form">
               <div class="modal-body">
                 <div class="row g-3">
-                  <div class="col-12 col-md-6">
-                    <label for="tarifas-form-codigo" class="form-label"
-                      >Código <span class="text-danger">*</span></label
-                    >
-                    <input
-                      type="text"
-                      id="tarifas-form-codigo"
-                      name="codigo"
-                      class="form-control"
-                      placeholder="Identificador único"
-                      required
-                    />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="tarifas-form-rol" class="form-label">Rol aplica</label>
-                    <select id="tarifas-form-rol" name="rol_aplica" class="form-select">
-                      <option value="cliente">Cliente</option>
-                      <option value="abogado">Abogado</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="tarifas-form-moneda" class="form-label">Moneda</label>
-                    <input
-                      type="text"
-                      id="tarifas-form-moneda"
-                      name="moneda"
-                      class="form-control text-uppercase"
-                      maxlength="3"
-                      placeholder="Ej. PEN"
-                    />
-                  </div>
                   <div class="col-12">
                     <label for="tarifas-form-descripcion" class="form-label">Descripción</label>
                     <input
@@ -749,7 +718,7 @@ function setupLayout() {
             <form id="comisiones-form">
               <div class="modal-body">
                 <div class="row g-3">
-                  <div class="col-12 col-md-6">
+                  <div class="col-12">
                     <label for="comisiones-form-descripcion" class="form-label">Descripción</label>
                     <input
                       type="text"
@@ -757,19 +726,6 @@ function setupLayout() {
                       name="descripcion"
                       class="form-control"
                       placeholder="Describe la comisión"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label for="comisiones-form-codigo" class="form-label"
-                      >Código <span class="text-danger">*</span></label
-                    >
-                    <input
-                      type="text"
-                      id="comisiones-form-codigo"
-                      name="codigo"
-                      class="form-control"
-                      placeholder="Identificador único"
-                      required
                     />
                   </div>
                   <div class="col-12">
@@ -1356,8 +1312,6 @@ async function populateTarifaForm() {
   if (!form) return;
   const data = state.tarifas.form.data || getDefaultTarifa();
   await prepareScopeOptions('tarifas', data);
-  form.querySelector('[name="codigo"]').value = data.codigo || '';
-  form.querySelector('[name="codigo"]').classList.remove('is-invalid');
   form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="valor"]').value = (data.valor ?? '').toString();
   form.querySelector('[name="incluye_impuesto"]').checked = !!data.incluye_impuesto;
@@ -1370,10 +1324,6 @@ async function populateTarifaForm() {
   form.querySelector('[name="vigencia_desde"]').value = data.vigencia_desde || '';
   form.querySelector('[name="vigencia_hasta"]').value = data.vigencia_hasta || '';
   form.querySelector('[name="activo"]').checked = data.activo !== false;
-  form.querySelector('[name="rol_aplica"]').value = data.rol_aplica || 'cliente';
-  form.querySelector('[name="moneda"]').value =
-    data.moneda || state.quick.econconfig?.moneda_defecto || state.monedaFallback || '';
-  form.querySelector('[name="moneda"]').classList.remove('is-invalid');
 
   updateTarifaFormUi();
 
@@ -1415,14 +1365,6 @@ async function submitTarifaForm(event) {
   const jsonField = form.querySelector('[name="parametros"]');
   if (!validateJsonField(jsonField)) return;
 
-  const codigo = form.codigo.value.trim();
-  if (!codigo) {
-    form.codigo.classList.add('is-invalid');
-    form.codigo.focus();
-    return;
-  }
-  form.codigo.classList.remove('is-invalid');
-
   const scopeControls = state.dom.tarifas.scope || {};
   const scopeType = scopeControls.hidden?.value || '';
   const planId = parseOptionalId(form.plan_id?.value);
@@ -1457,20 +1399,7 @@ async function submitTarifaForm(event) {
   scopeControls.servicioSelect?.classList.remove('is-invalid');
 
   const base = state.tarifas.form.data || {};
-  const monedaInput = form.moneda;
-  let moneda = monedaInput.value.trim().toUpperCase();
-  if (!moneda) {
-    moneda = (state.quick.econconfig?.moneda_defecto || state.monedaFallback || '').trim();
-  }
-  if (moneda && moneda.length !== 3) {
-    monedaInput.classList.add('is-invalid');
-    monedaInput.focus();
-    return;
-  }
-  monedaInput.classList.remove('is-invalid');
-
   const payload = {
-    codigo,
     descripcion: form.descripcion.value.trim() || null,
     valor: Number(form.valor.value),
     incluye_impuesto: form.incluye_impuesto.checked,
@@ -1481,8 +1410,6 @@ async function submitTarifaForm(event) {
     activo: form.activo.checked,
     plan_id: planId,
     servicio_id: servicioId,
-    rol_aplica: form.rol_aplica.value,
-    moneda: moneda ? moneda.toUpperCase() : null,
   };
   if (payload.tipo_calculo !== 'consumo_ia') {
     payload.parametros = {};
@@ -1492,7 +1419,6 @@ async function submitTarifaForm(event) {
     ...base,
     ...payload,
   };
-  requestBody.tipo = base.tipo || 'tarifa';
   requestBody.actualizado_el = base.actualizado_el || null;
 
   if (!Number.isFinite(payload.valor) || payload.valor < 0) {
@@ -1522,26 +1448,10 @@ async function persistTarifa(payload, formState) {
     } else {
       response = await apiPost('/tarifas', payload);
     }
-    const body = await response.json();
-    const saved = body?.tarifa || body;
+    const saved = await response.json();
     upsertTarifa(saved);
-    const tarifaForm = state.dom.tarifas.form;
-    const defaultTarifa = getDefaultTarifa();
-    if (tarifaForm) {
-      tarifaForm.reset();
-      const rolField = tarifaForm.querySelector('[name="rol_aplica"]');
-      if (rolField) {
-        rolField.value = defaultTarifa.rol_aplica;
-      }
-      const monedaField = tarifaForm.querySelector('[name="moneda"]');
-      if (monedaField) {
-        monedaField.value = defaultTarifa.moneda || '';
-        monedaField.classList.remove('is-invalid');
-      }
-      const codigoField = tarifaForm.querySelector('[name="codigo"]');
-      codigoField?.classList.remove('is-invalid');
-    }
-    await prepareScopeOptions('tarifas', defaultTarifa);
+    state.dom.tarifas.form.reset();
+    await prepareScopeOptions('tarifas', getDefaultTarifa());
     getBootstrapModal(state.dom.tarifas.formModal).hide();
     renderTarifas();
   } catch (error) {
@@ -1633,7 +1543,6 @@ async function attemptToggleTarifa(id, nextState) {
 
 function exportTarifas() {
   const params = new URLSearchParams({ ...state.tarifas.filters });
-  params.set('tipo', 'tarifa');
   const url = `${API_BASE_URL}/tarifas/export?${params.toString()}`;
   window.open(url, '_blank');
 }
@@ -2165,12 +2074,9 @@ async function populateComisionForm() {
   if (!form) return;
   const data = state.comisiones.form.data || getDefaultComision();
   await prepareScopeOptions('comisiones', data);
-  form.querySelector('[name="codigo"]').value = data.codigo || '';
-  form.querySelector('[name="codigo"]').classList.remove('is-invalid');
   form.querySelector('[name="descripcion"]').value = data.descripcion || '';
   form.querySelector('[name="rol_aplica"]').value = data.rol_aplica || 'cliente';
   form.querySelector('[name="porcentaje"]').value = (data.porcentaje ?? '').toString();
-  form.querySelector('[name="porcentaje"]').classList.remove('is-invalid');
   form.querySelector('[name="vigencia_desde"]').value = data.vigencia_desde || '';
   form.querySelector('[name="vigencia_hasta"]').value = data.vigencia_hasta || '';
   form.querySelector('[name="activo"]').checked = data.activo !== false;
@@ -2191,14 +2097,6 @@ async function submitComisionForm(event) {
     return;
   }
   form.porcentaje.classList.remove('is-invalid');
-
-  const codigo = form.codigo.value.trim();
-  if (!codigo) {
-    form.codigo.classList.add('is-invalid');
-    form.codigo.focus();
-    return;
-  }
-  form.codigo.classList.remove('is-invalid');
 
   const scopeControls = state.dom.comisiones.scope || {};
   const scopeType = scopeControls.hidden?.value || '';
@@ -2235,7 +2133,6 @@ async function submitComisionForm(event) {
 
   const base = state.comisiones.form.data || {};
   const payload = {
-    codigo,
     descripcion: form.descripcion.value.trim() || null,
     rol_aplica: form.rol_aplica.value,
     porcentaje,
@@ -2244,17 +2141,12 @@ async function submitComisionForm(event) {
     activo: form.activo.checked,
     plan_id: planId,
     servicio_id: servicioId,
-    tipo_calculo: 'fijo',
-    incluye_impuesto: false,
-    valor: porcentaje,
-    tipo: 'comision',
   };
 
   const requestBody = {
     ...base,
     ...payload,
   };
-  requestBody.tipo = 'comision';
   requestBody.actualizado_el = base.actualizado_el || null;
 
   const conflict = findComisionConflict(requestBody, state.comisiones.form.data?.id);
@@ -2302,13 +2194,13 @@ async function resolveComisionConflict(action) {
 
   try {
     if (action === 'desactivar') {
-      await apiPatch(`/tarifas/${conflict.id}`, { activo: false });
+      await apiPatch(`/comisiones/${conflict.id}`, { activo: false });
       conflict.activo = false;
     } else if (action === 'cerrar') {
       const fecha = new Date(payload.vigencia_desde);
       fecha.setDate(fecha.getDate() - 1);
       const cierre = fecha.toISOString().slice(0, 10);
-      await apiPatch(`/tarifas/${conflict.id}`, { vigencia_hasta: cierre });
+      await apiPatch(`/comisiones/${conflict.id}`, { vigencia_hasta: cierre });
       conflict.vigencia_hasta = cierre;
     }
     await persistComision(payload, state.comisiones.form);
@@ -2323,27 +2215,16 @@ async function persistComision(payload, formState) {
     const id = formState.data?.id;
     let response;
     if (id) {
-      response = await apiPut(`/tarifas/${id}`, payload, {
+      response = await apiPut(`/comisiones/${id}`, payload, {
         'If-Unmodified-Since': payload.actualizado_el || '',
       });
     } else {
-      response = await apiPost('/tarifas', payload);
+      response = await apiPost('/comisiones', payload);
     }
-    const body = await response.json();
-    const saved = normalizeComision(body?.tarifa || body);
+    const saved = await response.json();
     upsertComision(saved);
-    const comisionForm = state.dom.comisiones.form;
-    const defaultComision = getDefaultComision();
-    if (comisionForm) {
-      comisionForm.reset();
-      const rolField = comisionForm.querySelector('[name="rol_aplica"]');
-      if (rolField) {
-        rolField.value = defaultComision.rol_aplica;
-      }
-      comisionForm.querySelector('[name="codigo"]')?.classList.remove('is-invalid');
-      comisionForm.querySelector('[name="porcentaje"]')?.classList.remove('is-invalid');
-    }
-    await prepareScopeOptions('comisiones', defaultComision);
+    state.dom.comisiones.form.reset();
+    await prepareScopeOptions('comisiones', getDefaultComision());
     getBootstrapModal(state.dom.comisiones.formModal).hide();
     renderComisiones();
   } catch (error) {
@@ -2353,13 +2234,11 @@ async function persistComision(payload, formState) {
 }
 
 function upsertComision(comision) {
-  const normalized = normalizeComision(comision);
-  if (!normalized) return;
-  const index = state.comisiones.items.findIndex((item) => item.id === normalized.id);
+  const index = state.comisiones.items.findIndex((item) => item.id === comision.id);
   if (index >= 0) {
-    state.comisiones.items.splice(index, 1, normalized);
+    state.comisiones.items.splice(index, 1, comision);
   } else {
-    state.comisiones.items.push(normalized);
+    state.comisiones.items.push(comision);
   }
 }
 
@@ -2375,7 +2254,7 @@ async function attemptToggleComision(id, nextState) {
     }
   }
   try {
-    await apiPatch(`/tarifas/${id}`, { activo: nextState });
+    await apiPatch(`/comisiones/${id}`, { activo: nextState });
     comision.activo = nextState;
     renderComisiones();
   } catch (error) {
@@ -2388,11 +2267,10 @@ function exportComisiones() {
   const params = new URLSearchParams();
   const { estado, servicio, plan } = state.comisiones.filters;
   params.set('estado', estado || '');
-  params.set('tipo', 'comision');
   if (servicio) params.set('servicio', servicio);
   if (plan) params.set('plan', plan);
   const query = params.toString();
-  const url = `${API_BASE_URL}/tarifas/export${query ? `?${query}` : ''}`;
+  const url = `${API_BASE_URL}/comisiones/export${query ? `?${query}` : ''}`;
   window.open(url, '_blank');
 }
 
@@ -3274,14 +3152,7 @@ async function ensurePlanAssignments(planId, force = false) {
     const response = await apiGet(`/plans/${targetId}`);
     const body = await response.json();
     const plan = body?.plan || body || {};
-  const assignmentsSource = [
-      plan.planservicio,
-      plan.planservicios,
-      plan.planServicios,
-      plan.plan_servicios,
-      plan.planServices,
-    ].find((value) => Array.isArray(value));
-    const assignments = Array.isArray(assignmentsSource) ? assignmentsSource : [];
+    const assignments = Array.isArray(plan.planservicios) ? plan.planservicios : [];
     storePlanAssignments(targetId, assignments);
     mergePlanCatalog([plan]);
     return state.catalogs.planAssignments.get(targetId) || [];
@@ -3300,15 +3171,8 @@ async function ensurePlanAssignments(planId, force = false) {
 
 async function loadTarifas() {
   try {
-    const response = await apiGet('/tarifas', { tipo: 'tarifa' });
-    const body = await response.json();
-    const items = Array.isArray(body)
-      ? body
-      : Array.isArray(body?.items)
-      ? body.items
-      : Array.isArray(body?.tarifas)
-      ? body.tarifas
-      : [];
+    const response = await apiGet('/tarifas');
+    const { items } = await response.json();
     state.tarifas.items = items || [];
   } catch (error) {
     console.error('Error cargando tarifas', error);
@@ -3318,16 +3182,9 @@ async function loadTarifas() {
 
 async function loadComisiones() {
   try {
-    const response = await apiGet('/tarifas', { tipo: 'comision' });
-    const body = await response.json();
-    const items = Array.isArray(body)
-      ? body
-      : Array.isArray(body?.items)
-      ? body.items
-      : Array.isArray(body?.tarifas)
-      ? body.tarifas
-      : [];
-    state.comisiones.items = (items || []).map((item) => normalizeComision(item));
+    const response = await apiGet('/comisiones');
+    const { items } = await response.json();
+    state.comisiones.items = items || [];
   } catch (error) {
     console.error('Error cargando comisiones', error);
     state.comisiones.items = [];
@@ -3336,7 +3193,6 @@ async function loadComisiones() {
 
 function getDefaultTarifa() {
   return {
-    codigo: '',
     descripcion: '',
     valor: 0,
     incluye_impuesto: true,
@@ -3348,15 +3204,11 @@ function getDefaultTarifa() {
     actualizado_el: '',
     plan_id: null,
     servicio_id: null,
-    rol_aplica: 'cliente',
-    moneda: state.quick.econconfig?.moneda_defecto || state.monedaFallback || '',
-    tipo: 'tarifa',
   };
 }
 
 function getDefaultComision() {
   return {
-    codigo: '',
     descripcion: '',
     rol_aplica: 'cliente',
     porcentaje: 0,
@@ -3366,25 +3218,7 @@ function getDefaultComision() {
     actualizado_el: '',
     plan_id: null,
     servicio_id: null,
-    tipo: 'comision',
   };
-}
-
-function normalizeComision(comision) {
-  if (!comision || typeof comision !== 'object') return comision;
-  const normalized = { ...comision };
-  if (normalized.porcentaje === undefined && normalized.valor !== undefined) {
-    normalized.porcentaje = normalized.valor;
-  }
-  if (normalized.porcentaje !== undefined) {
-    const numeric = Number(normalized.porcentaje);
-    normalized.porcentaje = Number.isNaN(numeric) ? normalized.porcentaje : numeric;
-  }
-  if (normalized.valor !== undefined) {
-    const numeric = Number(normalized.valor);
-    normalized.valor = Number.isNaN(numeric) ? normalized.valor : numeric;
-  }
-  return normalized;
 }
 
 function matchesAutocomplete(item, needle, type) {
