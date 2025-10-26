@@ -1327,8 +1327,8 @@ const createUser = async (req, res) => {
 
         const usuarioCreated = await tx.usuario.create({
           data: {
-            persona_id: personaExist.id,
-            rol_id: parsedRoleId,
+            persona: { connect: { id: personaExist.id } },
+            role: { connect: { id: parsedRoleId } },
             clave, // IMPORTANTE: hashear a nivel de servicio
             telefono_verificado: false,
             activo: true
@@ -1439,8 +1439,8 @@ const createUser = async (req, res) => {
 
       const usuarioCreated = await tx.usuario.create({
         data: {
-          persona_id: personaId,
-          rol_id: parsedRoleId,
+          persona: { connect: { id: personaId } },
+          role: { connect: { id: parsedRoleId } },
           clave, // IMPORTANTE: hashear a nivel de servicio
           telefono_verificado: false,
           activo: true

@@ -218,8 +218,8 @@ const createOrActivateAbogadoUser = async (tx, personaId) => {
   // 4) crear usuario abogado duplicando SOLO la clave
   const newLawyer = await tx.usuario.create({
     data: {
-      persona_id: personaId,
-      rol_id: lawyerRole.id,
+      persona: { connect: { id: personaId } },
+      role: { connect: { id: lawyerRole.id } },
       clave: baseUser.clave, // <— SOLO contraseña (hash)
       activo: true,          // aprobado => habilitado
     },
