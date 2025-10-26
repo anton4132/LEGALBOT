@@ -380,8 +380,8 @@ const submitApplication = async (req, res) => {
 
     // Transacción: upsert de verificación, colegio y colegiatura
     const blobsToDelete = [];
+    const archivoIdsToDelete = [];
     const result = await prisma.$transaction(async (tx) => {
-      const archivoIdsToDelete = [];
 
       // 1) verificación (si existe y quedó OBSERVADA, vuelve a PENDIENTE y no borra URLs)
       let verification = await tx.verificacionabogado.findUnique({
@@ -576,17 +576,38 @@ const submitApplication = async (req, res) => {
     });
 
     if (archivoIdsToDelete.length) {
-      await tx.archivo.deleteMany({
-        where: {
-          id: { in: archivoIdsToDelete },
-          usuario_id: usuarioId,
-        },
-      });
+      try {
+        await prisma.archivo.deleteMany({
+          where: {
+            id: { in: archivoIdsToDelete },
+            usuario_id: usuarioId,
+          },
+        });
+      } catch (cleanupError) {
+        console.error('Error eliminando archivos antiguos:', cleanupError);
+      }
     }
 
-    return res.status(verificationWasCreated(result) ? 201 : 200).json({
+    if (blobsToDelete.length) {
+      await Promise.all(
+        blobsToDelete
+          .filter(Boolean)
+          .map(async (ruta) => {
+            try {
+              await deleteBlob(ruta);
+            } catch (blobError) {
+              console.error('Error eliminando blob antiguo:', blobError);
+            }
+          }),
+      );
+    }
+
+    const statusCode = verificationWasCreated(result) ? 201 : 200;
+    const payload = mapApplication(result);
+
+    return res.status(statusCode).json({
       success: true,
-      application: mapApplication(result),
+      application: payload,
     });
   } catch (error) {
     if (error.message === 'PENDING_ALREADY') {

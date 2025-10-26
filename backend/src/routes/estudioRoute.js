@@ -232,8 +232,10 @@ router.get('/', estudioController.searchEstudios);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *              example:
- *               message: "El RUC ya está registrado"
+ *             examples:
+ *               duplicateRuc:
+ *                 value:
+ *                   message: "El RUC ya está registrado"
  *       500:
  *         description: Error creando estudio
  *         content:
