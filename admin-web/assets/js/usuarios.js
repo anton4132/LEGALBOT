@@ -12,6 +12,21 @@ let currentVerificationEstado = null;
 let verificationActionsLocked = false;
 
 
+let filteredUsers = [];
+const USERS_DEFAULT_PAGE_SIZE = 10;
+const usersPaginationState = { page: 1, pageSize: USERS_DEFAULT_PAGE_SIZE, totalItems: 0 };
+let currentSearchTerm = '';
+let currentRoleFilter = '';
+
+const ubigeoCache = {
+  departamentos: null,
+  provincias: new Map(),
+  distritos: new Map(),
+};
+
+let userFormState = null;
+
+
 const API_BASE_URL = '/api';
 
 const SignupValidation = window.SignupValidation;
@@ -121,10 +136,102 @@ function personaNombreCompleto(persona = {}) {
     .join(' ');
 }
 const LAWYER_ROLE_CODE = 'abogado';
-const PANEL_ALLOWED_ROLE_CODES = new Set(['cliente', 'admin']);
+const PANEL_ALLOWED_ROLE_ORDER = ['cliente', 'admin'];
+const PANEL_ALLOWED_ROLE_CODES = new Set(PANEL_ALLOWED_ROLE_ORDER);
+
+const STEP_COUNT = 3;
+
+const EMAIL_STATUS_LABELS = {
+  [SignupValidation.VerificationStatus.NOT_REQUESTED]: 'Debes verificar el correo antes de continuar.',
+  [SignupValidation.VerificationStatus.CODE_SENT]: 'Hemos enviado un código de verificación al correo ingresado.',
+  [SignupValidation.VerificationStatus.MISMATCH]: 'El correo cambió después de solicitar el código. Solicita uno nuevo.',
+  [SignupValidation.VerificationStatus.EXPIRED]: 'El código ha expirado. Solicita uno nuevo para continuar.',
+  [SignupValidation.VerificationStatus.VERIFIED]: 'Correo verificado correctamente.',
+};
+
+const EMAIL_STATUS_CLASSES = {
+  [SignupValidation.VerificationStatus.NOT_REQUESTED]: 'text-muted',
+  [SignupValidation.VerificationStatus.CODE_SENT]: 'text-primary',
+  [SignupValidation.VerificationStatus.MISMATCH]: 'text-warning',
+  [SignupValidation.VerificationStatus.EXPIRED]: 'text-warning',
+  [SignupValidation.VerificationStatus.VERIFIED]: 'text-success fw-semibold',
+};
+
+function createInitialEmailState() {
+  return {
+    sending: false,
+    verifying: false,
+    validating: false,
+    codeRequested: false,
+    emailUsedForCode: null,
+    verifiedEmail: null,
+    codeSentAt: null,
+    codeExpiresAt: null,
+    status: SignupValidation.VerificationStatus.NOT_REQUESTED,
+  };
+}
+
+function createInitialDniState() {
+  return {
+    loading: false,
+    normalized: '',
+    lookup: null,
+    lastConsulted: null,
+    error: null,
+  };
+}
+
+function createInitialUbigeoState() {
+  return {
+    selectedDepartamento: '',
+    selectedProvincia: '',
+    selectedDistrito: '',
+    loadingDepartamentos: false,
+    loadingProvincias: false,
+    loadingDistritos: false,
+  };
+}
+
+function createInitialVerificationState() {
+  return {
+    dniMatch: false,
+    conflictsCleared: false,
+    dniLookup: null,
+    emailVerification: null,
+  };
+}
+
+function ensureUserFormState() {
+  if (!userFormState) {
+    resetUserFormState();
+  }
+  return userFormState;
+}
+
+function resetUserFormState() {
+  userFormState = {
+    step: 1,
+    isEditing: false,
+    email: createInitialEmailState(),
+    dni: createInitialDniState(),
+    ubigeo: createInitialUbigeoState(),
+    verification: createInitialVerificationState(),
+    conflictsMessage: null,
+    personaId: null,
+  };
+  return userFormState;
+}
 
 function getPanelAllowedRoles() {
-  return roles.filter((role) => PANEL_ALLOWED_ROLE_CODES.has((role?.codigo || '').toLowerCase()));
+  if (!Array.isArray(roles) || !roles.length) return [];
+  const roleMap = new Map(
+    roles
+      .filter(role => role && typeof role.codigo === 'string')
+      .map(role => [String(role.codigo).toLowerCase(), role])
+  );
+  return PANEL_ALLOWED_ROLE_ORDER
+    .map(code => roleMap.get(code))
+    .filter(Boolean);
 }
 
 function normalizeArchivoRecord(record) {
@@ -363,10 +470,45 @@ function logout() {
 
 /* --------------- Listeners UI ------------------ */
 function setupEventListeners() {
-  document.getElementById('searchInput')?.addEventListener('input', filterUsers);
-  document.getElementById('filterType')?.addEventListener('change', filterUsers);
-  document.getElementById('userForm')?.addEventListener('submit', (e) => { e.preventDefault(); saveUser(); });
+  document.getElementById('searchInput')?.addEventListener('input', handleSearchInput);
+  document.getElementById('filterType')?.addEventListener('change', handleFilterChange);
+  const form = document.getElementById('userForm');
+  form?.addEventListener('submit', (e) => { e.preventDefault(); });
+
   document.getElementById('dni')?.addEventListener('blur', handleDniLookup);
+  document.getElementById('dni')?.addEventListener('input', handleDniInputChange);
+  document.getElementById('dniLookupButton')?.addEventListener('click', () => handleDniLookup());
+
+  document.getElementById('telefono')?.addEventListener('blur', handleTelefonoBlur);
+  document.getElementById('telefono')?.addEventListener('input', () => {
+    ensureUserFormState().verification.conflictsCleared = false;
+  });
+
+  document.getElementById('email')?.addEventListener('input', handleEmailInputChange);
+  document.getElementById('emailSendCodeButton')?.addEventListener('click', handleEmailSendCode);
+  document.getElementById('emailVerifyCodeButton')?.addEventListener('click', handleEmailVerifyCode);
+  document.getElementById('emailCodigo')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleEmailVerifyCode();
+    }
+  });
+
+  document.getElementById('ubigeoDepartamento')?.addEventListener('change', handleDepartamentoChange);
+  document.getElementById('ubigeoProvincia')?.addEventListener('change', handleProvinciaChange);
+  document.getElementById('ubigeoDistrito')?.addEventListener('change', handleDistritoChange);
+
+  document.getElementById('lineaExactaDireccion')?.addEventListener('input', () => {
+    ensureUserFormState().verification.conflictsCleared = false;
+  });
+  document.getElementById('rol')?.addEventListener('change', () => {
+    ensureUserFormState().verification.conflictsCleared = false;
+  });
+
+  document.getElementById('nextStepButton')?.addEventListener('click', handleNextStep);
+  document.getElementById('prevStepButton')?.addEventListener('click', handlePrevStep);
+  document.getElementById('saveUserButton')?.addEventListener('click', saveUser);
+  document.getElementById('triggerChangePassword')?.addEventListener('click', enablePasswordEdition);
 
   document.getElementById('verificacionAprobarBtn')?.addEventListener('click', () => handleVerificationAction('APROBADA'));
   document.getElementById('verificacionRechazarBtn')?.addEventListener('click', () => handleVerificationAction('RECHAZADA'));
@@ -376,20 +518,127 @@ function setupEventListeners() {
   // Estudio: búsqueda de existentes
 }
 
+/* --------------- Paginación / filtros ----------- */
+function handleSearchInput(event) {
+  currentSearchTerm = (event?.target?.value || '').toLowerCase();
+  usersPaginationState.page = 1;
+  filterUsers();
+}
+
+function handleFilterChange(event) {
+  currentRoleFilter = (event?.target?.value || '').toLowerCase();
+  usersPaginationState.page = 1;
+  filterUsers();
+}
+
+function getPaginatedUsers() {
+  const { page, pageSize } = usersPaginationState;
+  const start = (page - 1) * pageSize;
+  return filteredUsers.slice(start, start + pageSize);
+}
+
+function updateUsersCountLabel() {
+  const label = document.getElementById('usersCountLabel');
+  const wrapper = document.getElementById('usersPaginationWrapper');
+  if (!label || !wrapper) return;
+
+  const total = filteredUsers.length;
+  if (!users.length) {
+    label.textContent = 'No hay usuarios registrados.';
+    wrapper.classList.add('d-none');
+    return;
+  }
+
+  if (!total) {
+    label.textContent = 'No se encontraron usuarios con los filtros seleccionados.';
+    wrapper.classList.remove('d-none');
+    return;
+  }
+
+  const { page, pageSize } = usersPaginationState;
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(start + pageSize - 1, total);
+  label.textContent = `Mostrando ${start}-${end} de ${total} usuarios`;
+  wrapper.classList.remove('d-none');
+}
+
+function renderUsersPagination() {
+  const container = document.getElementById('usersPagination');
+  if (!container) return;
+
+  const total = filteredUsers.length;
+  const { page, pageSize } = usersPaginationState;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  if (total <= pageSize) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  const createItem = (label, disabled, targetPage) => {
+    const li = document.createElement('li');
+    li.className = `page-item ${disabled ? 'disabled' : ''}`;
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'page-link';
+    link.textContent = label;
+    if (!disabled) {
+      link.addEventListener('click', () => goToUsersPage(targetPage));
+    }
+    li.appendChild(link);
+    return li;
+  };
+
+  container.appendChild(createItem('Anterior', page <= 1, Math.max(1, page - 1)));
+
+  const infoItem = document.createElement('li');
+  infoItem.className = 'page-item disabled';
+  const infoLink = document.createElement('span');
+  infoLink.className = 'page-link text-muted';
+  infoLink.textContent = `Página ${page} de ${totalPages}`;
+  infoItem.appendChild(infoLink);
+  container.appendChild(infoItem);
+
+  container.appendChild(createItem('Siguiente', page >= totalPages, Math.min(totalPages, page + 1)));
+}
+
+function goToUsersPage(targetPage) {
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPaginationState.pageSize));
+  const page = Math.min(Math.max(1, targetPage), totalPages);
+  if (page === usersPaginationState.page) return;
+  usersPaginationState.page = page;
+  renderUsersTable(getPaginatedUsers());
+  renderUsersPagination();
+  updateUsersCountLabel();
+}
+
 /* ----------------- Data loaders ---------------- */
 async function loadUsers() {
   try {
     const data = await apiFetch('/users'); // array o {items:[]}
     const arr = Array.isArray(data) ? data : (data.items ?? []);
+    const meta = Array.isArray(data) ? null : (data.meta ?? data.pagination ?? null);
     // Asegura role normalizado
     users = arr.map(u => ({
       ...u,
       role: u.role ?? roles.find(r => r.id === u.rol_id) ?? { id: u.rol_id, codigo: 'desconocido', nombre: 'Desconocido' }
     }));
+    filteredUsers = [...users];
+    usersPaginationState.totalItems = filteredUsers.length;
+    if (meta?.pageSize) usersPaginationState.pageSize = Number(meta.pageSize) || USERS_DEFAULT_PAGE_SIZE;
+    if (meta?.page) usersPaginationState.page = Number(meta.page) || 1;
+    if (meta?.total != null && Number.isFinite(Number(meta.total))) {
+      usersPaginationState.totalItems = Number(meta.total);
+    }
     filterUsers();
   } catch (e) {
     showAlert(`No se pudieron cargar usuarios: ${e.message}`, 'danger');
     renderUsersTable([]);
+    filteredUsers = [];
+    updateUsersCountLabel();
+    renderUsersPagination();
   }
 }
 
@@ -397,6 +646,7 @@ async function loadRoles() {
   const data = await apiFetch('/roles'); // [{id,codigo,nombre}]
   roles = Array.isArray(data) ? data : (data.items ?? []);
   if (!roles.length) throw new Error('No se recibieron roles');
+  validatePanelRolesAvailability();
   populateRoleSelects();
 }
 
@@ -409,19 +659,16 @@ async function loadEspecialidades() {
 function populateRoleSelects() {
   const filterSelect = document.getElementById('filterType');
   configureUserRoleSelect();
-  const allowedRoles = getPanelAllowedRoles().sort((a, b) => {
-    const nameA = String(a?.nombre ?? '').toLowerCase();
-    const nameB = String(b?.nombre ?? '').toLowerCase();
-    return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
-  });
+  const allowedRoles = getPanelAllowedRoles();
   if (filterSelect) {
     filterSelect.innerHTML = '<option value="">Todos los tipos</option>';
     allowedRoles.forEach(role => {
       const option = document.createElement('option');
-      option.value = role.codigo;
-      option.textContent = role.nombre;
+      option.value = (role?.codigo || '').toLowerCase();
+      option.textContent = role?.nombre ?? role?.codigo ?? '';
       filterSelect.appendChild(option);
     });
+    filterSelect.disabled = !allowedRoles.length;
   }
 }
 
@@ -434,24 +681,32 @@ function configureUserRoleSelect({ selectedRoleId = null } = {}) {
     : (select.value ? Number(select.value) : null);
 
   const allowedRoles = getPanelAllowedRoles();
-  const options = [...allowedRoles];
-
-  options.sort((a, b) => {
-    const nameA = String(a?.nombre ?? '').toLowerCase();
-    const nameB = String(b?.nombre ?? '').toLowerCase();
-    return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
-  });
 
   select.innerHTML = '<option value="">Seleccionar tipo</option>';
-  options.forEach((role) => {
+  allowedRoles.forEach((role) => {
     if (!role) return;
     const option = document.createElement('option');
     option.value = role.id;
     option.textContent = role.nombre;
     option.dataset.codigo = role.codigo;
-    if (!PANEL_ALLOWED_ROLE_CODES.has((role.codigo || '').toLowerCase())) {
-      option.disabled = true;
-    }
+    option.disabled = false;
+    select.appendChild(option);
+  });
+
+  if (!allowedRoles.length) {
+    select.disabled = true;
+  }
+
+  const disallowed = roles
+    .filter(role => role && !PANEL_ALLOWED_ROLE_CODES.has((role.codigo || '').toLowerCase()))
+    .sort((a, b) => String(a?.nombre ?? '').localeCompare(String(b?.nombre ?? ''), 'es', { sensitivity: 'base' }));
+
+  disallowed.forEach((role) => {
+    const option = document.createElement('option');
+    option.value = role.id;
+    option.textContent = `${role.nombre} (no disponible)`;
+    option.dataset.codigo = role.codigo;
+    option.disabled = true;
     select.appendChild(option);
   });
 
@@ -461,7 +716,17 @@ function configureUserRoleSelect({ selectedRoleId = null } = {}) {
     select.value = '';
   }
 
-  select.disabled = false;
+  if (allowedRoles.length) {
+    select.disabled = false;
+  }
+}
+
+function validatePanelRolesAvailability() {
+  const missingCodes = PANEL_ALLOWED_ROLE_ORDER.filter(code => !roles.some(role => (role?.codigo || '').toLowerCase() === code));
+  if (missingCodes.length) {
+    const humanList = missingCodes.map(code => code.toUpperCase()).join(', ');
+    showAlert(`Advertencia: los roles ${humanList} no están disponibles en la API. Verifica la configuración del backend para exponerlos.`, 'warning');
+  }
 }
 
 function getSelectedRoleCode() {
@@ -547,24 +812,711 @@ function renderUsersTable(usersToRender) {
 }
 
 function filterUsers() {
-  const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
-  const filterType = document.getElementById('filterType')?.value || '';
+  const normalizedTerm = currentSearchTerm.trim().toLowerCase();
+  const normalizedFilter = currentRoleFilter.trim().toLowerCase();
 
-  const filtered = users.filter(user => {
+  filteredUsers = users.filter(user => {
     const p = user.persona ?? {};
-    const hay = `${p.primer_nombre ?? ''} ${p.apellido_paterno ?? ''} ${p.dni ?? ''} ${p.telefono ?? ''}`.toLowerCase();
-    const searchMatch = hay.includes(searchTerm);
-    const typeMatch = !filterType || (user.role?.codigo === filterType);
+    const hay = `${p.primer_nombre ?? ''} ${p.apellido_paterno ?? ''} ${p.dni ?? ''} ${p.telefono ?? ''} ${p.correo ?? ''}`.toLowerCase();
+    const searchMatch = !normalizedTerm || hay.includes(normalizedTerm);
+    const roleCode = (user.role?.codigo || '').toLowerCase();
+    const typeMatch = !normalizedFilter || roleCode === normalizedFilter;
     return searchMatch && typeMatch;
   });
 
-  renderUsersTable(filtered);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPaginationState.pageSize));
+  if (usersPaginationState.page > totalPages) {
+    usersPaginationState.page = totalPages;
+  }
+
+  usersPaginationState.totalItems = filteredUsers.length;
+
+  renderUsersTable(getPaginatedUsers());
+  renderUsersPagination();
+  updateUsersCountLabel();
+}
+
+/* ----------------- Wizard helpers -------------- */
+function setStepAlert(elementId, message = null, type = 'info') {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  element.classList.remove('alert-info', 'alert-success', 'alert-danger', 'alert-warning');
+  if (!message) {
+    element.textContent = '';
+    element.classList.add('d-none');
+    return;
+  }
+  element.textContent = message;
+  element.classList.remove('d-none');
+  element.classList.add(`alert-${type}`);
+}
+
+function resetStepAlerts() {
+  ['contactStepAlert', 'identityStepAlert', 'securityStepAlert'].forEach(id => setStepAlert(id, null));
+}
+
+function updateStepIndicator(currentStep) {
+  const items = document.querySelectorAll('#userFormStepIndicator .step-indicator-item');
+  items.forEach((item) => {
+    const stepIndex = Number(item.dataset.step);
+    const badge = item.querySelector('.badge');
+    if (stepIndex === currentStep) {
+      item.classList.add('active');
+      item.classList.remove('text-muted');
+      if (badge) {
+        badge.classList.remove('bg-secondary');
+        badge.classList.add('bg-primary');
+      }
+    } else {
+      item.classList.remove('active');
+      item.classList.add('text-muted');
+      if (badge) {
+        badge.classList.remove('bg-primary');
+        badge.classList.add('bg-secondary');
+      }
+    }
+  });
+}
+
+function setFormStep(step) {
+  const state = ensureUserFormState();
+  const normalized = Math.min(Math.max(1, Number(step) || 1), STEP_COUNT);
+  state.step = normalized;
+  const sections = document.querySelectorAll('.signup-step');
+  sections.forEach(section => {
+    const sectionStep = Number(section.dataset.step);
+    if (sectionStep === normalized) {
+      section.classList.remove('d-none');
+    } else {
+      section.classList.add('d-none');
+    }
+  });
+  const prevButton = document.getElementById('prevStepButton');
+  const nextButton = document.getElementById('nextStepButton');
+  const saveButton = document.getElementById('saveUserButton');
+  prevButton?.classList.toggle('d-none', normalized <= 1);
+  nextButton?.classList.toggle('d-none', normalized >= STEP_COUNT);
+  saveButton?.classList.toggle('d-none', normalized < STEP_COUNT);
+  updateStepIndicator(normalized);
+}
+
+async function handleNextStep() {
+  const state = ensureUserFormState();
+  if (state.step === 1) {
+    const ok = await processContactStep();
+    if (!ok) return;
+  }
+  if (state.step === 2) {
+    setStepAlert('identityStepAlert', 'Identidad confirmada.', 'success');
+  }
+  setFormStep(state.step + 1);
+}
+
+function handlePrevStep() {
+  const state = ensureUserFormState();
+  if (state.step <= 1) return;
+  setFormStep(state.step - 1);
+}
+
+function handleTelefonoBlur(event) {
+  const input = event?.target || event?.currentTarget;
+  if (!input) return;
+  const result = validatePhone(input.value);
+  input.value = result.normalized || '';
+  ensureUserFormState().verification.conflictsCleared = false;
+  if (!result.valid && input.value) {
+    setStepAlert('contactStepAlert', result.error || signupMessages.phoneInvalid, 'danger');
+    showFieldError('telefonoFeedback', result.error || signupMessages.phoneInvalid);
+  } else {
+    showFieldError('telefonoFeedback', null);
+  }
+}
+
+function handleDniInputChange(event) {
+  const input = event?.target || event?.currentTarget;
+  if (!input) return;
+  const formatted = SignupValidation.formatDni
+    ? SignupValidation.formatDni(input.value)
+    : normalizeDigits(input.value).slice(0, 8);
+  if (input.value !== formatted) input.value = formatted;
+  const state = ensureUserFormState();
+  if (state.dni.lastConsulted && state.dni.lastConsulted !== formatted) {
+    state.dni.lookup = null;
+    state.dni.error = null;
+    state.dni.lastConsulted = null;
+    state.verification.dniMatch = false;
+    state.verification.dniLookup = null;
+    state.verification.conflictsCleared = false;
+    clearPersonalInfoFields();
+    showFieldError('dniLookupFeedback', null);
+  }
+}
+
+function updateDniLookupLoading(isLoading) {
+  const button = document.getElementById('dniLookupButton');
+  if (!button) return;
+  if (isLoading) {
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Consultando...';
+  } else {
+    button.disabled = false;
+    button.innerHTML = 'Consultar RENIEC';
+  }
+}
+
+function showFieldError(elementId, message) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  if (!message) {
+    element.textContent = '';
+    element.classList.add('d-none');
+  } else {
+    element.textContent = message;
+    element.classList.remove('d-none');
+  }
+}
+
+function clearPersonalInfoFields() {
+  ['primerNombre', 'segundoNombre', 'apellidoPaterno', 'apellidoMaterno'].forEach(id => {
+    const input = document.getElementById(id);
+    if (input) input.value = '';
+  });
+}
+
+function fillPersonalInfoFieldsFromLookup(data = {}) {
+  const mapping = {
+    primerNombre: data.primer_nombre ?? data.primerNombre,
+    segundoNombre: data.segundo_nombre ?? data.segundoNombre,
+    apellidoPaterno: data.apellido_paterno ?? data.apellidoPaterno,
+    apellidoMaterno: data.apellido_materno ?? data.apellidoMaterno,
+  };
+  Object.entries(mapping).forEach(([id, value]) => {
+    const input = document.getElementById(id);
+    if (input) input.value = value ? String(value).trim() : '';
+  });
+}
+
+function updateEmailButtonsState() {
+  const state = ensureUserFormState().email;
+  const sendBtn = document.getElementById('emailSendCodeButton');
+  const verifyBtn = document.getElementById('emailVerifyCodeButton');
+  const codeInput = document.getElementById('emailCodigo');
+  const isBusy = state.sending || state.validating;
+  if (sendBtn) sendBtn.disabled = isBusy;
+  if (verifyBtn) verifyBtn.disabled = state.verifying || !state.codeRequested;
+  if (codeInput) codeInput.disabled = !state.codeRequested && state.status !== SignupValidation.VerificationStatus.VERIFIED;
+}
+
+function updateEmailVerificationStatusUI() {
+  const state = ensureUserFormState().email;
+  const emailInput = document.getElementById('email');
+  const statusElement = document.getElementById('emailVerificationStatus');
+  if (!statusElement) return;
+  const normalizedEmail = normalizeEmail(emailInput?.value || '');
+  state.status = SignupValidation.getEmailVerificationStatus({
+    codeRequested: state.codeRequested,
+    currentEmail: normalizedEmail,
+    emailUsedForCode: state.emailUsedForCode,
+    verifiedEmail: state.verifiedEmail,
+    expiresAt: state.codeExpiresAt,
+  });
+  const text = EMAIL_STATUS_LABELS[state.status] || EMAIL_STATUS_LABELS[SignupValidation.VerificationStatus.NOT_REQUESTED];
+  statusElement.textContent = text;
+  statusElement.className = `small mt-1 ${EMAIL_STATUS_CLASSES[state.status] || 'text-muted'}`;
+}
+
+function resetUbigeoSelectors() {
+  const state = ensureUserFormState();
+  state.ubigeo.selectedDepartamento = '';
+  state.ubigeo.selectedProvincia = '';
+  state.ubigeo.selectedDistrito = '';
+  populateDepartamentoSelect();
+  populateProvinciaSelect();
+  populateDistritoSelect();
+}
+
+function getSelectedUbigeoCodigo() {
+  const state = ensureUserFormState();
+  return state.ubigeo.selectedDistrito || '';
+}
+
+async function processContactStep() {
+  const state = ensureUserFormState();
+  const dniInput = document.getElementById('dni');
+  const telefonoInput = document.getElementById('telefono');
+  const emailInput = document.getElementById('email');
+  const lineaInput = document.getElementById('lineaExactaDireccion');
+  const rolSelect = document.getElementById('rol');
+
+  const dniValidation = validateDni(dniInput?.value);
+  if (!dniValidation.valid) {
+    showFieldError('dniLookupFeedback', dniValidation.error || signupMessages.dniInvalid);
+    setStepAlert('contactStepAlert', dniValidation.error || signupMessages.dniInvalid, 'danger');
+    dniInput?.focus();
+    return false;
+  }
+
+  if (!state.dni.lookup || state.dni.lastConsulted !== dniValidation.normalized) {
+    await handleDniLookup();
+    if (!state.dni.lookup) {
+      return false;
+    }
+  }
+
+  const phoneValidation = validatePhone(telefonoInput?.value);
+  if (!phoneValidation.valid) {
+    showFieldError('telefonoFeedback', phoneValidation.error || signupMessages.phoneInvalid);
+    setStepAlert('contactStepAlert', phoneValidation.error || signupMessages.phoneInvalid, 'danger');
+    telefonoInput?.focus();
+    return false;
+  }
+  telefonoInput.value = phoneValidation.normalized;
+
+  const emailValidation = validateEmail(emailInput?.value);
+  if (!emailValidation.valid) {
+    showFieldError('emailFeedback', emailValidation.error || signupMessages.emailInvalid);
+    setStepAlert('contactStepAlert', emailValidation.error || signupMessages.emailInvalid, 'danger');
+    emailInput?.focus();
+    return false;
+  }
+
+  updateEmailVerificationStatusUI();
+  if (state.email.status !== SignupValidation.VerificationStatus.VERIFIED) {
+    const message = 'Debes verificar el correo antes de continuar.';
+    showFieldError('emailCodeError', message);
+    setStepAlert('contactStepAlert', message, 'danger');
+    return false;
+  }
+
+  if (!state.ubigeo.selectedDepartamento || !state.ubigeo.selectedProvincia || !state.ubigeo.selectedDistrito) {
+    const message = 'Selecciona departamento, provincia y distrito.';
+    setStepAlert('contactStepAlert', message, 'danger');
+    return false;
+  }
+
+  if (lineaInput) lineaInput.value = lineaInput.value.trim();
+  if (!lineaInput?.value) {
+    const message = 'Ingresa la dirección exacta.';
+    setStepAlert('contactStepAlert', message, 'danger');
+    lineaInput?.focus();
+    return false;
+  }
+
+  if (!rolSelect?.value) {
+    const message = 'Selecciona un tipo de usuario válido.';
+    setStepAlert('contactStepAlert', message, 'danger');
+    rolSelect?.focus();
+    return false;
+  }
+
+  const normalizedEmail = normalizeEmail(emailInput.value);
+  const personaIdForExclusion = state.personaId ?? state.dni.lookup?.personaId ?? null;
+  const conflictMessage = await ensureNoPersonaConflicts({
+    dni: dniValidation.normalized,
+    telefono: phoneValidation.normalized,
+    correo: normalizedEmail,
+    excludeUserId: isEditing ? currentUserId : null,
+    excludePersonaId: isEditing ? personaIdForExclusion : null,
+  });
+
+  if (conflictMessage) {
+    setStepAlert('contactStepAlert', conflictMessage, 'danger');
+    return false;
+  }
+
+  state.verification.dniMatch = true;
+  state.verification.conflictsCleared = true;
+  state.verification.emailVerification = {
+    email: normalizedEmail,
+    verifiedAt: new Date().toISOString(),
+  };
+  setStepAlert('contactStepAlert', 'Datos de contacto verificados correctamente.', 'success');
+  setStepAlert('identityStepAlert', 'Verifica que los datos coincidan con el DNI consultado.', 'info');
+  return true;
+}
+
+function preparePasswordFieldsForCreation() {
+  const fields = document.getElementById('password-fields');
+  const changeButton = document.getElementById('change-password-button');
+  const claveInput = document.getElementById('clave');
+  const confirmarInput = document.getElementById('confirmarClave');
+  fields?.classList.remove('d-none');
+  changeButton?.classList.add('d-none');
+  if (claveInput) {
+    claveInput.value = '';
+    claveInput.required = true;
+    claveInput.disabled = false;
+  }
+  if (confirmarInput) {
+    confirmarInput.value = '';
+    confirmarInput.required = true;
+    confirmarInput.disabled = false;
+  }
+}
+
+function preparePasswordFieldsForEdition() {
+  const fields = document.getElementById('password-fields');
+  const changeButton = document.getElementById('change-password-button');
+  const claveInput = document.getElementById('clave');
+  const confirmarInput = document.getElementById('confirmarClave');
+  fields?.classList.add('d-none');
+  changeButton?.classList.remove('d-none');
+  if (claveInput) {
+    claveInput.value = '';
+    claveInput.required = false;
+    claveInput.disabled = true;
+  }
+  if (confirmarInput) {
+    confirmarInput.value = '';
+    confirmarInput.required = false;
+    confirmarInput.disabled = true;
+  }
+}
+
+function enablePasswordEdition() {
+  const fields = document.getElementById('password-fields');
+  const changeButton = document.getElementById('change-password-button');
+  fields?.classList.remove('d-none');
+  changeButton?.classList.add('d-none');
+  const claveInput = document.getElementById('clave');
+  const confirmarInput = document.getElementById('confirmarClave');
+  if (claveInput) {
+    claveInput.disabled = false;
+    claveInput.required = true;
+    claveInput.focus();
+  }
+  if (confirmarInput) {
+    confirmarInput.disabled = false;
+    confirmarInput.required = true;
+  }
+}
+
+function handleEmailInputChange(event) {
+  const input = event?.target || event?.currentTarget;
+  const value = input?.value ?? '';
+  const normalizedEmail = normalizeEmail(value);
+  const state = ensureUserFormState().email;
+  if (state.verifiedEmail && normalizedEmail !== state.verifiedEmail) {
+    state.verifiedEmail = null;
+  }
+  if (state.emailUsedForCode && normalizedEmail !== state.emailUsedForCode) {
+    state.codeRequested = false;
+    state.emailUsedForCode = null;
+    state.codeSentAt = null;
+    state.codeExpiresAt = null;
+    const codeInput = document.getElementById('emailCodigo');
+    if (codeInput) codeInput.value = '';
+  }
+  showFieldError('emailFeedback', null);
+  showFieldError('emailCodeError', null);
+  state.verification.conflictsCleared = false;
+  state.verification.emailVerification = null;
+  updateEmailVerificationStatusUI();
+  updateEmailButtonsState();
+}
+
+async function handleEmailSendCode() {
+  const state = ensureUserFormState().email;
+  if (state.sending || state.validating) return;
+  const emailInput = document.getElementById('email');
+  const validation = validateEmail(emailInput?.value);
+  if (!validation.valid) {
+    showFieldError('emailFeedback', validation.error || signupMessages.emailInvalid);
+    setStepAlert('contactStepAlert', validation.error || signupMessages.emailInvalid, 'danger');
+    return;
+  }
+
+  const normalizedEmail = validation.normalized;
+  ensureUserFormState().verification.conflictsCleared = false;
+  ensureUserFormState().verification.emailVerification = null;
+  state.validating = true;
+  updateEmailButtonsState();
+  try {
+    await apiFetch('/auth/email/validate', {
+      method: 'POST',
+      body: JSON.stringify({ correo: normalizedEmail }),
+    });
+    state.validating = false;
+    state.sending = true;
+    updateEmailButtonsState();
+
+    const response = await apiFetch('/auth/email/request-code', {
+      method: 'POST',
+      body: JSON.stringify({ correo: normalizedEmail }),
+    });
+
+    const expirationRaw = response?.expiracion;
+    state.codeRequested = true;
+    state.emailUsedForCode = normalizedEmail;
+    state.codeSentAt = new Date();
+    state.codeExpiresAt = expirationRaw ? new Date(expirationRaw) : null;
+    state.status = SignupValidation.VerificationStatus.CODE_SENT;
+    state.verifiedEmail = null;
+    setStepAlert('contactStepAlert', `Se envió un código de verificación a ${normalizedEmail}.`, 'success');
+    showFieldError('emailFeedback', null);
+    showFieldError('emailCodeError', null);
+    updateEmailVerificationStatusUI();
+    const codeInput = document.getElementById('emailCodigo');
+    if (codeInput) {
+      codeInput.disabled = false;
+      codeInput.focus();
+    }
+  } catch (error) {
+    const message = error?.message || 'No se pudo enviar el código de verificación.';
+    showFieldError('emailFeedback', message);
+    setStepAlert('contactStepAlert', message, 'danger');
+  } finally {
+    state.validating = false;
+    state.sending = false;
+    updateEmailButtonsState();
+    updateEmailVerificationStatusUI();
+  }
+}
+
+async function handleEmailVerifyCode() {
+  const state = ensureUserFormState().email;
+  if (state.verifying) return;
+
+  const emailInput = document.getElementById('email');
+  const codeInput = document.getElementById('emailCodigo');
+  const validation = validateEmail(emailInput?.value);
+  if (!validation.valid) {
+    showFieldError('emailFeedback', validation.error || signupMessages.emailInvalid);
+    setStepAlert('contactStepAlert', validation.error || signupMessages.emailInvalid, 'danger');
+    return;
+  }
+
+  const normalizedEmail = validation.normalized;
+  if (!state.codeRequested || state.emailUsedForCode !== normalizedEmail) {
+    const message = 'Solicita un código de verificación para el correo actual.';
+    showFieldError('emailCodeError', message);
+    setStepAlert('contactStepAlert', message, 'warning');
+    return;
+  }
+
+  const code = normalizeDigits(codeInput?.value || '');
+  if (!SignupValidation.isValidEmailCode(code)) {
+    const message = signupMessages.emailCodeShort;
+    showFieldError('emailCodeError', message);
+    setStepAlert('contactStepAlert', message, 'danger');
+    return;
+  }
+
+  state.verifying = true;
+  updateEmailButtonsState();
+  try {
+    await apiFetch('/auth/email/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ correo: normalizedEmail, codigo: code }),
+    });
+    state.verifiedEmail = normalizedEmail;
+    state.status = SignupValidation.VerificationStatus.VERIFIED;
+    ensureUserFormState().verification.emailVerification = {
+      email: normalizedEmail,
+      verifiedAt: new Date().toISOString(),
+    };
+    showFieldError('emailCodeError', null);
+    setStepAlert('contactStepAlert', 'Correo verificado correctamente.', 'success');
+  } catch (error) {
+    const message = error?.message || 'Código incorrecto o expirado.';
+    state.verifiedEmail = null;
+    showFieldError('emailCodeError', message);
+    setStepAlert('contactStepAlert', message, 'danger');
+  } finally {
+    state.verifying = false;
+    updateEmailButtonsState();
+    updateEmailVerificationStatusUI();
+  }
+}
+
+async function ensureDepartamentosLoaded() {
+  const state = ensureUserFormState();
+  if (ubigeoCache.departamentos) {
+    populateDepartamentoSelect();
+    return ubigeoCache.departamentos;
+  }
+  const select = document.getElementById('ubigeoDepartamento');
+  if (select) {
+    select.disabled = true;
+    select.innerHTML = '<option value="">Cargando...</option>';
+  }
+  state.ubigeo.loadingDepartamentos = true;
+  try {
+    const data = await apiFetch('/ubigeo/departamentos');
+    ubigeoCache.departamentos = Array.isArray(data) ? data : (data.items ?? []);
+  } catch (error) {
+    ubigeoCache.departamentos = [];
+    setStepAlert('contactStepAlert', `No se pudieron cargar los departamentos: ${error.message}`, 'danger');
+  } finally {
+    state.ubigeo.loadingDepartamentos = false;
+    populateDepartamentoSelect();
+  }
+  return ubigeoCache.departamentos;
+}
+
+async function loadProvinciasForDepartamento(departamentoCodigo) {
+  const state = ensureUserFormState();
+  const select = document.getElementById('ubigeoProvincia');
+  if (!departamentoCodigo) {
+    state.ubigeo.selectedProvincia = '';
+    state.ubigeo.selectedDistrito = '';
+    populateProvinciaSelect();
+    populateDistritoSelect();
+    return [];
+  }
+  if (!ubigeoCache.provincias.has(departamentoCodigo)) {
+    if (select) {
+      select.disabled = true;
+      select.innerHTML = '<option value="">Cargando...</option>';
+    }
+    state.ubigeo.loadingProvincias = true;
+    try {
+      const data = await apiFetch(`/ubigeo/departamentos/${departamentoCodigo}/provincias`);
+      ubigeoCache.provincias.set(departamentoCodigo, Array.isArray(data) ? data : (data.items ?? []));
+    } catch (error) {
+      ubigeoCache.provincias.set(departamentoCodigo, []);
+      setStepAlert('contactStepAlert', `No se pudieron cargar las provincias: ${error.message}`, 'danger');
+    } finally {
+      state.ubigeo.loadingProvincias = false;
+    }
+  }
+  populateProvinciaSelect(departamentoCodigo);
+  populateDistritoSelect();
+  return ubigeoCache.provincias.get(departamentoCodigo) || [];
+}
+
+async function loadDistritosForProvincia(provinciaCodigo) {
+  const state = ensureUserFormState();
+  const select = document.getElementById('ubigeoDistrito');
+  if (!provinciaCodigo) {
+    state.ubigeo.selectedDistrito = '';
+    populateDistritoSelect();
+    return [];
+  }
+  if (!ubigeoCache.distritos.has(provinciaCodigo)) {
+    if (select) {
+      select.disabled = true;
+      select.innerHTML = '<option value="">Cargando...</option>';
+    }
+    state.ubigeo.loadingDistritos = true;
+    try {
+      const data = await apiFetch(`/ubigeo/provincias/${provinciaCodigo}/distritos`);
+      ubigeoCache.distritos.set(provinciaCodigo, Array.isArray(data) ? data : (data.items ?? []));
+    } catch (error) {
+      ubigeoCache.distritos.set(provinciaCodigo, []);
+      setStepAlert('contactStepAlert', `No se pudieron cargar los distritos: ${error.message}`, 'danger');
+    } finally {
+      state.ubigeo.loadingDistritos = false;
+    }
+  }
+  populateDistritoSelect(provinciaCodigo);
+  return ubigeoCache.distritos.get(provinciaCodigo) || [];
+}
+
+function populateDepartamentoSelect() {
+  const select = document.getElementById('ubigeoDepartamento');
+  if (!select) return;
+  const state = ensureUserFormState();
+  const options = ubigeoCache.departamentos || [];
+  select.innerHTML = '<option value="">Seleccionar</option>';
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.codigo;
+    option.textContent = opt.nombre;
+    select.appendChild(option);
+  });
+  select.disabled = state.ubigeo.loadingDepartamentos || !options.length;
+  if (state.ubigeo.selectedDepartamento) {
+    select.value = state.ubigeo.selectedDepartamento;
+  }
+}
+
+function populateProvinciaSelect(departamentoCodigo = ensureUserFormState().ubigeo.selectedDepartamento) {
+  const select = document.getElementById('ubigeoProvincia');
+  if (!select) return;
+  const state = ensureUserFormState();
+  const options = departamentoCodigo ? (ubigeoCache.provincias.get(departamentoCodigo) || []) : [];
+  select.innerHTML = '<option value="">Seleccionar</option>';
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.codigo;
+    option.textContent = opt.nombre;
+    select.appendChild(option);
+  });
+  select.disabled = !departamentoCodigo || !options.length || state.ubigeo.loadingProvincias;
+  if (state.ubigeo.selectedProvincia && !select.disabled) {
+    select.value = state.ubigeo.selectedProvincia;
+  }
+}
+
+function populateDistritoSelect(provinciaCodigo = ensureUserFormState().ubigeo.selectedProvincia) {
+  const select = document.getElementById('ubigeoDistrito');
+  if (!select) return;
+  const state = ensureUserFormState();
+  const options = provinciaCodigo ? (ubigeoCache.distritos.get(provinciaCodigo) || []) : [];
+  select.innerHTML = '<option value="">Seleccionar</option>';
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.codigo;
+    option.textContent = opt.nombre;
+    select.appendChild(option);
+  });
+  select.disabled = !provinciaCodigo || !options.length || state.ubigeo.loadingDistritos;
+  if (state.ubigeo.selectedDistrito && !select.disabled) {
+    select.value = state.ubigeo.selectedDistrito;
+  }
+}
+
+async function handleDepartamentoChange(event) {
+  const code = (event?.target?.value || '').trim();
+  const state = ensureUserFormState();
+  state.ubigeo.selectedDepartamento = code;
+  state.ubigeo.selectedProvincia = '';
+  state.ubigeo.selectedDistrito = '';
+  state.verification.conflictsCleared = false;
+  await loadProvinciasForDepartamento(code);
+}
+
+async function handleProvinciaChange(event) {
+  const code = (event?.target?.value || '').trim();
+  const state = ensureUserFormState();
+  state.ubigeo.selectedProvincia = code;
+  state.ubigeo.selectedDistrito = '';
+  state.verification.conflictsCleared = false;
+  await loadDistritosForProvincia(code);
+}
+
+function handleDistritoChange(event) {
+  const code = (event?.target?.value || '').trim();
+  const state = ensureUserFormState();
+  state.ubigeo.selectedDistrito = code;
+  state.verification.conflictsCleared = false;
+}
+
+async function setUbigeoFromCodigo(codigo) {
+  if (!codigo) {
+    resetUbigeoSelectors();
+    return;
+  }
+  const state = ensureUserFormState();
+  const departamento = codigo.slice(0, 2);
+  const provincia = codigo.slice(0, 4);
+  const distrito = codigo.slice(0, 6);
+  state.ubigeo.selectedDepartamento = departamento;
+  await ensureDepartamentosLoaded();
+  await loadProvinciasForDepartamento(departamento);
+  state.ubigeo.selectedProvincia = provincia;
+  await loadDistritosForProvincia(provincia);
+  state.ubigeo.selectedDistrito = distrito;
+  populateDepartamentoSelect();
+  populateProvinciaSelect(departamento);
+  populateDistritoSelect(provincia);
 }
 
 /* ----------------- DNI lookup ------------------ */
 async function handleDniLookup(event) {
   if (!shouldRunPersonaValidations()) return;
-  const input = event?.target || event?.currentTarget || this;
+  const input = event?.target || event?.currentTarget || document.getElementById('dni');
   if (!input) return;
 
   const formatted = SignupValidation.formatDni
@@ -574,23 +1526,56 @@ async function handleDniLookup(event) {
 
   const dniResult = validateDni(formatted);
   if (!dniResult.valid) {
-    if (formatted && formatted.length === 8) {
-      showAlert(dniResult.error || signupMessages.dniInvalid, 'warning');
-    }
+    showFieldError('dniLookupFeedback', dniResult.error || signupMessages.dniInvalid);
+    setStepAlert('contactStepAlert', dniResult.error || signupMessages.dniInvalid, 'danger');
+    clearPersonalInfoFields();
     return;
   }
+
   const dni = dniResult.normalized;
+  const state = ensureUserFormState();
+  if (state.dni.loading) return;
+  if (state.dni.lookup && state.dni.lastConsulted === dni) {
+    return;
+  }
+
+  state.dni.loading = true;
+  state.dni.error = null;
+  updateDniLookupLoading(true);
   try {
     const data = await apiFetch(`/dni/${dni}`);
     if (data?.success && data?.data) {
       const d = data.data;
-      document.getElementById('primerNombre').value    = d.primer_nombre || '';
-      document.getElementById('segundoNombre').value   = d.segundo_nombre || '';
-      document.getElementById('apellidoPaterno').value = d.apellido_paterno || '';
-      document.getElementById('apellidoMaterno').value = d.apellido_materno || '';
+      fillPersonalInfoFieldsFromLookup(d);
+      state.dni.lookup = {
+        numero: dni,
+        primerNombre: d.primer_nombre ?? '',
+        segundoNombre: d.segundo_nombre ?? '',
+        apellidoPaterno: d.apellido_paterno ?? '',
+        apellidoMaterno: d.apellido_materno ?? '',
+        personaId: null,
+      };
+      state.dni.lastConsulted = dni;
+      state.dni.normalized = dni;
+      state.verification.dniLookup = state.dni.lookup;
+      state.verification.dniMatch = true;
+      showFieldError('dniLookupFeedback', null);
+      setStepAlert('contactStepAlert', 'DNI validado con RENIEC.', 'success');
+    } else {
+      throw new Error('No se encontró información del DNI.');
     }
-  } catch (e) {
-    showAlert(`Error consultando DNI: ${e.message}`, 'danger');
+  } catch (error) {
+    const message = error?.message || 'Error consultando DNI.';
+    state.dni.lookup = null;
+    state.dni.lastConsulted = null;
+    state.verification.dniLookup = null;
+    state.verification.dniMatch = false;
+    clearPersonalInfoFields();
+    showFieldError('dniLookupFeedback', message);
+    setStepAlert('contactStepAlert', message, 'danger');
+  } finally {
+    state.dni.loading = false;
+    updateDniLookupLoading(false);
   }
 }
 
@@ -598,15 +1583,25 @@ async function handleDniLookup(event) {
 function openUserModal() {
   isEditing = false;
   currentUserId = null;
+  resetUserFormState();
+  const form = document.getElementById('userForm');
+  form?.reset();
+  resetStepAlerts();
   document.getElementById('userModalLabel').textContent = 'Nuevo Usuario';
-  document.getElementById('userForm').reset();
-  document.getElementById('userId') && (document.getElementById('userId').value = '');
-  // contraseña visible y requerida en creación
-  document.getElementById('password-fields')?.classList.remove('d-none');
-  document.getElementById('change-password-button')?.classList.add('d-none');
-  document.getElementById('clave') && (document.getElementById('clave').required = true);
-  document.getElementById('confirmarClave') && (document.getElementById('confirmarClave').required = true);
+  document.getElementById('userId')?.value = '';
+  setValue('dni', '');
+  setValue('telefono', '');
+  setValue('email', '');
+  setValue('emailCodigo', '');
+  setValue('lineaExactaDireccion', '');
+  clearPersonalInfoFields();
+  preparePasswordFieldsForCreation();
   configureUserRoleSelect({ selectedRoleId: null });
+  ensureDepartamentosLoaded();
+  resetUbigeoSelectors();
+  updateEmailVerificationStatusUI();
+  updateEmailButtonsState();
+  setFormStep(1);
 }
 
 async function editUser(userId) {
@@ -617,29 +1612,73 @@ async function editUser(userId) {
 
     currentUserId = userId;
     isEditing = true;
+    resetUserFormState();
+    const form = document.getElementById('userForm');
+    form?.reset();
+    resetStepAlerts();
+
     document.getElementById('userModalLabel').textContent = 'Editar Usuario';
-    document.getElementById('userForm').reset();
 
-    // persona
-    const p = user.persona ?? {};
+    const persona = user.persona ?? {};
+    ensureUserFormState().personaId = persona.id ?? null;
     setValue('userId', user.id);
-    setValue('primerNombre', p.primer_nombre);
-    setValue('segundoNombre', p.segundo_nombre);
-    setValue('apellidoPaterno', p.apellido_paterno);
-    setValue('apellidoMaterno', p.apellido_materno);
-    setValue('dni', p.dni);
-    setValue('telefono', p.telefono);
-    setValue('email', p.correo);
-    setValue('direccion', p.direccion);
+    setValue('dni', persona.dni);
+    setValue('telefono', persona.telefono);
+    setValue('email', persona.correo);
+    setValue('emailCodigo', '');
+    setValue('lineaExactaDireccion', persona.linea_exacta_direccion ?? persona.direccion ?? '');
 
-    // rol
+    fillPersonalInfoFieldsFromLookup({
+      primer_nombre: persona.primer_nombre,
+      segundo_nombre: persona.segundo_nombre,
+      apellido_paterno: persona.apellido_paterno,
+      apellido_materno: persona.apellido_materno,
+    });
+
+    const emailState = ensureUserFormState().email;
+    if (persona.correo) {
+      emailState.verifiedEmail = normalizeEmail(persona.correo);
+      emailState.codeRequested = false;
+      emailState.emailUsedForCode = null;
+    }
+    updateEmailVerificationStatusUI();
+    updateEmailButtonsState();
+
+    const dniState = ensureUserFormState().dni;
+    if (persona.dni) {
+      dniState.normalized = persona.dni;
+      dniState.lookup = {
+        numero: persona.dni,
+        primerNombre: persona.primer_nombre ?? '',
+        segundoNombre: persona.segundo_nombre ?? '',
+        apellidoPaterno: persona.apellido_paterno ?? '',
+        apellidoMaterno: persona.apellido_materno ?? '',
+        personaId: persona.id ?? null,
+      };
+      dniState.lastConsulted = persona.dni;
+      ensureUserFormState().verification.dniMatch = true;
+      ensureUserFormState().verification.dniLookup = dniState.lookup;
+    } else {
+      clearPersonalInfoFields();
+    }
+
+    ensureUserFormState().verification.conflictsCleared = true;
+    ensureUserFormState().verification.emailVerification = {
+      email: persona.correo ? normalizeEmail(persona.correo) : null,
+      verifiedAt: new Date().toISOString(),
+    };
+
     configureUserRoleSelect({ selectedRoleId: user.rol_id });
 
-    // contraseña: ocultar en edición
-    document.getElementById('password-fields')?.classList.add('d-none');
-    document.getElementById('change-password-button')?.classList.remove('d-none');
-    if (document.getElementById('clave')) document.getElementById('clave').required = false;
-    if (document.getElementById('confirmarClave')) document.getElementById('confirmarClave').required = false;
+    await ensureDepartamentosLoaded();
+    if (persona.direccion_id) {
+      await setUbigeoFromCodigo(persona.direccion_id);
+    } else {
+      resetUbigeoSelectors();
+    }
+
+    preparePasswordFieldsForEdition();
+    setFormStep(1);
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).show();
   } catch (e) {
@@ -658,22 +1697,34 @@ async function saveUser() {
   const form = document.getElementById('userForm');
   if (!form?.checkValidity()) { form?.reportValidity(); return; }
 
-  // validaciones extra
+  const state = ensureUserFormState();
+  if (!state.verification.dniMatch || !state.verification.conflictsCleared) {
+    setFormStep(1);
+    setStepAlert('contactStepAlert', 'Completa la verificación de contacto e identidad antes de guardar.', 'danger');
+    return;
+  }
+
   const dniResult = validateDni(document.getElementById('dni')?.value);
   if (!dniResult.valid) {
-    return showAlert(dniResult.error || signupMessages.dniInvalid, 'danger');
+    setFormStep(1);
+    setStepAlert('contactStepAlert', dniResult.error || signupMessages.dniInvalid, 'danger');
+    return;
   }
   const dni = dniResult.normalized;
 
   const emailResult = validateEmail(document.getElementById('email')?.value);
   if (!emailResult.valid) {
-    return showAlert(emailResult.error || signupMessages.emailInvalid, 'danger');
+    setFormStep(1);
+    setStepAlert('contactStepAlert', emailResult.error || signupMessages.emailInvalid, 'danger');
+    return;
   }
   const email = emailResult.normalized;
 
   const phoneResult = validatePhone(document.getElementById('telefono')?.value);
   if (!phoneResult.valid) {
-    return showAlert(phoneResult.error || signupMessages.phoneInvalid, 'danger');
+    setFormStep(1);
+    setStepAlert('contactStepAlert', phoneResult.error || signupMessages.phoneInvalid, 'danger');
+    return;
   }
   const telefonoNormalizado = phoneResult.normalized;
 
@@ -683,9 +1734,11 @@ async function saveUser() {
   if (pwContainer && !pwContainer.classList.contains('d-none')) {
     const clave = document.getElementById('clave')?.value || '';
     const confirmar = document.getElementById('confirmarClave')?.value || '';
-    const passwordValidation = validatePasswordPair(clave, confirmar);
+    const passwordValidation = validatePasswordPair(clave, confirmar, { requireBoth: true });
     if (!passwordValidation.valid) {
-      return showAlert(passwordValidation.error || signupMessages.passwordShort, 'danger');
+      setFormStep(3);
+      setStepAlert('securityStepAlert', passwordValidation.error || signupMessages.passwordShort, 'danger');
+      return;
     }
     claveToSend = passwordValidation.password;
   }
@@ -698,6 +1751,20 @@ async function saveUser() {
     return showAlert('Solo se pueden gestionar cuentas de clientes o administradores desde este panel.', 'danger');
   }
 
+  const direccionId = getSelectedUbigeoCodigo();
+  if (!direccionId) {
+    setFormStep(1);
+    setStepAlert('contactStepAlert', 'Selecciona el distrito del usuario.', 'danger');
+    return;
+  }
+
+  const lineaExacta = trimOrUndefined(document.getElementById('lineaExactaDireccion')?.value);
+  if (!lineaExacta) {
+    setFormStep(1);
+    setStepAlert('contactStepAlert', 'Ingresa la dirección exacta.', 'danger');
+    return;
+  }
+
   const personaPayload = {
     dni,
     telefono: telefonoNormalizado,
@@ -706,14 +1773,15 @@ async function saveUser() {
     segundo_nombre: trimOrUndefined(document.getElementById('segundoNombre')?.value),
     apellido_paterno: trimOrUndefined(document.getElementById('apellidoPaterno')?.value),
     apellido_materno: trimOrUndefined(document.getElementById('apellidoMaterno')?.value),
-    direccion: trimOrUndefined(document.getElementById('direccion')?.value),
+    linea_exacta_direccion: lineaExacta,
+    direccion_id: direccionId,
   };
 
   const payloadUser = { persona: personaPayload, rol_id: rolId };
   if (claveToSend) payloadUser.clave = claveToSend;
 
   const currentUser = isEditing ? users.find(u => u.id === currentUserId) : null;
-  const excludePersonaId = currentUser?.persona_id ?? currentUser?.persona?.id ?? null;
+  const excludePersonaId = currentUser?.persona_id ?? currentUser?.persona?.id ?? state.personaId ?? null;
 
   try {
     if (shouldRunPersonaValidations(rolCodigo)) {
@@ -725,7 +1793,8 @@ async function saveUser() {
         excludePersonaId,
       });
       if (conflictMessage) {
-        showAlert(conflictMessage, 'danger');
+        setFormStep(1);
+        setStepAlert('contactStepAlert', conflictMessage, 'danger');
         return;
       }
     }
@@ -748,6 +1817,7 @@ async function saveUser() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).hide();
   } catch (e) {
     const message = e?.message || 'Error guardando usuario';
+    setStepAlert('securityStepAlert', message, 'danger');
     showAlert(message, 'danger');
   }
 }
