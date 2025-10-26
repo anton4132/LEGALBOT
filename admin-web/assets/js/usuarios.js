@@ -14,6 +14,22 @@ let verificationActionsLocked = false;
 
 const API_BASE_URL = '/api';
 
+const SignupValidation = window.SignupValidation;
+if (!SignupValidation) {
+  throw new Error('SignupValidation utilities not loaded.');
+}
+
+const {
+  normalizeDigits,
+  normalizeEmail,
+  normalizePhone,
+  validateDni,
+  validateEmail,
+  validatePhone,
+  validatePasswordPair,
+  messages: signupMessages,
+} = SignupValidation;
+
 /* ------------------ Utils API ------------------ */
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken');
@@ -44,7 +60,7 @@ async function apiFetch(path, options = {}) {
 }
 
 /* ----------------- Sanitizadores ---------------- */
-const onlyDigits       = (s) => String(s ?? '').replace(/\D+/g, '');
+const onlyDigits       = (s) => normalizeDigits(s);
 const trimOrUndefined  = (s) => { const t = String(s ?? '').trim(); return t === '' ? undefined : t; };
 const toTimeDB         = (hhmm) => {
   if (!hhmm) return null;
@@ -67,8 +83,6 @@ const fromTimeDB       = (t) => {
   return `${hh}:${mm}`;
 };
 
-const isEmail          = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s ?? '').trim());
-const isDNI            = (s) => /^\d{8}$/.test(String(s ?? '').trim());
 const isRUC            = (s) => /^\d{11}$/.test(String(s ?? '').trim());
 const formatDate       = (d) => new Date(d).toLocaleDateString('es-PE', { year:'numeric', month:'2-digit', day:'2-digit' });
 
@@ -548,10 +562,24 @@ function filterUsers() {
 }
 
 /* ----------------- DNI lookup ------------------ */
-async function handleDniLookup() {
+async function handleDniLookup(event) {
   if (!shouldRunPersonaValidations()) return;
-  const dni = this.value.trim();
-  if (!isDNI(dni)) return;
+  const input = event?.target || event?.currentTarget || this;
+  if (!input) return;
+
+  const formatted = SignupValidation.formatDni
+    ? SignupValidation.formatDni(input.value)
+    : normalizeDigits(input.value).slice(0, 8);
+  input.value = formatted;
+
+  const dniResult = validateDni(formatted);
+  if (!dniResult.valid) {
+    if (formatted && formatted.length === 8) {
+      showAlert(dniResult.error || signupMessages.dniInvalid, 'warning');
+    }
+    return;
+  }
+  const dni = dniResult.normalized;
   try {
     const data = await apiFetch(`/dni/${dni}`);
     if (data?.success && data?.data) {
@@ -631,10 +659,23 @@ async function saveUser() {
   if (!form?.checkValidity()) { form?.reportValidity(); return; }
 
   // validaciones extra
-  const dni = document.getElementById('dni')?.value?.trim();
-  if (!isDNI(dni)) return showAlert('DNI inválido (8 dígitos).', 'danger');
-  const email = document.getElementById('email')?.value?.trim();
-  if (!isEmail(email)) return showAlert('Email inválido.', 'danger');
+  const dniResult = validateDni(document.getElementById('dni')?.value);
+  if (!dniResult.valid) {
+    return showAlert(dniResult.error || signupMessages.dniInvalid, 'danger');
+  }
+  const dni = dniResult.normalized;
+
+  const emailResult = validateEmail(document.getElementById('email')?.value);
+  if (!emailResult.valid) {
+    return showAlert(emailResult.error || signupMessages.emailInvalid, 'danger');
+  }
+  const email = emailResult.normalized;
+
+  const phoneResult = validatePhone(document.getElementById('telefono')?.value);
+  if (!phoneResult.valid) {
+    return showAlert(phoneResult.error || signupMessages.phoneInvalid, 'danger');
+  }
+  const telefonoNormalizado = phoneResult.normalized;
 
   // contraseña en creación
   let claveToSend;
@@ -642,9 +683,11 @@ async function saveUser() {
   if (pwContainer && !pwContainer.classList.contains('d-none')) {
     const clave = document.getElementById('clave')?.value || '';
     const confirmar = document.getElementById('confirmarClave')?.value || '';
-    if (clave !== confirmar) return showAlert('Las contraseñas no coinciden.', 'danger');
-    if (clave.length < 8) return showAlert('La contraseña debe tener al menos 8 caracteres.', 'danger');
-    claveToSend = clave;
+    const passwordValidation = validatePasswordPair(clave, confirmar);
+    if (!passwordValidation.valid) {
+      return showAlert(passwordValidation.error || signupMessages.passwordShort, 'danger');
+    }
+    claveToSend = passwordValidation.password;
   }
 
   const rolSelect = document.getElementById('rol');
@@ -655,7 +698,6 @@ async function saveUser() {
     return showAlert('Solo se pueden gestionar cuentas de clientes o administradores desde este panel.', 'danger');
   }
 
-  const telefonoNormalizado = trimOrUndefined(onlyDigits(document.getElementById('telefono')?.value));
   const personaPayload = {
     dni,
     telefono: telefonoNormalizado,
@@ -693,14 +735,20 @@ async function saveUser() {
       saved = await apiFetch(`/users/${currentUserId}`, { method: 'PUT', body: JSON.stringify(payloadUser) });
     } else {
       saved = await apiFetch('/users', { method: 'POST', body: JSON.stringify(payloadUser) });
-      currentUserId = saved?.id ?? saved?.user?.id ?? currentUserId;
+      const createdUserId = saved?.user?.id ?? saved?.id;
+      if (createdUserId != null) {
+        currentUserId = createdUserId;
+      }
     }
 
-    showAlert(isEditing ? 'Usuario actualizado con éxito.' : 'Usuario creado con éxito.', 'success');
+    const successMessage = saved?.message
+      || (isEditing ? 'Usuario actualizado con éxito.' : 'Usuario creado con éxito.');
+    showAlert(successMessage, 'success');
     await loadUsers();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).hide();
   } catch (e) {
-    showAlert(`Error guardando usuario: ${e.message}`, 'danger');
+    const message = e?.message || 'Error guardando usuario';
+    showAlert(message, 'danger');
   }
 }
 
