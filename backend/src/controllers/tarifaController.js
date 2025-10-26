@@ -54,7 +54,6 @@ function serializeTarifa(tarifa) {
   const creado = tarifa.creado_el ? tarifa.creado_el.toISOString() : null;
   return {
     id: tarifa.id,
-    codigo: tarifa.codigo,
     descripcion: tarifa.descripcion,
     tipo: tarifa.tipo,
     rol_aplica: tarifa.rol_aplica,
@@ -120,7 +119,6 @@ function mapTarifaData(payload) {
     vigencia_desde: parseDate(payload.vigencia_desde),
     vigencia_hasta: parseDate(payload.vigencia_hasta),
     activo: payload.activo ?? true,
-    codigo: payload.codigo?.trim(),
     rol_aplica: payload.rol_aplica ?? null,
     moneda: payload.moneda?.trim() || null,
     metodo_pago: payload.metodo_pago?.trim() || null,
@@ -212,12 +210,14 @@ function buildListWhere(query) {
     }
   }
   if (search) {
-    andClauses.push({
-      OR: [
-        { codigo: { contains: search, mode: 'insensitive' } },
-        { descripcion: { contains: search, mode: 'insensitive' } },
-      ],
-    });
+    const parsedId = parseIntOrNull(search);
+    const orClauses = [
+      { descripcion: { contains: search, mode: 'insensitive' } },
+    ];
+    if (parsedId !== null) {
+      orClauses.push({ id: parsedId });
+    }
+    andClauses.push({ OR: orClauses });
   }
   if (andClauses.length) {
     where.AND = where.AND ? where.AND.concat(andClauses) : andClauses;
@@ -347,7 +347,7 @@ async function getTarifas(req, res) {
         },
         orderBy: [
           { prioridad: 'desc' },
-          { codigo: 'asc' },
+          { id: 'asc' },
         ],
         skip: (page - 1) * perPage,
         take: perPage,
@@ -393,9 +393,6 @@ async function getTarifa(req, res) {
 async function createTarifa(req, res) {
   try {
     const data = mapTarifaData(req.body);
-    if (!data.codigo) {
-      return res.status(400).json({ success: false, message: 'El código es obligatorio' });
-    }
     if (!data.rol_aplica) {
       return res.status(400).json({ success: false, message: 'El rol aplica es obligatorio' });
     }
@@ -424,7 +421,7 @@ async function createTarifa(req, res) {
       return res.status(400).json({ success: false, message: error.message });
     }
     if (error.code === 'P2002') {
-      return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
+      return res.status(400).json({ success: false, message: 'La combinación ya existe' });
     }
     res.status(500).json({ success: false, message: 'Error creando tarifa' });
   }
@@ -464,7 +461,7 @@ async function updateTarifa(req, res) {
       return res.status(400).json({ success: false, message: error.message });
     }
     if (error.code === 'P2002') {
-      return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
+      return res.status(400).json({ success: false, message: 'La combinación ya existe' });
     }
     res.status(500).json({ success: false, message: 'Error actualizando tarifa' });
   }
@@ -485,10 +482,6 @@ async function cloneTarifa(req, res) {
       ...source,
       ...mapTarifaData({ ...source, ...overrides }),
     };
-    data.codigo = overrides.codigo?.trim();
-    if (!data.codigo) {
-      return res.status(400).json({ success: false, message: 'Debe indicar un código para la nueva regla' });
-    }
     data.id = undefined;
     data.created_at = undefined;
     data.updated_at = undefined;
@@ -514,7 +507,7 @@ async function cloneTarifa(req, res) {
       return res.status(400).json({ success: false, message: error.message });
     }
     if (error.code === 'P2002') {
-      return res.status(400).json({ success: false, message: 'El código o combinación ya existe' });
+      return res.status(400).json({ success: false, message: 'La combinación ya existe' });
     }
     res.status(500).json({ success: false, message: 'Error clonando tarifa' });
   }
@@ -769,7 +762,6 @@ async function simulateTarifa(req, res) {
       const previewRule = {
         ...previewPayload,
         id: 0,
-        codigo: previewPayload.codigo || 'BORRADOR',
         servicio_id: parseIntOrNull(previewPayload.servicio_id),
         plan_id: parseIntOrNull(previewPayload.plan_id),
         rol_aplica: previewPayload.rol_aplica,

@@ -219,7 +219,7 @@ function setupLayout() {
               <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                   <tr>
-                    <th>Código</th>
+                    <th>Descripción</th>
                     <th>Ámbito</th>
                     <th>Importe</th>
                     <th>Tipo cálculo</th>
@@ -306,7 +306,7 @@ function setupLayout() {
               <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                   <tr>
-                    <th>Código</th>
+                    <th>Descripción</th>
                     <th>Ámbito</th>
                     <th>Rol</th>
                     <th>Porcentaje</th>
@@ -1177,8 +1177,20 @@ function tarifaRowTemplate(tarifa) {
     ? '<span class="badge bg-success ms-2">Incluye IGV</span>'
     : '';
   const chip = statusChip(tarifa);
+  const displayName = tarifa.descripcion
+    ? escapeHtml(tarifa.descripcion)
+    : `Tarifa #${tarifa.id}`;
+  const identifier = tarifa.id != null ? `ID ${tarifa.id}` : '';
+  const metadataParts = [chip];
+  if (identifier) {
+    metadataParts.push(`<span class="text-muted small">${identifier}</span>`);
+  }
+  const metadata = metadataParts.filter(Boolean).join('');
   return `
-    <td><div class="fw-semibold">${tarifa.codigo}</div><div class="small text-muted">${chip}</div></td>
+    <td>
+      <div class="fw-semibold">${displayName}</div>
+      <div class="d-flex flex-wrap align-items-center gap-2 mt-1">${metadata}</div>
+    </td>
     <td>
       <div class="fw-semibold">${ambitoLabel(tarifa)}</div>
       <div class="small text-muted">${scopeTypeLabel(tarifa)}</div>
@@ -1405,10 +1417,10 @@ async function submitTarifaForm(event) {
   }
 
   const requestBody = {
-    ...base,
+    ...(base.id ? { id: base.id } : {}),
     ...payload,
+    actualizado_el: base.actualizado_el || null,
   };
-  requestBody.actualizado_el = base.actualizado_el || null;
 
   if (!Number.isFinite(payload.valor) || payload.valor < 0) {
     form.valor.classList.add('is-invalid');
@@ -1946,8 +1958,20 @@ function comisionRowTemplate(comision) {
   const rolBadge = `<span class="badge bg-primary">${
     comision.rol_aplica === 'abogado' ? 'Abogado' : 'Cliente'
   }</span>`;
+  const displayName = comision.descripcion
+    ? escapeHtml(comision.descripcion)
+    : `Comisión #${comision.id}`;
+  const identifier = comision.id != null ? `ID ${comision.id}` : '';
+  const metadataParts = [chip];
+  if (identifier) {
+    metadataParts.push(`<span class="text-muted small">${identifier}</span>`);
+  }
+  const metadata = metadataParts.filter(Boolean).join('');
   return `
-    <td><div class="fw-semibold">${comision.codigo}</div><div class="small text-muted">${chip}</div></td>
+    <td>
+      <div class="fw-semibold">${displayName}</div>
+      <div class="d-flex flex-wrap align-items-center gap-2 mt-1">${metadata}</div>
+    </td>
     <td>
       <div class="fw-semibold">${ambitoLabel(comision)}</div>
       <div class="small text-muted">${scopeTypeLabel(comision)}</div>
@@ -2139,10 +2163,10 @@ async function submitComisionForm(event) {
   };
 
   const requestBody = {
-    ...base,
+    ...(base.id ? { id: base.id } : {}),
     ...payload,
+    actualizado_el: base.actualizado_el || null,
   };
-  requestBody.actualizado_el = base.actualizado_el || null;
 
   const conflict = findComisionConflict(requestBody, state.comisiones.form.data?.id);
   if (conflict) {
@@ -3192,6 +3216,16 @@ async function ensurePlanAssignments(planId, force = false) {
     return state.catalogs.planAssignments.get(targetId) || [];
   }
 
+  if (!force) {
+    const cached = (state.catalogs.planServicios || []).filter(
+      (item) => Number(item?.plan_id) === targetId
+    );
+    if (cached.length) {
+      storePlanAssignments(targetId, cached);
+      return state.catalogs.planAssignments.get(targetId) || cached;
+    }
+  }
+
   if (!(state.catalogs.loading.planAssignments instanceof Map)) {
     state.catalogs.loading.planAssignments = new Map();
   }
@@ -3204,7 +3238,12 @@ async function ensurePlanAssignments(planId, force = false) {
     const response = await apiGet(`/plans/${targetId}`);
     const body = await response.json();
     const plan = body?.plan || body || {};
-    const assignments = Array.isArray(plan.planservicios) ? plan.planservicios : [];
+    const assignmentsRaw = Array.isArray(plan.planservicios)
+      ? plan.planservicios
+      : Array.isArray(plan.planservicio)
+      ? plan.planservicio
+      : [];
+    const assignments = Array.isArray(assignmentsRaw) ? assignmentsRaw : [];
     storePlanAssignments(targetId, assignments);
     mergePlanCatalog([plan]);
     return state.catalogs.planAssignments.get(targetId) || [];
@@ -3292,7 +3331,8 @@ function matchesAutocomplete(item, needle, type) {
   }
 
   if (item.nombre_ambito?.toLowerCase().includes(search)) return true;
-  if (item.codigo && String(item.codigo).toLowerCase().includes(search)) return true;
+  if (typeof item.descripcion === 'string' && item.descripcion.toLowerCase().includes(search)) return true;
+  if (item.id && String(item.id).toLowerCase().includes(search)) return true;
   return false;
 }
 
