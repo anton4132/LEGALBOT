@@ -1757,7 +1757,10 @@ function openUserModal() {
   form?.reset();
   resetStepAlerts();
   document.getElementById('userModalLabel').textContent = 'Nuevo Usuario';
-  document.getElementById('userId')?.value = '';
+ const userIdInput = document.getElementById('userId');
+  if (userIdInput) {
+    userIdInput.value = '';
+  }
   setValue('dni', '');
   setValue('telefono', '');
   setValue('email', '');
