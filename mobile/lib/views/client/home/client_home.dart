@@ -41,6 +41,7 @@ class _ClientHomeState extends State<ClientHome> {
       ClientSettingsSubsection.overview;
   bool _isLoadingCatalog = false;
   String? _catalogError;
+  String? _catalogTariffWarning;
   List<_ServicePlanCatalogItem> _catalogItems = const [];
 
   final DateFormat _dateFormatter = DateFormat('dd/MM/yyyy');
@@ -90,18 +91,25 @@ class _ClientHomeState extends State<ClientHome> {
     setState(() {
       _isLoadingCatalog = true;
       _catalogError = null;
+      _catalogTariffWarning = null;
+
     });
 
-    try {
-      final results = await Future.wait([
-        _fetchServices(),
-        _fetchPlans(),
-        _fetchTariffRules(),
-      ]);
+     try {
+      final services = await _fetchServices();
+      final plans = await _fetchPlans();
 
-      final services = results[0] as List<Map<String, dynamic>>;
-      final plans = results[1] as List<Map<String, dynamic>>;
-      final tariffs = results[2] as List<_TariffRule>;
+      List<_TariffRule> tariffs = const [];
+      String? tariffWarning;
+      try {
+        tariffs = await _fetchTariffRules();
+      } on UnauthorizedException {
+        rethrow;
+      } on ApiException catch (error) {
+        tariffWarning = _resolveTariffWarning(error.message);
+      } catch (_) {
+        tariffWarning = _resolveTariffWarning(null);
+      }
 
       final items = <_ServicePlanCatalogItem>[];
       for (final service in services) {
@@ -129,6 +137,8 @@ class _ClientHomeState extends State<ClientHome> {
       if (!mounted) return;
       setState(() {
         _catalogItems = items;
+        _catalogTariffWarning = tariffWarning;
+
       });
     } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
@@ -136,11 +146,15 @@ class _ClientHomeState extends State<ClientHome> {
       if (!mounted) return;
       setState(() {
         _catalogError = error.message;
+        _catalogTariffWarning = null;
+
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _catalogError = 'No se pudieron cargar los servicios y planes.';
+        _catalogTariffWarning = null;
+
       });
     } finally {
       if (mounted) {
@@ -218,15 +232,15 @@ class _ClientHomeState extends State<ClientHome> {
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 401) {
       final message = _extractMessage(response.body);
-final resolvedMessage = (() {
+      final resolvedMessage = (() {
         final trimmed = message?.trim();
         if (trimmed != null && trimmed.isNotEmpty) {
           return trimmed;
         }
         return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
       })();
-      throw UnauthorizedException(resolvedMessage);    }
-    if (response.statusCode >= 400) {
+throw UnauthorizedException(resolvedMessage);
+    }    if (response.statusCode >= 400) {
       throw ApiException(
         _extractMessage(response.body) ??
             'Error ${response.statusCode} al consultar $path',
@@ -257,6 +271,17 @@ final resolvedMessage = (() {
       return null;
     }
     return null;
+  }
+
+  String _resolveTariffWarning(String? detail) {
+    const baseMessage =
+        'Mostramos el catálogo sin información de tarifas por ahora.';
+    final trimmed = detail?.trim();
+    if (trimmed == null || trimmed.isEmpty ||
+        trimmed == 'Error obteniendo tarifas') {
+      return baseMessage;
+    }
+    return '$baseMessage\nDetalle: $trimmed';
   }
 
   void _handleSendConsultation() {
@@ -471,6 +496,10 @@ final resolvedMessage = (() {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_catalogTariffWarning != null) ...[
+            _buildCatalogWarningCard(_catalogTariffWarning!),
+            const SizedBox(height: 24),
+          ],
           _buildCatalogStatusBlock(
             title: 'Servicios individuales',
             child: _buildCatalogEmptyCard(
@@ -498,6 +527,10 @@ final resolvedMessage = (() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+         if (_catalogTariffWarning != null) ...[
+          _buildCatalogWarningCard(_catalogTariffWarning!),
+          const SizedBox(height: 28),
+        ],
         _buildCatalogSection(
           title: 'Servicios individuales',
           items: services,
@@ -595,6 +628,53 @@ final resolvedMessage = (() {
               onPressed: _loadServicePlanCatalog,
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+Widget _buildCatalogWarningCard(String message) {
+    return ShadowCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(
+                Icons.info_outline,
+                color: AppColors.button2Color,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Mostramos el catálogo sin tarifas detalladas',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: AppColors.buttonColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: AppColors.text2Color,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _loadServicePlanCatalog,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Intentar nuevamente'),
             ),
           ),
         ],
