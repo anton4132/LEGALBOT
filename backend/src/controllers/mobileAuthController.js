@@ -101,11 +101,12 @@ const loginFlutter = async (req, res) => {
 
     const nombreCompleto = buildFullName(persona);
 
+    const preferredRoleId = preferredAccount.role_id ?? preferredAccount.rol_id ?? null;
     const token = jwt.sign(
       {
         personaId: persona.id,
         usuarioId: preferredAccount.id,
-        rolId: preferredAccount.rol_id,
+        rolId: preferredRoleId,
         scope: 'full',
       },
       JWT_SECRET,
@@ -122,7 +123,8 @@ const loginFlutter = async (req, res) => {
       user: {
         personaId: persona.id,
         usuarioId: preferredAccount.id,
-        rolId: preferredAccount.rol_id,
+        rolId: preferredRoleId,
+        roleId: preferredRoleId,
         rolCodigo: preferredAccount.role?.codigo || null,
         rolNombre: preferredAccount.role?.nombre || null,
         activo: preferredAccount.activo,
@@ -131,13 +133,17 @@ const loginFlutter = async (req, res) => {
         correo: persona.correo,
         nombreCompleto,
       },
-      accounts: matchingAccounts.map((u) => ({
-        usuarioId: u.id,
-        rolId: u.rol_id,
-        rolCodigo: u.role?.codigo || null,
-        rolNombre: u.role?.nombre || null,
-        activo: u.activo,
-      })),
+      accounts: matchingAccounts.map((u) => {
+        const accountRoleId = u.role_id ?? u.rol_id ?? null;
+        return {
+          usuarioId: u.id,
+          rolId: accountRoleId,
+          roleId: accountRoleId,
+          rolCodigo: u.role?.codigo || null,
+          rolNombre: u.role?.nombre || null,
+          activo: u.activo,
+        };
+      }),
       verification: mapVerification(verification),
     });
   } catch (error) {
@@ -165,13 +171,17 @@ const getMyAccounts = async (req, res) => {
       return res.status(404).json({ message: 'Persona no encontrada' });
     }
 
-    const accounts = (persona.usuario || []).map((u) => ({
-      usuarioId: u.id,
-      rolId: u.rol_id,
-      rolCodigo: u.role?.codigo || null,
-      rolNombre: u.role?.nombre || null,
-      activo: u.activo,
-    }));
+    const accounts = (persona.usuario || []).map((u) => {
+      const roleId = u.role_id ?? u.rol_id ?? null;
+      return {
+        usuarioId: u.id,
+        rolId: roleId,
+        roleId,
+        rolCodigo: u.role?.codigo || null,
+        rolNombre: u.role?.nombre || null,
+        activo: u.activo,
+      };
+    });
 
     res.json({
       personaId: persona.id,

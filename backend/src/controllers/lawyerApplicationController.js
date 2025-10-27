@@ -191,7 +191,7 @@ const createOrActivateAbogadoUser = async (tx, personaId) => {
 
   // 2) ¿ya existe usuario abogado?
   let lawyerUser = await tx.usuario.findFirst({
-    where: { persona_id: personaId, rol_id: lawyerRole.id },
+    where: { persona_id: personaId, role_id: lawyerRole.id },
   });
   if (lawyerUser) {
     if (!lawyerUser.activo) {
@@ -237,7 +237,7 @@ const deactivateAbogadoUser = async (tx, personaId) => {
   }
 
   await tx.usuario.updateMany({
-    where: { persona_id: personaId, rol_id: lawyerRole.id },
+    where: { persona_id: personaId, role_id: lawyerRole.id },
     data: { activo: false },
   });
 };

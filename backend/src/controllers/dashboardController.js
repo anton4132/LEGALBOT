@@ -71,7 +71,7 @@ const getCharts = async (req, res) => {
         DATE_TRUNC('week', u.creado_el)::DATE as semana,
         COUNT(*)::bigint as nuevos_clientes
       FROM "usuario" u
-      JOIN "role" r ON u.rol_id = r.id
+      JOIN "role" r ON u.role_id = r.id
       WHERE r.codigo = 'cliente'
         AND u.creado_el >= $1
       GROUP BY DATE_TRUNC('week', u.creado_el)
@@ -84,7 +84,7 @@ const getCharts = async (req, res) => {
         DATE_TRUNC('week', u.creado_el)::DATE as semana,
         COUNT(*)::bigint as nuevos_abogados
       FROM "usuario" u
-      JOIN "role" r ON u.rol_id = r.id
+      JOIN "role" r ON u.role_id = r.id
       WHERE r.codigo = 'abogado'
         AND u.creado_el >= $1
       GROUP BY DATE_TRUNC('week', u.creado_el)

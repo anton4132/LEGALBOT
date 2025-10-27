@@ -119,6 +119,19 @@ function normalizeArchivoPayload(input) {
   return { id, ruta: resolvedRuta, tamano, tipo, url };
 }
 
+function ensureRoleIdAlias(user) {
+  if (!user || typeof user !== 'object') return user;
+  const roleId = user.role_id ?? user.rol_id ?? null;
+  const normalized = { ...user };
+  if (roleId != null) {
+    normalized.role_id = roleId;
+    if (!('rol_id' in normalized) || normalized.rol_id == null) {
+      normalized.rol_id = roleId;
+    }
+  }
+  return normalized;
+}
+
 function mapArchivoResponse(archivo) {
   if (!archivo) return null;
   const ruta = sanitizeString(archivo.ruta) || null;
@@ -1165,6 +1178,7 @@ const getAllUsers = async (_req, res) => {
     // Aplana especialidades para facilitar al front
     const data = usuarios.map(u => {
       const { perfilabogado, persona, ...rest } = u;
+      const baseUser = ensureRoleIdAlias(rest);
 
       const personaMapped = persona
         ? {
@@ -1172,15 +1186,15 @@ const getAllUsers = async (_req, res) => {
             colegiatura: mapColegiaturaResponse(persona.colegiatura),
             verificacionabogado: mapVerificacionResponse(persona.verificacionabogado),
           }
-        : null;      
+        : null;
       if (!perfilabogado) {
-        return { ...rest, persona: personaMapped, perfilabogado: null };
+        return { ...baseUser, persona: personaMapped, perfilabogado: null };
       }
       const perfilMapped = mapPerfilResponse(perfilabogado);
       if (perfilMapped) {
         perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
       }
-      return { ...rest, persona: personaMapped, perfilabogado: perfilMapped };
+      return { ...baseUser, persona: personaMapped, perfilabogado: perfilMapped };
     });
 
     res.json(data);
@@ -1228,6 +1242,7 @@ const getUserById = async (req, res) => {
     if (!usuario) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
     const { perfilabogado, persona, ...rest } = usuario;
+    const baseUser = ensureRoleIdAlias(rest);
     const perfilMapped = perfilabogado ? mapPerfilResponse(perfilabogado) : null;
     if (perfilMapped) {
       perfilMapped.especialidades = (perfilabogado.especialidades || []).map(pe => pe.especialidad);
@@ -1240,8 +1255,8 @@ const getUserById = async (req, res) => {
         }
       : null;
     const data = perfilabogado
-    ? { ...rest, persona: personaMapped, perfilabogado: perfilMapped }
-    : { ...rest, persona: personaMapped, perfilabogado: null };
+    ? { ...baseUser, persona: personaMapped, perfilabogado: perfilMapped }
+    : { ...baseUser, persona: personaMapped, perfilabogado: null };
 
 
     res.json({ success: true, user: data });
@@ -1254,14 +1269,22 @@ const getUserById = async (req, res) => {
 // ========== Crear ==========// ========== Crear (con attachToExisting) ==========
 const createUser = async (req, res) => {
   try {
-    const { persona, rol_id, clave, abogado_info, attachToExisting } = req.body || {};
-    if (!rol_id || !clave) {
-      return res.status(400).json({ success: false, message: 'rol_id y clave son requeridos' });
+    const {
+      persona,
+      role_id: roleIdRaw,
+      rol_id: legacyRoleId,
+      clave,
+      abogado_info,
+      attachToExisting,
+    } = req.body || {};
+    const requestedRoleId = roleIdRaw ?? legacyRoleId;
+    if (!requestedRoleId || !clave) {
+      return res.status(400).json({ success: false, message: 'role_id (o rol_id) y clave son requeridos' });
     }
 
-    const parsedRoleId = Number.parseInt(rol_id, 10);
+    const parsedRoleId = Number.parseInt(requestedRoleId, 10);
     if (Number.isNaN(parsedRoleId)) {
-      return res.status(400).json({ success: false, message: 'rol_id inválido' });
+      return res.status(400).json({ success: false, message: 'role_id inválido' });
     }
 
     const roleRecord = await prisma.role.findUnique({ where: { id: parsedRoleId } });
@@ -1319,7 +1342,7 @@ const createUser = async (req, res) => {
       const result = await prisma.$transaction(async (tx) => {
         // Evitar duplicar el mismo rol para la persona
         const dup = await tx.usuario.findUnique({
-          where: { persona_id_rol_id: { persona_id: personaExist.id, rol_id: parsedRoleId } }
+          where: { persona_id_role_id: { persona_id: personaExist.id, role_id: parsedRoleId } }
         });
         if (dup) {
           throw new Error('La persona ya tiene una cuenta con ese rol');
@@ -1340,7 +1363,11 @@ const createUser = async (req, res) => {
           include: { persona: true, role: true }
         });
       });
-      return res.status(201).json({ success: true, message: 'Cuenta agregada a persona existente', user: result });
+      return res.status(201).json({
+        success: true,
+        message: 'Cuenta agregada a persona existente',
+        user: ensureRoleIdAlias(result),
+      });
     }
 
     // ---------------------------
@@ -1399,7 +1426,7 @@ const createUser = async (req, res) => {
     // Si existe, validar que no tenga ya el mismo rol
     if (personaExistente) {
       const existingUserRole = await prisma.usuario.findFirst({
-        where: { persona_id: personaExistente.id, rol_id: parsedRoleId }
+        where: { persona_id: personaExistente.id, role_id: parsedRoleId }
       });
       if (existingUserRole) {
         return res.status(409).json({ success: false, message: 'La persona ya posee un usuario con ese rol' });
@@ -1452,7 +1479,11 @@ const createUser = async (req, res) => {
         include: { persona: true, role: true }
       });
     });
-    res.status(201).json({ success: true, message: 'Usuario creado exitosamente', user: result });
+    res.status(201).json({
+      success: true,
+      message: 'Usuario creado exitosamente',
+      user: ensureRoleIdAlias(result),
+    });
   } catch (error) {
     if (String(error.message || '').includes('ya tiene una cuenta con ese rol')) {
       return res.status(409).json({ success: false, message: error.message });
@@ -1466,7 +1497,8 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    const { persona, rol_id, abogado_info, clave } = req.body || {};
+    const body = req.body || {};
+    const { persona, role_id: roleIdRaw, rol_id: legacyRoleId, abogado_info, clave } = body;
     const trimmedClave =
       clave === undefined
         ? undefined
@@ -1487,12 +1519,16 @@ const updateUser = async (req, res) => {
     let parsedRoleId = null;
     let targetRole = usuarioActual.role;
 
-    if (rol_id !== undefined && rol_id !== null) {
-      parsedRoleId = Number.parseInt(rol_id, 10);
+    const hasRoleIdProp = Object.prototype.hasOwnProperty.call(body, 'role_id')
+      || Object.prototype.hasOwnProperty.call(body, 'rol_id');
+    const requestedRoleId = roleIdRaw ?? legacyRoleId;
+
+    if (hasRoleIdProp) {
+      parsedRoleId = Number.parseInt(requestedRoleId, 10);
       if (Number.isNaN(parsedRoleId)) {
-        return res.status(400).json({ success: false, message: 'rol_id inválido' });
+        return res.status(400).json({ success: false, message: 'role_id inválido' });
       }
-      if (parsedRoleId !== usuarioActual.rol_id) {
+      if (parsedRoleId !== usuarioActual.role_id) {
         targetRole = await prisma.role.findUnique({ where: { id: parsedRoleId } });
         if (!targetRole) {
           return res.status(404).json({ success: false, message: 'Rol no encontrado' });
@@ -1556,11 +1592,11 @@ const updateUser = async (req, res) => {
     }
 
     // Si cambian de rol, validar que no exista otro usuario de la misma persona con ese rol
-    if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
+    if (parsedRoleId != null && parsedRoleId !== usuarioActual.role_id) {
       const roleTaken = await prisma.usuario.findFirst({
         where: {
           persona_id: usuarioActual.persona_id,
-          rol_id: parsedRoleId,
+          role_id: parsedRoleId,
           id: { not: userId }
         }
       });
@@ -1569,12 +1605,12 @@ const updateUser = async (req, res) => {
       }
     }
     const updated = await prisma.$transaction(async (tx) => {
-      if (parsedRoleId != null && parsedRoleId !== usuarioActual.rol_id) {
+      if (parsedRoleId != null && parsedRoleId !== usuarioActual.role_id) {
         const dup = await tx.usuario.findUnique({
           where: {
-            persona_id_rol_id: {
+            persona_id_role_id: {
               persona_id: usuarioActual.persona_id,
-              rol_id: parsedRoleId,
+              role_id: parsedRoleId,
             },
           },
         });
@@ -1584,7 +1620,7 @@ const updateUser = async (req, res) => {
 
         await tx.usuario.update({
           where: { id: userId },
-          data: { rol_id: parsedRoleId },
+          data: { role_id: parsedRoleId },
         });
       }
 
@@ -1655,7 +1691,11 @@ const updateUser = async (req, res) => {
       });
     });
 
-    res.json({ success: true, message: 'Usuario actualizado exitosamente', user: updated });
+    res.json({
+      success: true,
+      message: 'Usuario actualizado exitosamente',
+      user: ensureRoleIdAlias(updated),
+    });
   } catch (error) {
     if (error?.message === 'DUP_ROLE') {
       return res.status(409).json({ success: false, message: 'La persona ya tiene ese rol' });
@@ -1763,7 +1803,12 @@ const setUserActive = async (req, res) => {
     if (!usuario.activo) {
       return res.json({
         success: true,
-        user: { id: usuario.id, persona_id: usuario.persona_id, rol_id: usuario.rol_id, activo: usuario.activo },
+        user: ensureRoleIdAlias({
+          id: usuario.id,
+          persona_id: usuario.persona_id,
+          role_id: usuario.role_id,
+          activo: usuario.activo,
+        }),
       });
     }
 
@@ -1774,7 +1819,12 @@ const setUserActive = async (req, res) => {
 
     return res.json({
       success: true,
-      user: { id: updated.id, persona_id: updated.persona_id, rol_id: updated.rol_id, activo: updated.activo },
+      user: ensureRoleIdAlias({
+        id: updated.id,
+        persona_id: updated.persona_id,
+        role_id: updated.role_id,
+        activo: updated.activo,
+      }),
     });
   } catch (error) {
     console.error('Error actualizando estado del usuario:', error);

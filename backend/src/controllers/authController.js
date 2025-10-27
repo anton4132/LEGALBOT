@@ -25,11 +25,12 @@ const login = async (req, res) => {
     }
 
     // 🔐 Emite JWT para Swagger / endpoints protegidos
+    const resolvedRoleId = user.role_id ?? user.rol_id ?? null;
     const token = jwt.sign(
       {
         personaId: persona.id,
         usuarioId: user.id,
-        rolId: user.rol_id,
+        rolId: resolvedRoleId,
         scope: 'full',
       },
       JWT_SECRET,
@@ -46,6 +47,8 @@ const login = async (req, res) => {
         rolCodigo: user.role?.codigo || null,
         rolNombre: user.role?.nombre || null,
         activo: user.activo,
+        roleId: resolvedRoleId,
+        rolId: resolvedRoleId,
       }
     });
   } catch (error) {
@@ -142,11 +145,12 @@ const switchAccount = async (req, res) => {
         code: 'ACCOUNT_DISABLED'
       });
     }
+    const targetRoleId = targetAccount.role_id ?? targetAccount.rol_id ?? null;
     const token = jwt.sign(
       {
         personaId: targetAccount.persona_id,
         usuarioId: targetAccount.id,
-        rolId: targetAccount.rol_id,
+        rolId: targetRoleId,
         scope: 'full'
       },
       JWT_SECRET,
@@ -157,7 +161,8 @@ const switchAccount = async (req, res) => {
       token,
       personaId: targetAccount.persona_id,
       usuarioId: targetAccount.id,
-      rolId: targetAccount.rol_id,
+      rolId: targetRoleId,
+      roleId: targetRoleId,
       rolCodigo: targetAccount.role?.codigo || null,
       rolNombre: targetAccount.role?.nombre || null,
       activo: targetAccount.activo,

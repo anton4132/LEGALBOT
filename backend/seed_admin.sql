@@ -24,11 +24,11 @@ ON CONFLICT (dni) DO UPDATE SET
   direccion = EXCLUDED.direccion;
 
 -- 3) Crea usuario admin SIN hash si no existe aún (clave = 'admin')
-INSERT INTO usuario (persona_id, rol_id, clave, telefono_verificado, creado_el)
+INSERT INTO usuario (persona_id, role_id, clave, telefono_verificado, creado_el)
 SELECT p.id, r.id, 'admin', TRUE, NOW()
 FROM persona p
 JOIN role r ON r.codigo = 'admin'
-LEFT JOIN usuario u ON u.persona_id = p.id AND u.rol_id = r.id
+LEFT JOIN usuario u ON u.persona_id = p.id AND u.role_id = r.id
 WHERE p.dni = '00000000'
   AND u.id IS NULL;
 
