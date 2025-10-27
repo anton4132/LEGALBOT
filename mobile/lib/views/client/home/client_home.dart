@@ -14,7 +14,6 @@ import '../../../widgets/custom_app_bar.dart';
 import '../../../widgets/custom_drawer.dart';
 import '../../../widgets/custombtn.dart';
 import '../../../widgets/gradient_container.dart';
-import '../../../widgets/option_card.dart';
 import '../../../widgets/section_header.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
@@ -435,314 +434,326 @@ final resolvedMessage = (() {
 
   Widget _buildServicePlanSection() {
     if (_isLoadingCatalog) {
-      return ShadowCard(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            SizedBox(
-              height: 22,
-              width: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.4),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Cargando servicios y planes...',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.text2Color,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCatalogStatusBlock(
+            title: 'Servicios individuales',
+            child: _buildCatalogLoadingCard(),
+          ),
+          const SizedBox(height: 24),
+          _buildCatalogStatusBlock(
+            title: 'Planes y membresías',
+            child: _buildCatalogLoadingCard(),
+          ),
+        ],
       );
     }
 
     if (_catalogError != null) {
-      return ShadowCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: const [
-                Icon(
-                  Icons.error_outline,
-                  color: AppColors.text3Color,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'No se pudo cargar el catálogo',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: AppColors.buttonColor,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _catalogError!,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.text2Color,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _loadServicePlanCatalog,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-              ),
-            ),
-          ],
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCatalogStatusBlock(
+            title: 'Servicios individuales',
+            child: _buildCatalogErrorCard(_catalogError!),
+          ),
+          const SizedBox(height: 24),
+          _buildCatalogStatusBlock(
+            title: 'Planes y membresías',
+            child: _buildCatalogErrorCard(_catalogError!),
+          ),
+        ],
       );
     }
 
     if (_catalogItems.isEmpty) {
-      return ShadowCard(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: const [
-            Icon(
-              Icons.info_outline,
-              color: AppColors.button2Color,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCatalogStatusBlock(
+            title: 'Servicios individuales',
+            child: _buildCatalogEmptyCard(
+              'No hay servicios individuales activos registrados por el momento.',
             ),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'No hay servicios ni planes activos registrados por el momento.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.text2Color,
-                ),
-              ),
+          ),
+          const SizedBox(height: 24),
+          _buildCatalogStatusBlock(
+            title: 'Planes y membresías',
+            child: _buildCatalogEmptyCard(
+              'No hay planes disponibles todavía. Vuelve a intentarlo más tarde.',
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
+    final services = _catalogItems
+        .where((item) => item.type == _CatalogItemType.service)
+        .toList();
+    final plans = _catalogItems
+        .where((item) => item.type == _CatalogItemType.plan)
+        .toList();
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (int i = 0; i < _catalogItems.length; i++)
-          Padding(
-            padding: EdgeInsets.only(bottom: i == _catalogItems.length - 1 ? 0 : 12),
-            child: _buildCatalogCard(_catalogItems[i]),
-          ),
+        _buildCatalogSection(
+          title: 'Servicios individuales',
+          items: services,
+          type: _CatalogItemType.service,
+        ),
+        const SizedBox(height: 28),
+        _buildCatalogSection(
+          title: 'Planes y membresías',
+          items: plans,
+          type: _CatalogItemType.plan,
+        ),
       ],
     );
   }
 
-  Widget _buildCatalogCard(_ServicePlanCatalogItem item) {
-    final icon = item.type == _CatalogItemType.service
-        ? Icons.miscellaneous_services
-        : Icons.workspace_premium;
-    final typeLabel = item.type == _CatalogItemType.service ? 'Servicio' : 'Plan';
-    final accentColor =
-        item.type == _CatalogItemType.service ? AppColors.button2Color : AppColors.tabColor;
+  Widget _buildCatalogStatusBlock({
+    required String title,
+    required Widget child,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: title),
+        const SizedBox(height: 12),
+        child,
+      ],
+    );
+  }
 
+  Widget _buildCatalogLoadingCard() {
     return ShadowCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          SizedBox(
+            height: 24,
+            width: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.6),
+          ),
+          SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Cargando catálogo personalizado...',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.text2Color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCatalogErrorCard(String message) {
+    return ShadowCard(
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+            children: const [
               Icon(
-                icon,
-                color: accentColor,
-                size: 28,
+                Icons.error_outline,
+                color: AppColors.text3Color,
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.buttonColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        _buildInfoBadge(typeLabel, color: accentColor),
-                        if (item.identifierLabel != null) ...[
-                          const SizedBox(width: 8),
-                          _buildInfoBadge(item.identifierLabel!),
-                        ],
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  'No se pudo cargar el catálogo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: AppColors.buttonColor,
+                  ),
                 ),
               ),
             ],
           ),
-          if ((item.description ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              item.description!.trim(),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: AppColors.text2Color,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _loadServicePlanCatalog,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCatalogEmptyCard(String message) {
+    return ShadowCard(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.info_outline,
+            color: AppColors.button2Color,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
               style: const TextStyle(
                 fontSize: 13,
                 height: 1.35,
                 color: AppColors.text2Color,
               ),
             ),
-          ],
-          const SizedBox(height: 12),
-          Text(
-            'Reglas de tarifa',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: accentColor,
-            ),
           ),
-          const SizedBox(height: 8),
-          _buildTariffRulesList(item.tariffs),
         ],
       ),
     );
   }
 
-  Widget _buildTariffRulesList(List<_TariffRule> rules) {
-    if (rules.isEmpty) {
-      return const Text(
-        'Sin reglas de tarifa registradas.',
-        style: TextStyle(
-          fontSize: 13,
-          color: AppColors.text2Color,
-        ),
-      );
-    }
-
+  Widget _buildCatalogSection({
+    required String title,
+    required List<_ServicePlanCatalogItem> items,
+    required _CatalogItemType type,
+  }) {
+    final accentColor = _accentColorForType(type);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (int i = 0; i < rules.length; i++)
-          Padding(
-            padding: EdgeInsets.only(bottom: i == rules.length - 1 ? 0 : 10),
-            child: _buildTariffRuleTile(rules[i]),
+        SectionHeader(title: title),
+        const SizedBox(height: 12),
+        if (items.isEmpty)
+          _buildCatalogEmptyState(
+            type == _CatalogItemType.service
+                ? 'Aún no contamos con servicios individuales en esta categoría.'
+                : 'Todavía no hay planes disponibles. Pronto añadiremos nuevas propuestas.',
+            accentColor,
+          )
+        else
+          Column(
+            children: [
+              for (int index = 0; index < items.length; index++) ...[
+                _CatalogCard(
+                  item: items[index],
+                  accentColor: accentColor,
+                  gradient: _gradientForType(type),
+                  icon: _iconForItem(items[index]),
+                  actionLabel: _actionLabelForItem(items[index]),
+                  onPressed: () => _handleCatalogItemAction(items[index]),
+                ),
+                if (index != items.length - 1) const SizedBox(height: 18),
+              ],
+            ],
           ),
       ],
     );
   }
 
-  Widget _buildTariffRuleTile(_TariffRule rule) {
-    final chips = <Widget>[];
-
-    void addChip(String field, String? value) {
-      final text = value?.trim();
-      if (text == null || text.isEmpty) return;
-      chips.add(_buildInfoBadge('$field: $text'));
-    }
-
-    addChip('codigo', rule.codigo);
-    addChip('tipo_calculo', rule.tipoCalculo);
-    if (rule.valor != null) {
-      addChip('valor', rule.valor!.toStringAsFixed(2));
-    }
-    addChip('moneda', rule.moneda);
-    addChip('rol_aplica', rule.rolAplica);
-    addChip('metodo_pago', rule.metodoPago);
-    addChip('ambito_region', rule.ambitoRegion);
-    addChip('incluye_impuesto', rule.incluyeImpuesto.toString());
-    if (rule.prioridad != null) {
-      addChip('prioridad', rule.prioridad.toString());
-    }
-    addChip('vigencia_desde', _formatDate(rule.vigenciaDesde));
-    addChip('vigencia_hasta', _formatDate(rule.vigenciaHasta));
-
-    final parametrosText = _formatParametros(rule.parametros);
-
+  Widget _buildCatalogEmptyState(String message, Color color) {
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 18),
       decoration: BoxDecoration(
-        color: AppColors.bgColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.strokeColor),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            rule.descripcion?.trim().isNotEmpty == true
-                ? rule.descripcion!.trim()
-                : 'Regla ${rule.codigo ?? rule.id?.toString() ?? ''}'.trim(),
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.buttonColor,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (chips.isNotEmpty)
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: chips,
-            ),
-          if (parametrosText != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              'parametros: $parametrosText',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.text2Color,
-                height: 1.35,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoBadge(String text, {Color color = AppColors.button2Color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.25)),
       ),
       child: Text(
-        text,
+        message,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 13,
+          height: 1.35,
+          color: color.withOpacity(0.9),
           fontWeight: FontWeight.w600,
-          color: color,
         ),
       ),
     );
   }
 
-  String? _formatParametros(Map<String, dynamic>? parametros) {
-    if (parametros == null || parametros.isEmpty) {
-      return null;
-    }
-    try {
-      return const JsonEncoder.withIndent('  ').convert(parametros);
-    } catch (_) {
-      return parametros.toString();
+  void _handleCatalogItemAction(_ServicePlanCatalogItem item) {
+    final message = item.type == _CatalogItemType.plan
+        ? 'Muy pronto podrás contratar el plan "${item.name}" desde la app.'
+        : 'Estamos preparando más detalles para el servicio "${item.name}".';
+    _showSnackBar(
+      message,
+      color: item.type == _CatalogItemType.plan
+          ? AppColors.button2Color
+          : AppColors.tabColor,
+    );
+  }
+
+  String _actionLabelForItem(_ServicePlanCatalogItem item) {
+    return item.type == _CatalogItemType.plan ? 'Contratar' : 'Ver más';
+  }
+
+  Color _accentColorForType(_CatalogItemType type) {
+    switch (type) {
+      case _CatalogItemType.plan:
+        return AppColors.button2Color;
+      case _CatalogItemType.service:
+      default:
+        return AppColors.buttonColor;
     }
   }
 
-  String? _formatDate(DateTime? date) {
-    if (date == null) return null;
-    return _dateFormatter.format(date);
+  Gradient _gradientForType(_CatalogItemType type) {
+    switch (type) {
+      case _CatalogItemType.plan:
+        return LinearGradient(
+          colors: [
+            AppColors.button2Color.withOpacity(0.95),
+            AppColors.tabColor.withOpacity(0.95),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case _CatalogItemType.service:
+      default:
+        return LinearGradient(
+          colors: [
+            AppColors.buttonColor.withOpacity(0.95),
+            AppColors.text3Color.withOpacity(0.9),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+    }
   }
+
+  IconData _iconForItem(_ServicePlanCatalogItem item) {
+    if (item.type == _CatalogItemType.plan) {
+      return Icons.workspace_premium;
+    }
+    final category = item.category?.toLowerCase() ?? '';
+    if (category.contains('veh')) {
+      return Icons.directions_car_filled_outlined;
+    }
+    if (category.contains('famil')) {
+      return Icons.family_restroom;
+    }
+    if (category.contains('labor')) {
+      return Icons.work_history_outlined;
+    }
+    return Icons.gavel_outlined;
+  }
+
   Widget _buildDashboardContent(
     UserSession? session,
     LawyerApplicationStatus application,
@@ -875,58 +886,7 @@ final resolvedMessage = (() {
           ),
         ),
         const SizedBox(height: 20),
-        const SectionHeader(title: 'Servicios'),
-        const SizedBox(height: 15),
         _buildServicePlanSection(),
-        const SizedBox(height: 20),
-        const SectionHeader(title: 'Accesos rápidos'),
-        const SizedBox(height: 15),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          crossAxisSpacing: 15,
-          mainAxisSpacing: 15,
-          childAspectRatio: 1.1,
-          children: [
-            OptionCard(
-              icon: Icons.question_answer,
-              title: 'Consultas\nLegales',
-              color: AppColors.button2Color,
-              onTap: () {
-                // TODO
-              },
-            ),
-            OptionCard(
-              icon: Icons.directions_car,
-              title: 'Búsqueda\nVehicular',
-              color: AppColors.tabColor,
-              onTap: () {
-                // TODO
-              },
-            ),
-            OptionCard(
-              icon: Icons.search,
-              title: 'Buscar\nAbogados',
-              color: AppColors.buttonColor,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ClientLawyerSearchScreen(),
-                  ),
-                );
-              },
-            ),
-            OptionCard(
-              icon: Icons.history,
-              title: 'Mi\nHistorial',
-              color: AppColors.text3Color,
-              onTap: () {
-                // TODO
-              },
-            ),
-          ],
-        ),
         const SizedBox(height: 20),
         ShadowCard(
           padding: const EdgeInsets.all(15),
@@ -1386,6 +1346,8 @@ class _ServicePlanCatalogItem {
   final bool isActive;
   final List<_TariffRule> tariffs;
   final String? identifierLabel;
+  final String? category;
+  final List<String> associatedServices;
 
   const _ServicePlanCatalogItem({
     required this.id,
@@ -1395,6 +1357,8 @@ class _ServicePlanCatalogItem {
     this.description,
     this.isActive = true,
     this.identifierLabel,
+    this.category,
+    this.associatedServices = const [],
   });
 
   factory _ServicePlanCatalogItem.fromService(
@@ -1418,6 +1382,8 @@ class _ServicePlanCatalogItem {
       isActive: json['activo'] != false,
       identifierLabel: codigo,
       tariffs: List.unmodifiable(filteredTariffs),
+      category: _TariffRule._asString(json['categoria']) ??
+          _TariffRule._asString(json['tipo']),
     );
   }
 
@@ -1438,7 +1404,48 @@ class _ServicePlanCatalogItem {
       isActive: json['activo'] != false,
       identifierLabel: 'ID $id',
       tariffs: List.unmodifiable(filteredTariffs),
+      category: _TariffRule._asString(json['categoria']) ??
+          _TariffRule._asString(json['tipo']),
+      associatedServices:
+          List.unmodifiable(_extractServiceNames(json['servicios'])),
     );
+  }
+
+  static List<String> _extractServiceNames(Object? value) {
+    if (value == null) {
+      return const [];
+    }
+    if (value is List) {
+      return value
+          .map((item) {
+            if (item is Map<String, dynamic>) {
+              final name = item['nombre'] ?? item['name'];
+              if (name is String && name.trim().isNotEmpty) {
+                return name.trim();
+              }
+            }
+            if (item is String && item.trim().isNotEmpty) {
+              return item.trim();
+            }
+            return null;
+          })
+          .whereType<String>()
+          .toList();
+    }
+    if (value is Map<String, dynamic>) {
+      final names = <String>[];
+      for (final entry in value.entries) {
+        final val = entry.value;
+        if (val is String && val.trim().isNotEmpty) {
+          names.add(val.trim());
+        }
+      }
+      return names;
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      return value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return const [];
   }
 }
 
@@ -1576,5 +1583,408 @@ class _TariffRule {
     return null;
   }
 }
+
+class _CatalogCard extends StatefulWidget {
+  final _ServicePlanCatalogItem item;
+  final Color accentColor;
+  final Gradient gradient;
+  final IconData icon;
+  final String actionLabel;
+  final VoidCallback onPressed;
+
+  const _CatalogCard({
+    required this.item,
+    required this.accentColor,
+    required this.gradient,
+    required this.icon,
+    required this.actionLabel,
+    required this.onPressed,
+  });
+
+  @override
+  State<_CatalogCard> createState() => _CatalogCardState();
+}
+
+class _CatalogCardState extends State<_CatalogCard> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final description = item.description?.trim();
+    final hasDescription = description != null && description.isNotEmpty;
+
+    final badges = <Widget>[
+      _buildBadge(item.type == _CatalogItemType.plan ? 'Plan' : 'Servicio'),
+    ];
+
+    final category = item.category?.trim();
+    if (category != null && category.isNotEmpty) {
+      badges.add(_buildBadge(category));
+    }
+    if (item.identifierLabel != null && item.identifierLabel!.trim().isNotEmpty) {
+      badges.add(_buildBadge(item.identifierLabel!));
+    }
+
+    final tariffHighlights = _buildTariffHighlights(item.tariffs);
+    final associatedServices = item.associatedServices;
+
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      scale: _isPressed ? 0.97 : 1,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          gradient: widget.gradient,
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: widget.accentColor.withOpacity(0.35),
+              blurRadius: 30,
+              offset: const Offset(0, 18),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(26),
+            onHighlightChanged: (value) => setState(() => _isPressed = value),
+            onTap: widget.onPressed,
+            child: Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Hero(
+                        tag: 'catalog-icon-${item.type.name}-${item.id}',
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.16),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Icon(
+                            widget.icon,
+                            size: 28,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.name,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (badges.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: badges,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (hasDescription) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      description!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.4,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                    ),
+                  ],
+                  if (tariffHighlights.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Text(
+                      'Tarifas destacadas',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white.withOpacity(0.95),
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...tariffHighlights,
+                  ],
+                  if (item.type == _CatalogItemType.plan && associatedServices.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Text(
+                      'Servicios incluidos',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white.withOpacity(0.95),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _buildServiceChips(associatedServices),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Hero(
+                      tag: 'catalog-action-${item.type.name}-${item.id}',
+                      child: ElevatedButton.icon(
+                        onPressed: widget.onPressed,
+                        icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                        label: Text(widget.actionLabel),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: widget.accentColor,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(32),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadge(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.22)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildTariffHighlights(List<_TariffRule> rules) {
+    if (rules.isEmpty) {
+      return [
+        Text(
+          'Sin tarifas definidas por el momento.',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.85),
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ];
+    }
+
+    final widgets = <Widget>[];
+    final topRules = rules.take(2).toList();
+    for (int index = 0; index < topRules.length; index++) {
+      final rule = topRules[index];
+      widgets.add(_buildTariffCard(rule));
+      if (index != topRules.length - 1) {
+        widgets.add(const SizedBox(height: 10));
+      }
+    }
+
+    if (rules.length > topRules.length) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            '+${rules.length - topRules.length} reglas adicionales',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 12,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return widgets;
+  }
+
+  Widget _buildTariffCard(_TariffRule rule) {
+    final chips = _buildMetadataChips(rule);
+    final price = _formatTariffPrice(rule);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _formatTariffTitle(rule),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          if (price != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              price,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: chips,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatTariffTitle(_TariffRule rule) {
+    final title = rule.descripcion?.trim();
+    if (title != null && title.isNotEmpty) {
+      return title;
+    }
+    final code = rule.codigo ?? rule.id?.toString() ?? '';
+    if (code.isEmpty) {
+      return 'Tarifa disponible';
+    }
+    return 'Tarifa $code';
+  }
+
+  String? _formatTariffPrice(_TariffRule rule) {
+    final value = rule.valor;
+    if (value == null) {
+      return null;
+    }
+    final currency = rule.moneda?.trim();
+    final symbol = (currency == null || currency.isEmpty) ? 'S/' : currency;
+    final decimals = value == value.roundToDouble() ? 0 : 2;
+    final formatter = NumberFormat.currency(
+      locale: 'es_PE',
+      symbol: symbol,
+      decimalDigits: decimals,
+    );
+    return formatter.format(value);
+  }
+
+  List<Widget> _buildMetadataChips(_TariffRule rule) {
+    final chips = <Widget>[];
+
+    void addChip(String label, String? value) {
+      final content = value?.trim();
+      if (content == null || content.isEmpty) {
+        return;
+      }
+      chips.add(_buildChip('$label: $content'));
+    }
+
+    addChip('Cálculo', rule.tipoCalculo);
+    addChip('Método', rule.metodoPago);
+    addChip('Rol', rule.rolAplica);
+    addChip('Región', rule.ambitoRegion);
+    if (rule.incluyeImpuesto) {
+      chips.add(_buildChip('Incluye impuestos'));
+    }
+
+    final formatter = DateFormat('dd/MM/yyyy');
+    if (rule.vigenciaHasta != null) {
+      chips.add(_buildChip('Vigente hasta ${formatter.format(rule.vigenciaHasta!)}'));
+    }
+
+    return chips;
+  }
+
+  Widget _buildChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildServiceChips(List<String> services) {
+    final chips = <Widget>[];
+    final limit = services.length > 6 ? 6 : services.length;
+    for (int index = 0; index < limit; index++) {
+      chips.add(
+        Chip(
+          backgroundColor: Colors.white.withOpacity(0.14),
+          label: Text(
+            services[index],
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+    }
+    if (services.length > limit) {
+      chips.add(_buildChip('+${services.length - limit} adicionales'));
+    }
+    return chips;
+  }
+}
+
 
 int? _asInt(Object? value) => _TariffRule._asInt(value);
