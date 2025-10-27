@@ -455,11 +455,12 @@ function renderArchivoLink(containerId, archivo, { fallbackLabel, emptyText = 'N
 /* ----------------- Bootstrap ------------------- */
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    await Promise.all([loadRoles(), loadEspecialidades()]);
+    await Promise.allSettled([loadRoles(), loadEspecialidades()]);
     await loadUsers();
-    setupEventListeners();
   } catch (e) {
     showAlert(`Error inicializando: ${e.message}`, 'danger');
+  } finally {
+    setupEventListeners();
   }
 });
 
@@ -620,11 +621,26 @@ async function loadUsers() {
     const data = await apiFetch('/users'); // array o {items:[]}
     const arr = Array.isArray(data) ? data : (data.items ?? []);
     const meta = Array.isArray(data) ? null : (data.meta ?? data.pagination ?? null);
-    // Asegura role normalizado
-    users = arr.map(u => ({
-      ...u,
-      role: u.role ?? roles.find(r => r.id === u.rol_id) ?? { id: u.rol_id, codigo: 'desconocido', nombre: 'Desconocido' }
-    }));
+
+    users = arr.map((u) => {
+      const rawRoleId = u.role_id ?? u.rol_id ?? u.roleId ?? null;
+      const normalizedRoleId = rawRoleId != null ? Number(rawRoleId) : null;
+      const resolvedRole = u.role
+        ?? roles.find((r) => r.id === normalizedRoleId)
+        ?? (normalizedRoleId != null
+          ? { id: normalizedRoleId, codigo: 'desconocido', nombre: 'Desconocido' }
+          : null);
+      const mapped = {
+        ...u,
+        role_id: normalizedRoleId,
+        role: resolvedRole,
+      };
+      if (!('rol_id' in mapped) && normalizedRoleId != null) {
+        mapped.rol_id = normalizedRoleId;
+      }
+      return mapped;
+    });
+
     filteredUsers = [...users];
     usersPaginationState.totalItems = filteredUsers.length;
     if (meta?.pageSize) usersPaginationState.pageSize = Number(meta.pageSize) || USERS_DEFAULT_PAGE_SIZE;
@@ -635,24 +651,42 @@ async function loadUsers() {
     filterUsers();
   } catch (e) {
     showAlert(`No se pudieron cargar usuarios: ${e.message}`, 'danger');
-    renderUsersTable([]);
+    users = [];
     filteredUsers = [];
+    renderUsersTable([]);
     updateUsersCountLabel();
     renderUsersPagination();
   }
 }
 
 async function loadRoles() {
-  const data = await apiFetch('/roles'); // [{id,codigo,nombre}]
-  roles = Array.isArray(data) ? data : (data.items ?? []);
-  if (!roles.length) throw new Error('No se recibieron roles');
-  validatePanelRolesAvailability();
-  populateRoleSelects();
+  let loadError = null;
+  try {
+    const data = await apiFetch('/roles'); // [{id,codigo,nombre}]
+    roles = Array.isArray(data) ? data : (data.items ?? []);
+    if (!roles.length) {
+      showAlert('No se recibieron roles desde la API. Verifica la configuración.', 'warning');
+    }
+  } catch (error) {
+    loadError = error;
+    roles = [];
+    showAlert(`No se pudieron cargar roles: ${error.message}`, 'danger');
+  } finally {
+    populateRoleSelects();
+    if (!loadError) {
+      validatePanelRolesAvailability();
+    }
+  }
 }
 
 async function loadEspecialidades() {
-  const data = await apiFetch('/especialidades'); // [{id, nombre}]
-  especialidades = Array.isArray(data) ? data : (data.items ?? []);
+  try {
+    const data = await apiFetch('/especialidades'); // [{id, nombre}]
+    especialidades = Array.isArray(data) ? data : (data.items ?? []);
+  } catch (error) {
+    especialidades = [];
+    showAlert(`No se pudieron cargar especialidades: ${error.message}`, 'danger');
+  }
 }
 
 /* ----------------- Poblar selects -------------- */
@@ -750,7 +784,10 @@ function renderUsersTable(usersToRender) {
   if (!tbody) return;
 
   if (!usersToRender.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted p-4">No se encontraron usuarios</td></tr>`;
+    const emptyMessage = users.length
+      ? 'No se encontraron usuarios con los filtros actuales.'
+      : 'No hay usuarios registrados todavía.';
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted p-4">${escapeHtml(emptyMessage)}</td></tr>`;
     return;
   }
 
@@ -973,6 +1010,19 @@ function showFieldError(elementId, message) {
   } else {
     element.textContent = message;
     element.classList.remove('d-none');
+  }
+}
+
+function setButtonBusy(button, busy, { loadingText = 'Procesando...' } = {}) {
+  if (!button) return;
+  if (busy) {
+    if (!button.dataset.originalContent) {
+      button.dataset.originalContent = button.innerHTML;
+    }
+    button.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>${loadingText}`;
+  } else if (button.dataset.originalContent) {
+    button.innerHTML = button.dataset.originalContent;
+    delete button.dataset.originalContent;
   }
 }
 
@@ -1219,6 +1269,7 @@ async function handleEmailSendCode() {
   const state = ensureUserFormState().email;
   if (state.sending || state.validating) return;
   const emailInput = document.getElementById('email');
+  const sendBtn = document.getElementById('emailSendCodeButton');
   const validation = validateEmail(emailInput?.value);
   if (!validation.valid) {
     showFieldError('emailFeedback', validation.error || signupMessages.emailInvalid);
@@ -1229,6 +1280,7 @@ async function handleEmailSendCode() {
   const normalizedEmail = validation.normalized;
   ensureUserFormState().verification.conflictsCleared = false;
   ensureUserFormState().verification.emailVerification = null;
+  setButtonBusy(sendBtn, true, { loadingText: 'Solicitando código...' });
   state.validating = true;
   updateEmailButtonsState();
   try {
@@ -1262,7 +1314,7 @@ async function handleEmailSendCode() {
       codeInput.focus();
     }
   } catch (error) {
-    const message = error?.message || 'No se pudo enviar el código de verificación.';
+    const message = `${error?.message || 'No se pudo enviar el código de verificación.'} Puedes intentar solicitarlo nuevamente.`;
     showFieldError('emailFeedback', message);
     setStepAlert('contactStepAlert', message, 'danger');
   } finally {
@@ -1270,6 +1322,7 @@ async function handleEmailSendCode() {
     state.sending = false;
     updateEmailButtonsState();
     updateEmailVerificationStatusUI();
+    setButtonBusy(sendBtn, false);
   }
 }
 
@@ -1279,6 +1332,7 @@ async function handleEmailVerifyCode() {
 
   const emailInput = document.getElementById('email');
   const codeInput = document.getElementById('emailCodigo');
+  const verifyBtn = document.getElementById('emailVerifyCodeButton');
   const validation = validateEmail(emailInput?.value);
   if (!validation.valid) {
     showFieldError('emailFeedback', validation.error || signupMessages.emailInvalid);
@@ -1303,6 +1357,7 @@ async function handleEmailVerifyCode() {
   }
 
   state.verifying = true;
+  setButtonBusy(verifyBtn, true, { loadingText: 'Validando código...' });
   updateEmailButtonsState();
   try {
     await apiFetch('/auth/email/verify-code', {
@@ -1318,7 +1373,7 @@ async function handleEmailVerifyCode() {
     showFieldError('emailCodeError', null);
     setStepAlert('contactStepAlert', 'Correo verificado correctamente.', 'success');
   } catch (error) {
-    const message = error?.message || 'Código incorrecto o expirado.';
+    const message = `${error?.message || 'Código incorrecto o expirado.'} Puedes ingresar un nuevo código e intentarlo nuevamente.`;
     state.verifiedEmail = null;
     showFieldError('emailCodeError', message);
     setStepAlert('contactStepAlert', message, 'danger');
@@ -1326,6 +1381,7 @@ async function handleEmailVerifyCode() {
     state.verifying = false;
     updateEmailButtonsState();
     updateEmailVerificationStatusUI();
+    setButtonBusy(verifyBtn, false);
   }
 }
 
@@ -1346,7 +1402,7 @@ async function ensureDepartamentosLoaded() {
     ubigeoCache.departamentos = Array.isArray(data) ? data : (data.items ?? []);
   } catch (error) {
     ubigeoCache.departamentos = [];
-    setStepAlert('contactStepAlert', `No se pudieron cargar los departamentos: ${error.message}`, 'danger');
+    setStepAlert('contactStepAlert', `No se pudieron cargar los departamentos: ${error.message}. Puedes volver a abrir el selector para reintentar.`, 'danger');
   } finally {
     state.ubigeo.loadingDepartamentos = false;
     populateDepartamentoSelect();
@@ -1375,7 +1431,7 @@ async function loadProvinciasForDepartamento(departamentoCodigo) {
       ubigeoCache.provincias.set(departamentoCodigo, Array.isArray(data) ? data : (data.items ?? []));
     } catch (error) {
       ubigeoCache.provincias.set(departamentoCodigo, []);
-      setStepAlert('contactStepAlert', `No se pudieron cargar las provincias: ${error.message}`, 'danger');
+      setStepAlert('contactStepAlert', `No se pudieron cargar las provincias: ${error.message}. Selecciona nuevamente el departamento para reintentar.`, 'danger');
     } finally {
       state.ubigeo.loadingProvincias = false;
     }
@@ -1404,7 +1460,7 @@ async function loadDistritosForProvincia(provinciaCodigo) {
       ubigeoCache.distritos.set(provinciaCodigo, Array.isArray(data) ? data : (data.items ?? []));
     } catch (error) {
       ubigeoCache.distritos.set(provinciaCodigo, []);
-      setStepAlert('contactStepAlert', `No se pudieron cargar los distritos: ${error.message}`, 'danger');
+      setStepAlert('contactStepAlert', `No se pudieron cargar los distritos: ${error.message}. Selecciona nuevamente la provincia para reintentar.`, 'danger');
     } finally {
       state.ubigeo.loadingDistritos = false;
     }
@@ -1565,9 +1621,10 @@ async function handleDniLookup(event) {
       throw new Error('No se encontró información del DNI.');
     }
   } catch (error) {
-    const message = error?.message || 'Error consultando DNI.';
+    const message = `${error?.message || 'Error consultando DNI.'} Puedes intentar consultar nuevamente.`;
     state.dni.lookup = null;
     state.dni.lastConsulted = null;
+    state.dni.error = message;
     state.verification.dniLookup = null;
     state.verification.dniMatch = false;
     clearPersonalInfoFields();
@@ -1668,7 +1725,7 @@ async function editUser(userId) {
       verifiedAt: new Date().toISOString(),
     };
 
-    configureUserRoleSelect({ selectedRoleId: user.rol_id });
+    configureUserRoleSelect({ selectedRoleId: user.role_id ?? user.rol_id });
 
     await ensureDepartamentosLoaded();
     if (persona.direccion_id) {
@@ -1777,11 +1834,18 @@ async function saveUser() {
     direccion_id: direccionId,
   };
 
-  const payloadUser = { persona: personaPayload, rol_id: rolId };
+  const payloadUser = { persona: personaPayload, role_id: rolId, rol_id: rolId };
   if (claveToSend) payloadUser.clave = claveToSend;
 
   const currentUser = isEditing ? users.find(u => u.id === currentUserId) : null;
   const excludePersonaId = currentUser?.persona_id ?? currentUser?.persona?.id ?? state.personaId ?? null;
+
+  const saveBtn = document.getElementById('saveUserButton');
+  const originalSaveDisabled = saveBtn?.disabled ?? false;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    setButtonBusy(saveBtn, true, { loadingText: isEditing ? 'Actualizando...' : 'Creando...' });
+  }
 
   try {
     if (shouldRunPersonaValidations(rolCodigo)) {
@@ -1816,9 +1880,14 @@ async function saveUser() {
     await loadUsers();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('userModal')).hide();
   } catch (e) {
-    const message = e?.message || 'Error guardando usuario';
+    const message = `${e?.message || 'Error guardando usuario'}. Corrige los datos o inténtalo nuevamente.`;
     setStepAlert('securityStepAlert', message, 'danger');
     showAlert(message, 'danger');
+  } finally {
+    if (saveBtn) {
+      setButtonBusy(saveBtn, false);
+      saveBtn.disabled = originalSaveDisabled;
+    }
   }
 }
 

@@ -132,7 +132,7 @@ const userController = require('../controllers/userController');
  *       properties:
  *         id: { type: integer, example: 51 }
  *         persona_id: { type: integer, example: 25 }
- *         rol_id: { type: integer, example: 3 }
+ *         role_id: { type: integer, example: 3 }
  *         clave: { type: string, example: "hash/clave" }
  *         telefono_verificado: { type: boolean, example: false }
  *         plan_id: { type: integer, nullable: true, example: null }
@@ -165,12 +165,12 @@ const userController = require('../controllers/userController');
  *
  *     CreateUserRequest:
  *       type: object
- *       required: [rol_id, clave]
+ *       required: [role_id, clave]
  *       properties:
  *         attachToExisting:
  *           type: boolean
  *           default: false
- *         rol_id:
+ *         role_id:
  *           type: integer
  *           example: 3
  *         clave:
@@ -193,7 +193,7 @@ const userController = require('../controllers/userController');
  *     UpdateUserRequest:
  *       type: object
  *       properties:
- *         rol_id: { type: integer, example: 1 }
+ *         role_id: { type: integer, example: 1 }
  *         persona:
  *           $ref: '#/components/schemas/Persona'
  *
