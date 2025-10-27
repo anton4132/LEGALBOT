@@ -234,6 +234,86 @@ function getPanelAllowedRoles() {
     .filter(Boolean);
 }
 
+function describeRoleAvailability() {
+  const normalizedRoles = Array.isArray(roles) ? roles : [];
+  const available = normalizedRoles
+    .filter(role => role && typeof role.codigo === 'string')
+    .map(role => ({ codigo: String(role.codigo).toLowerCase(), role }));
+  const availableCodes = new Map(available.map(item => [item.codigo, item.role]));
+  const missing = PANEL_ALLOWED_ROLE_ORDER.filter(code => !availableCodes.has(code));
+  return { availableRoles: available.map(item => item.role), missingCodes: missing };
+}
+
+function updateRoleAvailabilityFeedback() {
+  const element = document.getElementById('roleAvailabilityFeedback');
+  if (!element) return;
+
+  element.classList.remove('text-muted', 'text-warning', 'text-success');
+
+  const { missingCodes } = describeRoleAvailability();
+
+  if (!Array.isArray(roles) || !roles.length) {
+    element.textContent = 'No se recibieron roles desde la API. Verifica la configuración.';
+    element.classList.remove('d-none');
+    element.classList.add('text-warning');
+    return;
+  }
+
+  if (missingCodes.length) {
+    const humanList = missingCodes.map(code => code.toUpperCase()).join(', ');
+    element.textContent = `Faltan los roles requeridos: ${humanList}. Puedes continuar con los roles disponibles.`;
+    element.classList.remove('d-none');
+    element.classList.add('text-warning');
+    return;
+  }
+
+  element.textContent = 'Roles de cliente y administrador disponibles para su asignación.';
+  element.classList.remove('d-none');
+  element.classList.add('text-success');
+}
+
+function showPersonaValidationNotice(message = null, tone = 'warning') {
+  const element = document.getElementById('personaValidationNotice');
+  if (!element) return;
+  element.classList.remove('alert-warning', 'alert-info', 'alert-danger', 'alert-success');
+  if (!message) {
+    element.textContent = '';
+    element.classList.add('d-none');
+    return;
+  }
+  element.textContent = message;
+  element.classList.remove('d-none');
+  element.classList.add(`alert-${tone}`);
+}
+
+function updatePersonaValidationState({ triggerAlert = false } = {}) {
+  const roleCode = getSelectedRoleCode();
+  const canRunValidations = shouldRunPersonaValidations(roleCode);
+  const state = ensureUserFormState();
+  const isLoadingDni = state?.dni?.loading ?? false;
+  const reniecButton = document.getElementById('dniLookupButton');
+
+  if (reniecButton) {
+    reniecButton.disabled = isLoadingDni || !canRunValidations;
+  }
+
+  let notice = null;
+  if (!roleCode) {
+    notice = 'Selecciona un rol de cliente o administrador para habilitar las validaciones de RENIEC y duplicados.';
+  } else if (!canRunValidations) {
+    notice = 'El rol seleccionado no requiere validaciones de persona desde este panel.';
+  }
+
+  if (notice) {
+    showPersonaValidationNotice(notice, 'warning');
+    if (triggerAlert) {
+      setStepAlert('contactStepAlert', notice, 'warning');
+    }
+  } else {
+    showPersonaValidationNotice(null);
+  }
+}
+
 function normalizeArchivoRecord(record) {
   if (!record) return null;
 
@@ -504,6 +584,7 @@ function setupEventListeners() {
   });
   document.getElementById('rol')?.addEventListener('change', () => {
     ensureUserFormState().verification.conflictsCleared = false;
+    updatePersonaValidationState();
   });
 
   document.getElementById('nextStepButton')?.addEventListener('click', handleNextStep);
@@ -663,8 +744,13 @@ async function loadRoles() {
   let loadError = null;
   try {
     const data = await apiFetch('/roles'); // [{id,codigo,nombre}]
-    roles = Array.isArray(data) ? data : (data.items ?? []);
-    if (!roles.length) {
+    const list = Array.isArray(data)
+      ? data
+      : (Array.isArray(data?.data) ? data.data : (data.items ?? []));
+    roles = list;
+    if (data?.warning) {
+      showAlert(data.warning, 'warning');
+    } else if (!roles.length) {
       showAlert('No se recibieron roles desde la API. Verifica la configuración.', 'warning');
     }
   } catch (error) {
@@ -673,6 +759,8 @@ async function loadRoles() {
     showAlert(`No se pudieron cargar roles: ${error.message}`, 'danger');
   } finally {
     populateRoleSelects();
+    updateRoleAvailabilityFeedback();
+    updatePersonaValidationState();
     if (!loadError) {
       validatePanelRolesAvailability();
     }
@@ -753,10 +841,12 @@ function configureUserRoleSelect({ selectedRoleId = null } = {}) {
   if (allowedRoles.length) {
     select.disabled = false;
   }
+
+  updatePersonaValidationState();
 }
 
 function validatePanelRolesAvailability() {
-  const missingCodes = PANEL_ALLOWED_ROLE_ORDER.filter(code => !roles.some(role => (role?.codigo || '').toLowerCase() === code));
+  const { missingCodes } = describeRoleAvailability();
   if (missingCodes.length) {
     const humanList = missingCodes.map(code => code.toUpperCase()).join(', ');
     showAlert(`Advertencia: los roles ${humanList} no están disponibles en la API. Verifica la configuración del backend para exponerlos.`, 'warning');
@@ -996,7 +1086,8 @@ function updateDniLookupLoading(isLoading) {
     button.disabled = true;
     button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Consultando...';
   } else {
-    button.disabled = false;
+    const canRun = shouldRunPersonaValidations();
+    button.disabled = !canRun;
     button.innerHTML = 'Consultar RENIEC';
   }
 }
@@ -1399,7 +1490,13 @@ async function ensureDepartamentosLoaded() {
   state.ubigeo.loadingDepartamentos = true;
   try {
     const data = await apiFetch('/ubigeo/departamentos');
-    ubigeoCache.departamentos = Array.isArray(data) ? data : (data.items ?? []);
+    const list = Array.isArray(data)
+      ? data
+      : (Array.isArray(data?.data) ? data.data : (data.items ?? []));
+    ubigeoCache.departamentos = list;
+    if (data?.warning) {
+      setStepAlert('contactStepAlert', data.warning, 'warning');
+    }
   } catch (error) {
     ubigeoCache.departamentos = [];
     setStepAlert('contactStepAlert', `No se pudieron cargar los departamentos: ${error.message}. Puedes volver a abrir el selector para reintentar.`, 'danger');
@@ -1428,7 +1525,13 @@ async function loadProvinciasForDepartamento(departamentoCodigo) {
     state.ubigeo.loadingProvincias = true;
     try {
       const data = await apiFetch(`/ubigeo/departamentos/${departamentoCodigo}/provincias`);
-      ubigeoCache.provincias.set(departamentoCodigo, Array.isArray(data) ? data : (data.items ?? []));
+      const list = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.data) ? data.data : (data.items ?? []));
+      ubigeoCache.provincias.set(departamentoCodigo, list);
+      if (data?.warning) {
+        setStepAlert('contactStepAlert', data.warning, 'warning');
+      }
     } catch (error) {
       ubigeoCache.provincias.set(departamentoCodigo, []);
       setStepAlert('contactStepAlert', `No se pudieron cargar las provincias: ${error.message}. Selecciona nuevamente el departamento para reintentar.`, 'danger');
@@ -1457,7 +1560,13 @@ async function loadDistritosForProvincia(provinciaCodigo) {
     state.ubigeo.loadingDistritos = true;
     try {
       const data = await apiFetch(`/ubigeo/provincias/${provinciaCodigo}/distritos`);
-      ubigeoCache.distritos.set(provinciaCodigo, Array.isArray(data) ? data : (data.items ?? []));
+      const list = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.data) ? data.data : (data.items ?? []));
+      ubigeoCache.distritos.set(provinciaCodigo, list);
+      if (data?.warning) {
+        setStepAlert('contactStepAlert', data.warning, 'warning');
+      }
     } catch (error) {
       ubigeoCache.distritos.set(provinciaCodigo, []);
       setStepAlert('contactStepAlert', `No se pudieron cargar los distritos: ${error.message}. Selecciona nuevamente la provincia para reintentar.`, 'danger');
@@ -1571,7 +1680,10 @@ async function setUbigeoFromCodigo(codigo) {
 
 /* ----------------- DNI lookup ------------------ */
 async function handleDniLookup(event) {
-  if (!shouldRunPersonaValidations()) return;
+  if (!shouldRunPersonaValidations()) {
+    updatePersonaValidationState({ triggerAlert: true });
+    return;
+  }
   const input = event?.target || event?.currentTarget || document.getElementById('dni');
   if (!input) return;
 
@@ -1805,6 +1917,7 @@ async function saveUser() {
   const rolCodigo = getSelectedRoleCode();
   if (!rolId || Number.isNaN(rolId)) return showAlert('Selecciona un rol válido.', 'danger');
   if (!shouldRunPersonaValidations(rolCodigo)) {
+    updatePersonaValidationState({ triggerAlert: true });
     return showAlert('Solo se pueden gestionar cuentas de clientes o administradores desde este panel.', 'danger');
   }
 
