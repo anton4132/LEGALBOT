@@ -2121,7 +2121,7 @@ function openEstudioModal(userId) {
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('estudioModal')).show();
 }
-}
+
 
 /* ----------------- Disponibilidad ---------------- */
 async function openDisponibilidadModal(userId) {
