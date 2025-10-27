@@ -28,6 +28,25 @@ let departamentosCacheExpiration = 0;
 const provinciasCache = new Map();
 const distritosCache = new Map();
 
+const EMPTY_WARNINGS = {
+  departamentos: 'No se encontraron departamentos en el catálogo de direcciones. Carga los datos antes de continuar.',
+  provincias: 'No hay provincias disponibles para el departamento seleccionado.',
+  distritos: 'No hay distritos disponibles para la provincia seleccionada.',
+};
+
+function buildResponsePayload(data, warningKey) {
+  const list = Array.isArray(data) ? data : [];
+  const payload = { success: true, data: list };
+  if (!list.length && warningKey && EMPTY_WARNINGS[warningKey]) {
+    payload.warning = EMPTY_WARNINGS[warningKey];
+  }
+  return payload;
+}
+
+function respondWithData(res, data, warningKey) {
+  res.json(buildResponsePayload(data, warningKey));
+}
+
 function isCacheValid(expiration) {
   return expiration !== 0 && Date.now() < expiration;
 }
@@ -50,7 +69,7 @@ function setCacheEntry(cacheMap, key, value) {
 async function listDepartamentos(req, res, next) {
   try {
     if (isCacheValid(departamentosCacheExpiration) && departamentosCache) {
-      return res.json(departamentosCache);
+      return respondWithData(res, departamentosCache, 'departamentos');
     }
     const rows = await prisma.$queryRaw`
       SELECT DISTINCT LEFT(ubigeo_codigo, 2) AS codigo, departamento AS nombre
@@ -66,7 +85,7 @@ async function listDepartamentos(req, res, next) {
     departamentosCache = data;
     departamentosCacheExpiration = Date.now() + CACHE_TTL_MS;
 
-    res.json(data);
+    respondWithData(res, data, 'departamentos');
   } catch (error) {
     next(error);
   }
@@ -83,7 +102,7 @@ async function listProvincias(req, res, next) {
 
     const cached = getCacheEntry(provinciasCache, departamentoCodigo);
     if (cached) {
-      return res.json(cached);
+      return respondWithData(res, cached, 'provincias');
     }
 
     const rows = await prisma.$queryRaw`
@@ -102,7 +121,7 @@ async function listProvincias(req, res, next) {
       .filter((row) => row.codigo && row.nombre);
 
     setCacheEntry(provinciasCache, departamentoCodigo, data);
-    res.json(data);
+    respondWithData(res, data, 'provincias');
   } catch (error) {
     next(error);
   }
@@ -118,7 +137,7 @@ async function listDistritos(req, res, next) {
     }
     const cached = getCacheEntry(distritosCache, provinciaCodigo);
     if (cached) {
-      return res.json(cached);
+      return respondWithData(res, cached, 'distritos');
     }
     const rows = await prisma.$queryRaw`
       SELECT DISTINCT ubigeo_codigo AS codigo, distrito AS nombre
@@ -134,9 +153,9 @@ async function listDistritos(req, res, next) {
         nombre: row.nombre ? String(row.nombre).trim() : null,
       }))
       .filter((row) => row.codigo && row.nombre);
-      setCacheEntry(distritosCache, provinciaCodigo, data);
+    setCacheEntry(distritosCache, provinciaCodigo, data);
 
-    res.json(data);
+    respondWithData(res, data, 'distritos');
   } catch (error) {
     next(error);
   }

@@ -1,4 +1,36 @@
+const { Prisma } = require('@prisma/client');
 const { prisma } = require('../config/database');
+
+let cachedRoleForeignKey = null;
+
+async function resolveRoleForeignKey() {
+  if (cachedRoleForeignKey) {
+    return cachedRoleForeignKey;
+  }
+
+  try {
+    const result = await prisma.$queryRaw`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'usuario'
+        AND column_name IN ('role_id', 'rol_id')
+      ORDER BY CASE column_name WHEN 'role_id' THEN 0 ELSE 1 END
+      LIMIT 1
+    `;
+
+    const resolved = Array.isArray(result) && result.length
+      ? result[0]?.column_name
+      : null;
+
+    cachedRoleForeignKey = resolved || 'role_id';
+  } catch (err) {
+    console.warn('No se pudo determinar la columna de rol, usando role_id por defecto.', err?.message);
+    cachedRoleForeignKey = 'role_id';
+  }
+
+  return cachedRoleForeignKey;
+}
 
 // Obtener estadísticas del dashboard
 const getStats = async (req, res) => {
@@ -65,31 +97,35 @@ const getCharts = async (req, res) => {
     const sixWeeksAgo = new Date();
     sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42); // 6 semanas atrás
 
-    // Clientes
-    let clientesData = await prisma.$queryRawUnsafe(`
-      SELECT 
+    const roleForeignKey = await resolveRoleForeignKey();
+    const roleJoinFragment = Prisma.raw(`u."${roleForeignKey}"`);
+
+    const clientesQuery = Prisma.sql`
+      SELECT
         DATE_TRUNC('week', u.creado_el)::DATE as semana,
         COUNT(*)::bigint as nuevos_clientes
       FROM "usuario" u
-      JOIN "role" r ON u.role_id = r.id
+      JOIN "role" r ON ${roleJoinFragment} = r.id
       WHERE r.codigo = 'cliente'
-        AND u.creado_el >= $1
+        AND u.creado_el >= ${sixWeeksAgo}
       GROUP BY DATE_TRUNC('week', u.creado_el)
       ORDER BY semana
-    `, sixWeeksAgo);
+    `;
 
-    // Abogados
-    let abogadosData = await prisma.$queryRawUnsafe(`
-      SELECT 
+    const abogadosQuery = Prisma.sql`
+      SELECT
         DATE_TRUNC('week', u.creado_el)::DATE as semana,
         COUNT(*)::bigint as nuevos_abogados
       FROM "usuario" u
-      JOIN "role" r ON u.role_id = r.id
+      JOIN "role" r ON ${roleJoinFragment} = r.id
       WHERE r.codigo = 'abogado'
-        AND u.creado_el >= $1
+        AND u.creado_el >= ${sixWeeksAgo}
       GROUP BY DATE_TRUNC('week', u.creado_el)
       ORDER BY semana
-    `, sixWeeksAgo);
+    `;
+
+    let clientesData = await prisma.$queryRaw(clientesQuery);
+    let abogadosData = await prisma.$queryRaw(abogadosQuery);
 
     // Convertir BigInt a Number
     clientesData = clientesData.map(row => ({
