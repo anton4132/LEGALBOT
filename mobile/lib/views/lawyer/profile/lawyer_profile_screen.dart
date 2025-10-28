@@ -15,7 +15,6 @@ import '../../../services/session_service.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
 
-
 class LawyerProfileScreen extends StatefulWidget {
   const LawyerProfileScreen({
     super.key,
@@ -46,15 +45,11 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   // Estudios
   final TextEditingController _lawFirmRucController = TextEditingController();
 
-
   bool _loading = true;
   bool _savingProfile = false;
   bool _savingSpecialties = false;
   bool _addingAvailability = false;
   bool _savingLawFirm = false;
-  static const String _filterKeyLawFirmRuc = 'lawFirmRuc';
-  static const String _filterKeyLawFirmSelection = 'lawFirmSelected';
-  Set<String> _activeFilters = <String>{};
   static const int _maxAvatarFileSizeBytes = 5 * 1024 * 1024;
 
   LawyerProfileInfo? _profileInfo;
@@ -65,7 +60,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   late LawyerProfileSubsection _currentSubsection;
 
   bool _lookingUpLawFirm = false;
-
 
   int _newSlotDay = 1;
   TimeOfDay? _newSlotStart;
@@ -83,8 +77,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   void initState() {
     super.initState();
     _currentSubsection = widget.initialSubsection;
-    _lawFirmRucController.addListener(_recomputeActiveFilters);
-    _recomputeActiveFilters();
     _loadInitialData();
   }
 
@@ -94,7 +86,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     _baseRateController.dispose();
 
     // Estudios
-    _lawFirmRucController.removeListener(_recomputeActiveFilters);
     _lawFirmRucController.dispose();
 
     super.dispose();
@@ -125,7 +116,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
   void selectSubsection(LawyerProfileSubsection subsection) {
     _setSubsection(subsection, notifyParent: false);
   }
-
 
   Future<void> _loadInitialData() async {
     final session = SessionService.instance.session;
@@ -213,7 +203,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       _selectedLawFirm = primary.estudio;
       _lawFirmPrincipal = primary.principal;
     });
-    _recomputeActiveFilters();
   }
 
   void _clearLawFirmForm() {
@@ -222,7 +211,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       _selectedLawFirm = null;
       _lawFirmPrincipal = false;
     });
-    _recomputeActiveFilters();
   }
 
   Future<void> _pickAvatarFile() async {
@@ -714,12 +702,12 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
         _savingLawFirm = false;
         _selectedLawFirm = assignment.estudio;
         _studies = _mergeStudyAssignment(_studies, assignment);
-        _lawFirmRucController.text = assignment.estudio.ruc ??
+        _lawFirmRucController.text =
+            assignment.estudio.ruc ??
             selected.ruc ??
             _lawFirmRucController.text;
         _lawFirmPrincipal = assignment.principal;
       });
-      _recomputeActiveFilters();
 
       _showSnack('Estudio actualizado', color: AppColors.button2Color);
     } on UnauthorizedException catch (error) {
@@ -731,7 +719,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     }
   }
 
-   Future<void> _lookupLawFirmByRuc() async {
+  Future<void> _lookupLawFirmByRuc() async {
     if (_lookingUpLawFirm) return;
     final session = SessionService.instance.session;
     if (session == null) return;
@@ -753,7 +741,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
         _selectedLawFirm = summary;
         _lawFirmRucController.text = summary.ruc ?? ruc;
       });
-      _recomputeActiveFilters();
       _showSnack(
         'Estudio consultado correctamente.',
         color: AppColors.button2Color,
@@ -987,10 +974,8 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       setState(() {
         _selectedLawFirm = selected;
       });
-      _recomputeActiveFilters();
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -1007,126 +992,19 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Icon(
-                      _iconForSection(_currentSubsection),
-                      color: AppColors.buttonColor,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _labelForSection(_currentSubsection),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.buttonColor,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (!widget.embedded) _buildDrawerButton(),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildFilterStatusBar(),
+           if (!widget.embedded) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: _buildDrawerButton(),
+            ),
+            const SizedBox(height: 12),
+          ],
           const SizedBox(height: 16),
           _buildCurrentSection(),
         ],
       ),
     );
     return RefreshIndicator(onRefresh: _loadInitialData, child: scrollable);
-  }
-
-  Widget _buildFilterStatusBar() {
-    final applied = _filtersApplied;
-    final Color accentColor =
-        applied ? AppColors.buttonColor : AppColors.text3Color;
-    final Color backgroundColor = applied
-        ? AppColors.buttonColor.withOpacity(0.12)
-        : AppColors.strokeColor.withOpacity(0.12);
-    final Color borderColor =
-        applied ? AppColors.buttonColor.withOpacity(0.4) : AppColors.strokeColor;
-    final icon = applied ? Icons.filter_alt : Icons.filter_alt_off;
-    final summary = _filterSummaryText();
-
-    return Semantics(
-      container: true,
-      label: summary,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: accentColor),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                summary,
-                style: TextStyle(
-                  color: accentColor,
-                  fontWeight: applied ? FontWeight.w600 : FontWeight.w500,
-                ),
-              ),
-            ),
-            if (applied)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${_activeFilters.length}',
-                  style: TextStyle(
-                    color: accentColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerButton() {
-    return Builder(
-      builder: (context) {
-        final scaffoldState = Scaffold.maybeOf(context);
-        final hasDrawer = scaffoldState?.hasDrawer ?? false;
-        if (!hasDrawer) {
-          return IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: null,
-            tooltip: 'Menú no disponible',
-          );
-        }
-        return IconButton(
-          icon: const Icon(Icons.menu),
-          color: AppColors.buttonColor,
-          tooltip: 'Abrir menú',
-          onPressed: () {
-            FocusScope.of(context).unfocus();
-            scaffoldState?.openDrawer();
-          },
-        );
-      },
-    );
   }
 
   Widget _buildCurrentSection() {
@@ -1142,44 +1020,28 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     }
   }
 
-  void _recomputeActiveFilters() {
-    if (!mounted) return;
-    final filters = <String>{};
-    if (_lawFirmRucController.text.trim().isNotEmpty) {
-      filters.add(_filterKeyLawFirmRuc);
-    }
-    if (_selectedLawFirm != null) {
-      filters.add(_filterKeyLawFirmSelection);
-    }
-    if (!setEquals(filters, _activeFilters)) {
-      setState(() {
-        _activeFilters = filters;
-      });
-    }
-  }
-
-  bool get _filtersApplied => _activeFilters.isNotEmpty;
-
-  String _filterSummaryText() {
-    if (_activeFilters.isEmpty) {
-      return 'Sin filtros activos';
-    }
-    final labels = _activeFilters.map(_filterLabelForKey).toList()..sort();
-    if (labels.length == 1) {
-      return 'Filtro aplicado: ${labels.first}';
-    }
-    return 'Filtros aplicados: ${labels.join(', ')}';
-  }
-
-  String _filterLabelForKey(String key) {
-    switch (key) {
-      case _filterKeyLawFirmRuc:
-        return 'RUC de estudio';
-      case _filterKeyLawFirmSelection:
-        return 'Estudio seleccionado';
-      default:
-        return key;
-    }
+   Widget _buildSectionHeader(LawyerProfileSubsection subsection) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(
+          _iconForSection(subsection),
+          color: AppColors.buttonColor,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            _labelForSection(subsection),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.buttonColor,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 
   IconData _iconForSection(LawyerProfileSubsection subsection) {
@@ -1206,6 +1068,25 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       case LawyerProfileSubsection.studies:
         return 'Estudios asociados';
     }
+  }
+
+  Widget _buildSectionTitle(String title, {IconData? icon}) {
+    return Row(
+      children: [
+        if (icon != null) ...[
+          Icon(icon, color: AppColors.buttonColor),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.buttonColor,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildSummaryRow(String label, String? value) {
@@ -1260,7 +1141,10 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
 
     addFlag('Agente de retención', firm.esAgenteRetencion);
     addFlag('Agente de percepción', firm.esAgentePercepcion);
-    addFlag('Agente percepción combustible', firm.esAgentePercepcionCombustible);
+    addFlag(
+      'Agente percepción combustible',
+      firm.esAgentePercepcionCombustible,
+    );
     addFlag('Buen contribuyente', firm.esBuenContribuyente);
 
     return Container(
@@ -1295,21 +1179,14 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
           _buildSummaryRow('Teléfono', firm.telefono),
           if (flagChips.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: flagChips,
-            ),
+            Wrap(spacing: 8, runSpacing: 8, children: flagChips),
           ],
           if (direccion == null || direccion.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 12),
               child: Text(
                 'Este estudio no cuenta con dirección exacta registrada. Consulta nuevamente el RUC para completar la información.',
-                style: TextStyle(
-                  color: AppColors.text3Color,
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: AppColors.text3Color, fontSize: 12),
               ),
             ),
         ],
@@ -1323,6 +1200,9 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+           _buildSectionHeader(LawyerProfileSubsection.profile),
+          const SizedBox(height: 16),
+
           _buildAvatarPicker(!_savingProfile),
           const SizedBox(height: 16),
 
@@ -1371,6 +1251,8 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+           _buildSectionHeader(LawyerProfileSubsection.specialties),
+          const SizedBox(height: 16),
           if (_catalogSpecialties.isEmpty)
             const Text('No hay especialidades registradas en el catálogo.')
           else
@@ -1431,6 +1313,8 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildSectionHeader(LawyerProfileSubsection.acceptanceCriteria),
+          const SizedBox(height: 16),
           if (_availability.isEmpty)
             const Text('Aún no registras horarios de atención.'),
           if (_availability.isNotEmpty)
@@ -1440,7 +1324,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                         '${_dayName(slot.diaSemana)} · ${_formatTimeForDisplay(slot.horaInicio)} - ${_formatTimeForDisplay(slot.horaFin)}',
+                        '${_dayName(slot.diaSemana)} · ${_formatTimeForDisplay(slot.horaInicio)} - ${_formatTimeForDisplay(slot.horaFin)}',
                       ),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
@@ -1524,6 +1408,8 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildSectionHeader(LawyerProfileSubsection.acceptanceCriteria),
+          const SizedBox(height: 16),
           if (_studies.isEmpty)
             const Text('No tienes estudios vinculados todavía.'),
           if (_studies.isNotEmpty)
@@ -1532,9 +1418,7 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                   _studies.map((assignment) {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        assignment.estudio.displayName,
-                      ),
+                      title: Text(assignment.estudio.displayName),
                       subtitle: Text(
                         [
                               assignment.estudio.ruc,
@@ -1555,7 +1439,6 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
                           _selectedLawFirm = assignment.estudio;
                           _lawFirmPrincipal = assignment.principal;
                         });
-                        _recomputeActiveFilters();
                       },
                     );
                   }).toList(),
@@ -1583,14 +1466,17 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
             children: [
               ElevatedButton.icon(
                 onPressed:
-                    (_lookingUpLawFirm || _savingLawFirm) ? null : _lookupLawFirmByRuc,
-                icon: _lookingUpLawFirm
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.manage_search_rounded),
+                    (_lookingUpLawFirm || _savingLawFirm)
+                        ? null
+                        : _lookupLawFirmByRuc,
+                icon:
+                    _lookingUpLawFirm
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.manage_search_rounded),
                 label: Text(
                   _lookingUpLawFirm ? 'Buscando...' : 'Buscar registro',
                 ),
@@ -1622,9 +1508,10 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Marcar como estudio principal'),
             value: _lawFirmPrincipal,
-            onChanged: _selectedLawFirm == null
-                ? null
-                : (value) => setState(() => _lawFirmPrincipal = value),
+            onChanged:
+                _selectedLawFirm == null
+                    ? null
+                    : (value) => setState(() => _lawFirmPrincipal = value),
           ),
           const SizedBox(height: 12),
           Align(

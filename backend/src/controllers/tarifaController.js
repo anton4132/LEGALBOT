@@ -1,5 +1,12 @@
-const { Prisma } = require('@prisma/client');
 const { prisma } = require('../config/database');
+const {
+  parseIntOrNull,
+  parseDate,
+  toDecimal,
+  decimalToNumber,
+  collectConflictIds,
+  buildOverlapWhere,
+} = require('./helpers/ruleUtils');
 
 const PARAM_TEMPLATES = {
   fijo: { monto: 0 },
@@ -9,41 +16,17 @@ const PARAM_TEMPLATES = {
   estacional: { multiplicadores: [{ desde: '', hasta: '', factor: 1 }] },
 };
 
-function parseIntOrNull(value) {
-  if (value === undefined || value === null || value === '') return null;
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? null : parsed;
-}
+const TARIFFA_SCOPE_FIELDS = [
+  'servicio_id',
+  'plan_id',
+  'rol_aplica',
+  'ambito_region',
+  'metodo_pago',
+  'moneda',
+  'tipo',
+];
 
-function parseDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
-
-function toDecimal(value) {
-  if (value === undefined || value === null || value === '') return null;
-  return new Prisma.Decimal(value);
-}
-
-function decimalToNumber(value) {
-  if (value === undefined || value === null) return null;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') return Number(value);
-  if (typeof value === 'object' && typeof value.toNumber === 'function') {
-    return value.toNumber();
-  }
-  if (value instanceof Prisma.Decimal) {
-    return value.toNumber();
-  }
-  return Number(value);
-}
-
-function resolveEntityKey(resLocals, data) {
-  if (resLocals?.targetTipo === 'comision') return 'comision';
-  if (resLocals?.targetTipo === 'tarifa') return 'tarifa';
-  if (data?.tipo === 'comision') return 'comision';
+function resolveEntityKey() {
   return 'tarifa';
 }
 
@@ -68,7 +51,7 @@ function serializeTarifa(tarifa) {
     plan: tarifa.plan || null,
     servicio_id: tarifa.servicio_id,
     servicio: tarifa.servicio || null,
-    moneda: tarifa.moneda,
+    moneda: tarifa.moneda,  
     metodo_pago: tarifa.metodo_pago,
     ambito_region: tarifa.ambito_region,
     tipo_calculo: tarifa.tipo_calculo,
@@ -159,6 +142,15 @@ function mapTarifaPatch(payload) {
   }
   return data;
 }
+
+function ensureTipoCalculo(data) {
+  if (!data.tipo_calculo) {
+    const error = new Error('El tipo de cálculo es obligatorio');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
 
 function buildListWhere(query) {
   const where = {};
@@ -259,46 +251,14 @@ function buildListWhere(query) {
   }
   return where;
 }
-
-function buildOverlapWhere(data, excludeId) {
-  const where = {
-    activo: true,
-  };
-  if (excludeId) {
-    where.id = { not: excludeId };
-  }
-  const eqFields = [
-    'servicio_id',
-    'plan_id',
-    'rol_aplica',
-    'ambito_region',
-    'metodo_pago',
-    'moneda',
-    'tipo',
-  ];
-  eqFields.forEach((field) => {
-    if (data[field] !== undefined) {
-      where[field] = data[field];
-    }
-  });
-  const start = data.vigencia_desde ? new Date(data.vigencia_desde) : null;
-  const end = data.vigencia_hasta ? new Date(data.vigencia_hasta) : null;
-  const range = [];
-  if (start) {
-    range.push({ OR: [{ vigencia_hasta: null }, { vigencia_hasta: { gte: start } }] });
-  }
-  if (end) {
-    range.push({ OR: [{ vigencia_desde: null }, { vigencia_desde: { lte: end } }] });
-  }
-  if (range.length) {
-    where.AND = range;
-  }
-  return where;
+function buildTarifaOverlapWhere(data, excludeId) {
+  return buildOverlapWhere(data, TARIFFA_SCOPE_FIELDS, excludeId);
 }
+
 
 async function findConflicts(data, excludeId) {
   if (data.activo === false) return [];
-  const where = buildOverlapWhere(data, excludeId);
+  const where = buildTarifaOverlapWhere(data, excludeId);
   const overlaps = await prisma.tarifacomision.findMany({
     where,
     include: {
@@ -307,47 +267,6 @@ async function findConflicts(data, excludeId) {
     },
   });
   return overlaps.map((item) => serializeTarifa(item));
-}
-function sameScope(a, b) {
-  const fields = [
-    'servicio_id',
-    'plan_id',
-    'rol_aplica',
-    'ambito_region',
-    'metodo_pago',
-    'moneda',
-    'tipo',
-  ];
-  return fields.every((field) => {
-    const valueA = a[field] ?? null;
-    const valueB = b[field] ?? null;
-    return valueA === valueB;
-  });
-}
-
-function periodsOverlap(aDesde, aHasta, bDesde, bHasta) {
-  const startA = aDesde ? new Date(aDesde).getTime() : Number.NEGATIVE_INFINITY;
-  const endA = aHasta ? new Date(aHasta).getTime() : Number.POSITIVE_INFINITY;
-  const startB = bDesde ? new Date(bDesde).getTime() : Number.NEGATIVE_INFINITY;
-  const endB = bHasta ? new Date(bHasta).getTime() : Number.POSITIVE_INFINITY;
-  return startA <= endB && startB <= endA;
-}
-
-function collectConflictIds(records) {
-  const ids = new Set();
-  for (let i = 0; i < records.length; i += 1) {
-    for (let j = i + 1; j < records.length; j += 1) {
-      const a = records[i];
-      const b = records[j];
-      if (!sameScope(a, b)) continue;
-      if (a.activo === false && b.activo === false) continue;
-      if (periodsOverlap(a.vigencia_desde, a.vigencia_hasta, b.vigencia_desde, b.vigencia_hasta)) {
-        ids.add(a.id);
-        ids.add(b.id);
-      }
-    }
-  }
-  return Array.from(ids);
 }
 
 
@@ -373,7 +292,7 @@ async function getTarifas(req, res) {
           activo: true,
         },
       });
-      const conflictIds = collectConflictIds(scopeCandidates);
+      const conflictIds = collectConflictIds(scopeCandidates, TARIFFA_SCOPE_FIELDS);
       if (!conflictIds.length) {
         return res.json({ items: [], total: 0, page: 1, perPage });
       }
@@ -440,16 +359,8 @@ async function getTarifa(req, res) {
 async function createTarifa(req, res) {
   try {
     const data = mapTarifaData(req.body);
-    if (previous.tipo) {
-      data.tipo = previous.tipo;
-    }
-    const entityKey = resolveEntityKey(res.locals, data);
-    if (entityKey === 'comision' && !data.rol_aplica) {
-      return res.status(400).json({ success: false, message: 'El rol aplica es obligatorio' });
-    }
-    if (!data.tipo_calculo) {
-      return res.status(400).json({ success: false, message: 'El tipo de cálculo es obligatorio' });
-    }
+    ensureTipoCalculo(data);
+
     const conflicts = await findConflicts(data);
     if (conflicts.length) {
       return res.status(409).json({
@@ -465,9 +376,8 @@ async function createTarifa(req, res) {
         plan: { select: { id: true, nombre: true } },
       },
     });
-    res
-      .status(201)
-      .json({ success: true, [entityKey]: serializeTarifa(created) });
+    res.status(201).json({ success: true, tarifa: serializeTarifa(created) });
+
   } catch (error) {
     console.error('Error creando tarifa:', error);
     if (error.statusCode === 400) {

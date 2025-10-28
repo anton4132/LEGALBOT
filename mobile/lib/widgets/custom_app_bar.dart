@@ -6,6 +6,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
   final VoidCallback? onNotificationPressed;
   final VoidCallback? onProfilePressed;
+    final Widget? leading;
+
 
   const CustomAppBar({
     super.key,
@@ -13,6 +15,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.onNotificationPressed,
     this.onProfilePressed,
+    this.leading,
+
   });
 
   @override
@@ -22,6 +26,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       foregroundColor: Colors.white,
       title: Text(title),
       elevation: 0,
+      leading: leading,
+      automaticallyImplyLeading: leading == null,
       actions: actions ?? [
         IconButton(
           icon: const Icon(Icons.notifications),
