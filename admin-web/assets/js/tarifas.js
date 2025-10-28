@@ -1424,9 +1424,23 @@ async function submitTarifaForm(event) {
   scopeControls.servicioSelect?.classList.remove('is-invalid');
 
   const base = state.tarifas.form.data || {};
+  const rawValorInput = form.valor.value.trim();
+  const normalizedValorInput = rawValorInput.replace(/,/g, '.');
+  const parsedValor =
+    normalizedValorInput === '' ? Number.NaN : Number(normalizedValorInput);
+
+  if (!Number.isFinite(parsedValor) || parsedValor < 0) {
+    form.valor.classList.add('is-invalid');
+    return;
+  }
+  form.valor.classList.remove('is-invalid');
+  if (rawValorInput !== normalizedValorInput) {
+    form.valor.value = normalizedValorInput;
+  }
+
   const payload = {
     descripcion: form.descripcion.value.trim() || null,
-    valor: Number(form.valor.value),
+    valor: parsedValor,
     incluye_impuesto: form.incluye_impuesto.checked,
     tipo_calculo: form.tipo_calculo.value,
     parametros: jsonField.value ? JSON.parse(jsonField.value) : {},
@@ -1445,12 +1459,6 @@ async function submitTarifaForm(event) {
     ...payload,
     actualizado_el: base.actualizado_el || null,
   };
-
-  if (!Number.isFinite(payload.valor) || payload.valor < 0) {
-    form.valor.classList.add('is-invalid');
-    return;
-  }
-  form.valor.classList.remove('is-invalid');
 
   const conflict = findTarifaConflict(requestBody, state.tarifas.form.data?.id);
   if (conflict) {

@@ -8,7 +8,7 @@ const {
 } = require('./helpers/ruleUtils');
 
 const TARIFA_INCLUDE = {
-  plan: { select: { id: true, nombre: true, activo: true } },
+  plan: { select: { id: true, nombre: true } },
   servicio: { select: { id: true, nombre: true, codigo: true, activo: true } },
 };
 
@@ -58,13 +58,26 @@ function parseValor(value, { required } = {}) {
     }
     return undefined;
   }
-  if (value === null || value === '') {
+  if (value === null) {
     if (required) {
       throw createHttpError(400, 'El valor es obligatorio');
     }
     return null;
   }
-  const numeric = Number(value);
+
+  let normalizedValue = value;
+  if (typeof normalizedValue === 'string') {
+    const trimmed = normalizedValue.trim();
+    if (!trimmed) {
+      if (required) {
+        throw createHttpError(400, 'El valor es obligatorio');
+      }
+      return null;
+    }
+    normalizedValue = trimmed.replace(/,/g, '.');
+  }
+
+  const numeric = Number(normalizedValue);
   if (!Number.isFinite(numeric)) {
     throw createHttpError(400, 'El valor debe ser un número válido');
   }
