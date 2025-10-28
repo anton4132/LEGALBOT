@@ -7,6 +7,13 @@ const { resolveBlobPublicUrl, deleteBlob } = require('../utils/blob');
 // ---------- helpers ----------
 const sanitizeString = (v) => (typeof v === 'string' ? v.trim() : '');
 
+const ADMIN_ROLE_CODES = new Set(['admin', 'superadmin']);
+const CLIENT_ROLE_CODE = 'cliente';
+
+const normalizeRoleCode = (code) => (typeof code === 'string' ? code.toLowerCase() : '');
+const isAdminRoleCode = (code) => ADMIN_ROLE_CODES.has(normalizeRoleCode(code));
+const isClientRoleCode = (code) => normalizeRoleCode(code) === CLIENT_ROLE_CODE;
+
 const isValidUrl = (value) => {
   if (!value) return false;
   try {
@@ -683,6 +690,28 @@ const reviewApplication = async (req, res) => {
     });
     if (!application) {
       return res.status(404).json({ success: false, message: 'Solicitud no encontrada' });
+    }
+
+    const personaUsuarios = await prisma.usuario.findMany({
+      where: { persona_id: personaId },
+      include: { role: true },
+    });
+
+    const hasAdminAccount = personaUsuarios.some((usuario) => isAdminRoleCode(usuario.role?.codigo));
+    const hasClientAccount = personaUsuarios.some((usuario) => isClientRoleCode(usuario.role?.codigo));
+
+    if (hasAdminAccount) {
+      return res.status(409).json({
+        success: false,
+        message: 'La verificación de abogado no aplica para cuentas administrativas.',
+      });
+    }
+
+    if (!hasClientAccount) {
+      return res.status(409).json({
+        success: false,
+        message: 'La verificación solo aplica para usuarios cliente.',
+      });
     }
 
     const existingLawyerAccount = await prisma.usuario.findFirst({

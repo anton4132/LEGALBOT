@@ -10,7 +10,7 @@ let verificationModalInstance = null;
 let verificationLoading = false;
 let currentVerificationEstado = null;
 let verificationActionsLocked = false;
-
+let currentEstudioLinks = [];
 
 let filteredUsers = [];
 const USERS_DEFAULT_PAGE_SIZE = 10;
@@ -138,6 +138,8 @@ function personaNombreCompleto(persona = {}) {
 const LAWYER_ROLE_CODE = 'abogado';
 const PANEL_ALLOWED_ROLE_ORDER = ['cliente', 'admin'];
 const PANEL_ALLOWED_ROLE_CODES = new Set(PANEL_ALLOWED_ROLE_ORDER);
+const CLIENT_ROLE_CODE = 'cliente';
+const ADMIN_ROLE_CODES = new Set(['admin', 'superadmin']);
 
 const STEP_COUNT = 3;
 
@@ -146,7 +148,7 @@ const EMAIL_STATUS_LABELS = {
   [SignupValidation.VerificationStatus.CODE_SENT]: 'Hemos enviado un código de verificación al correo ingresado.',
   [SignupValidation.VerificationStatus.MISMATCH]: 'El correo cambió después de solicitar el código. Solicita uno nuevo.',
   [SignupValidation.VerificationStatus.EXPIRED]: 'El código ha expirado. Solicita uno nuevo para continuar.',
-  [SignupValidation.VerificationStatus.VERIFIED]: 'Correo verificado correctamente.',
+  [SignupValidation.VerificationStatus.VERIFIED]: '¡Correo verificado correctamente!',
 };
 
 const EMAIL_STATUS_CLASSES = {
@@ -155,6 +157,34 @@ const EMAIL_STATUS_CLASSES = {
   [SignupValidation.VerificationStatus.MISMATCH]: 'text-warning',
   [SignupValidation.VerificationStatus.EXPIRED]: 'text-warning',
   [SignupValidation.VerificationStatus.VERIFIED]: 'text-success fw-semibold',
+};
+
+const EMAIL_STATUS_BADGES = {
+  [SignupValidation.VerificationStatus.NOT_REQUESTED]: {
+    text: 'Sin verificar',
+    className: 'badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle',
+    icon: 'bi-envelope-exclamation',
+  },
+  [SignupValidation.VerificationStatus.CODE_SENT]: {
+    text: 'Código enviado',
+    className: 'badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle',
+    icon: 'bi-send-check',
+  },
+  [SignupValidation.VerificationStatus.MISMATCH]: {
+    text: 'Actualiza el correo',
+    className: 'badge rounded-pill bg-warning-subtle text-warning border border-warning-subtle',
+    icon: 'bi-arrow-repeat',
+  },
+  [SignupValidation.VerificationStatus.EXPIRED]: {
+    text: 'Código expirado',
+    className: 'badge rounded-pill bg-warning-subtle text-warning border border-warning-subtle',
+    icon: 'bi-hourglass-split',
+  },
+  [SignupValidation.VerificationStatus.VERIFIED]: {
+    text: 'Correo verificado',
+    className: 'badge rounded-pill bg-success-subtle text-success border border-success-subtle',
+    icon: 'bi-check-circle-fill',
+  },
 };
 
 function createInitialEmailState() {
@@ -420,6 +450,14 @@ function getRoleCode(user) {
   return (user?.role?.codigo || '').toLowerCase();
 }
 
+function isAdminRoleCode(code) {
+  return ADMIN_ROLE_CODES.has((code || '').toLowerCase());
+}
+
+function isClientRoleCode(code) {
+  return (code || '').toLowerCase() === CLIENT_ROLE_CODE;
+}
+
 function getLawyerAccountsByPersona(personaId) {
   if (personaId == null) return [];
   return users.filter((u) => u.persona_id === personaId && getRoleCode(u) === LAWYER_ROLE_CODE);
@@ -494,7 +532,20 @@ function mapVerificationFromUser(user) {
   };
 }
 
-function verificationBadgeInfo(verification) {
+function verificationBadgeInfo(verification, roleCode = '') {
+  const normalizedRole = (roleCode || '').toLowerCase();
+  if (isAdminRoleCode(normalizedRole)) {
+    return {
+      text: 'Administrador del sistema',
+      className: 'bg-dark-subtle text-dark border border-dark-subtle',
+    };
+  }
+  if (normalizedRole === LAWYER_ROLE_CODE) {
+    return {
+      text: 'Cuenta de abogado',
+      className: 'bg-info text-dark',
+    };
+  }
   if (!verification || !verification.estado) {
     return { text: 'Sin postulación', className: VERIFICATION_STATE_CLASSES.NONE };
   }
@@ -598,6 +649,7 @@ function setupEventListeners() {
 
   document.getElementById('verificacionDisableLawyerBtn')?.addEventListener('click', handleDisableLawyerFromModal);
   // Estudio: búsqueda de existentes
+  document.getElementById('sugerenciasEstudio')?.addEventListener('click', handleEstudioSuggestionClick);
 }
 
 /* --------------- Paginación / filtros ----------- */
@@ -885,9 +937,11 @@ function renderUsersTable(usersToRender) {
     const p = user.persona ?? {};
     const roleCode = getRoleCode(user);
     const badgeClass = getRoleBadge(user.role?.codigo);
-    const verificationInfo = verificationBadgeInfo(mapVerificationFromUser(user));
+    const verification = mapVerificationFromUser(user);
+    const verificationInfo = verificationBadgeInfo(verification, roleCode);
     const verificationBadge = `<span class="badge ${verificationInfo.className}">${escapeHtml(verificationInfo.text)}</span>`;
     const isLawyer = roleCode === LAWYER_ROLE_CODE;
+    const isClient = isClientRoleCode(roleCode);
     const activeBadge = user.activo ? '' : ' <span class="badge bg-secondary">Deshabilitado</span>';
     const disableTitle = isLawyer
       ? (user.activo ? 'Deshabilitar cuenta de abogado' : 'Cuenta de abogado deshabilitada')
@@ -904,7 +958,7 @@ function renderUsersTable(usersToRender) {
       `
       : '';
 
-    const verificationButton = p.id
+    const verificationButton = p.id && isClient
       ? `<button class="btn btn-sm btn-outline-success me-1" title="Revisar verificación" onclick="openVerificacionModal(${user.id})"><i class="bi bi-patch-check"></i></button>`
       : '';
 
@@ -1161,9 +1215,19 @@ function updateEmailVerificationStatusUI() {
     verifiedEmail: state.verifiedEmail,
     expiresAt: state.codeExpiresAt,
   });
-  const text = EMAIL_STATUS_LABELS[state.status] || EMAIL_STATUS_LABELS[SignupValidation.VerificationStatus.NOT_REQUESTED];
-  statusElement.textContent = text;
-  statusElement.className = `small mt-1 ${EMAIL_STATUS_CLASSES[state.status] || 'text-muted'}`;
+  const statusKey = state.status in EMAIL_STATUS_LABELS
+    ? state.status
+    : SignupValidation.VerificationStatus.NOT_REQUESTED;
+  const message = EMAIL_STATUS_LABELS[statusKey];
+  const textClass = EMAIL_STATUS_CLASSES[statusKey] || EMAIL_STATUS_CLASSES[SignupValidation.VerificationStatus.NOT_REQUESTED];
+  const badgeInfo = EMAIL_STATUS_BADGES[statusKey]
+    || EMAIL_STATUS_BADGES[SignupValidation.VerificationStatus.NOT_REQUESTED];
+  const iconHtml = badgeInfo.icon
+    ? `<i class="bi ${badgeInfo.icon} me-1"></i>`
+    : '';
+  statusElement.className = 'small mt-1 d-flex align-items-center gap-2 flex-wrap';
+  statusElement.innerHTML = `<span class="${badgeInfo.className}">${iconHtml}${badgeInfo.text}</span>`
+    + `<span class="${textClass}">${message}</span>`;
 }
 
 function resetUbigeoSelectors() {
@@ -1336,7 +1400,8 @@ function handleEmailInputChange(event) {
   const input = event?.target || event?.currentTarget;
   const value = input?.value ?? '';
   const normalizedEmail = normalizeEmail(value);
-  const state = ensureUserFormState().email;
+  const formState = ensureUserFormState();
+  const state = formState.email;
   if (state.verifiedEmail && normalizedEmail !== state.verifiedEmail) {
     state.verifiedEmail = null;
   }
@@ -1350,8 +1415,9 @@ function handleEmailInputChange(event) {
   }
   showFieldError('emailFeedback', null);
   showFieldError('emailCodeError', null);
-  state.verification.conflictsCleared = false;
-  state.verification.emailVerification = null;
+  setStepAlert('contactStepAlert', null);
+  formState.verification.conflictsCleared = false;
+  formState.verification.emailVerification = null;
   updateEmailVerificationStatusUI();
   updateEmailButtonsState();
 }
@@ -2074,52 +2140,93 @@ function openEstudioModal(userId) {
   ['buscarEstudio','estudioRuc','estudioNombre','estudioPais','estudioCiudad','estudioCorreo','estudioTelefono','estudioDireccion','rolEnEstudio']
     .forEach(id => setValue(id, ''));
   const chk = document.getElementById('estudioPrincipal'); if (chk) chk.checked = false;
-  const sugerencias = document.getElementById('sugerenciasEstudio');
-  if (sugerencias) sugerencias.innerHTML = '';
+  currentEstudioLinks = [];
+  renderEstudioSuggestions([], { message: 'Cargando estudios...' });
 
   apiFetch(`/users/${userId}/estudios`).then(list => {
-    const arr = Array.isArray(list) ? list : (list.items ?? []);
-    if (sugerencias) {
-      if (!arr.length) {
-        sugerencias.innerHTML = '<div class="list-group-item text-muted">Sin estudios registrados</div>';
-      } else {
-        sugerencias.innerHTML = arr.map(v => {
-          const estudio = v.estudio ?? {};
-          const nombre = escapeHtml(estudio.nombre_comercial ?? `ID ${v.estudio_id}`);
-          const rol = v.rol_en_estudio ? ` – ${escapeHtml(v.rol_en_estudio)}` : '';
-          const principalBadge = v.principal ? '<span class="badge bg-primary ms-2">Principal</span>' : '';
-          return `<div class="list-group-item d-flex justify-content-between align-items-start">
-            <div>
-              <div class="fw-semibold">${nombre}${rol}</div>
-              <small class="text-muted">RUC: ${escapeHtml(estudio.ruc ?? 'N/A')}</small>
-            </div>
-            ${principalBadge}
-          </div>`;
-        }).join('');
-      }
-    }
-
-    const principal = arr.find(v => v.principal) ?? arr[0];
-    if (principal) {
-      setValue('estudioId', principal.estudio_id);
-      setValue('rolEnEstudio', principal.rol_en_estudio ?? '');
-      const chk2 = document.getElementById('estudioPrincipal'); if (chk2) chk2.checked = !!principal.principal;
-      const est = principal.estudio ?? {};
-      setValue('estudioRuc', est.ruc);
-      setValue('estudioNombre', est.nombre_comercial);
-      setValue('estudioPais', est.pais);
-      setValue('estudioCiudad', est.ciudad);
-      setValue('estudioCorreo', est.correo_contacto);
-      setValue('estudioTelefono', est.telefono);
-      setValue('estudioDireccion', est.direccion);
-    }
+    currentEstudioLinks = Array.isArray(list) ? list : (list.items ?? []);
+    renderEstudioSuggestions(currentEstudioLinks);
+    const principalIndex = currentEstudioLinks.findIndex(v => v.principal);
+    const selectedIndex = principalIndex !== -1
+      ? principalIndex
+      : (currentEstudioLinks.length ? 0 : -1);
+    applyEstudioSelection(selectedIndex);
   }).catch(() => {
-    if (sugerencias) {
-      sugerencias.innerHTML = '<div class="list-group-item text-muted">No se pudo cargar la información del estudio.</div>';
-    }
+    currentEstudioLinks = [];
+    renderEstudioSuggestions([], { message: 'No se pudo cargar la información del estudio.' });
+    applyEstudioSelection(-1);
   });
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('estudioModal')).show();
+}
+
+function renderEstudioSuggestions(list, { message } = {}) {
+  const container = document.getElementById('sugerenciasEstudio');
+  if (!container) return;
+  if (message) {
+    container.innerHTML = `<div class="list-group-item text-muted">${escapeHtml(message)}</div>`;
+    return;
+  }
+  const entries = Array.isArray(list) ? list : [];
+  if (!entries.length) {
+    container.innerHTML = '<div class="list-group-item text-muted">Sin estudios registrados</div>';
+    return;
+  }
+  container.innerHTML = entries.map((v, index) => {
+    const estudio = v.estudio ?? {};
+    const nombre = escapeHtml(estudio.nombre_comercial ?? `ID ${v.estudio_id}`);
+    const rol = v.rol_en_estudio ? ` – ${escapeHtml(v.rol_en_estudio)}` : '';
+    const principalBadge = v.principal ? '<span class="badge bg-primary ms-2">Principal</span>' : '';
+    const ruc = escapeHtml(estudio.ruc ?? 'N/A');
+    return `<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-start" data-estudio-index="${index}">
+      <div>
+        <div class="fw-semibold">${nombre}${rol}</div>
+        <small class="text-muted">RUC: ${ruc}</small>
+      </div>
+      ${principalBadge}
+    </button>`;
+  }).join('');
+}
+
+function updateEstudioSelectionHighlight(selectedIndex) {
+  const container = document.getElementById('sugerenciasEstudio');
+  if (!container) return;
+  container.querySelectorAll('[data-estudio-index]').forEach((item) => {
+    const itemIndex = Number(item.dataset.estudioIndex);
+    item.classList.toggle('active', itemIndex === selectedIndex);
+  });
+}
+
+function applyEstudioSelection(index) {
+  const vinculo = Array.isArray(currentEstudioLinks) ? currentEstudioLinks[index] : null;
+  if (!vinculo) {
+    ['estudioId','rolEnEstudio','estudioRuc','estudioNombre','estudioPais','estudioCiudad','estudioCorreo','estudioTelefono','estudioDireccion']
+      .forEach(id => setValue(id, ''));
+    const chk = document.getElementById('estudioPrincipal'); if (chk) chk.checked = false;
+    updateEstudioSelectionHighlight(-1);
+    return;
+  }
+
+  setValue('estudioId', vinculo.estudio_id);
+  setValue('rolEnEstudio', vinculo.rol_en_estudio ?? '');
+  const chk = document.getElementById('estudioPrincipal'); if (chk) chk.checked = !!vinculo.principal;
+  const est = vinculo.estudio ?? {};
+  setValue('estudioRuc', est.ruc);
+  setValue('estudioNombre', est.nombre_comercial);
+  setValue('estudioPais', est.pais);
+  setValue('estudioCiudad', est.ciudad);
+  setValue('estudioCorreo', est.correo_contacto);
+  setValue('estudioTelefono', est.telefono);
+  setValue('estudioDireccion', est.direccion);
+  updateEstudioSelectionHighlight(index);
+}
+
+function handleEstudioSuggestionClick(event) {
+  const target = event.target?.closest('[data-estudio-index]');
+  if (!target) return;
+  const index = Number(target.dataset.estudioIndex);
+  if (Number.isNaN(index)) return;
+  applyEstudioSelection(index);
 }
 
 
@@ -2187,11 +2294,19 @@ function openVerificacionModal(userId) {
     return;
   }
 
+  const roleCode = getRoleCode(user);
+  const isClient = isClientRoleCode(roleCode);
   currentVerificationUserId = userId;
-  currentVerificationPersonaId = user.persona?.id ?? null;
+  currentVerificationPersonaId = isClient ? (user.persona?.id ?? null) : null;
   verificationModalInstance = bootstrap.Modal.getOrCreateInstance(document.getElementById('verificacionModal'));
   populateVerificationModal(user);
   verificationModalInstance.show();
+  if (!isClient) {
+    const infoMessage = isAdminRoleCode(roleCode)
+      ? 'Las cuentas administrativas no requieren verificación de abogado.'
+      : 'La verificación de credenciales solo está disponible para usuarios cliente.';
+    showAlert(infoMessage, 'info');
+  }
 }
 
 function setVerificationButtonsEnabled(enabled) {
@@ -2220,6 +2335,22 @@ function updateVerificationControls() {
   const user = users.find(u => u.id === currentVerificationUserId);
 
   if (!user) {
+    verificationActionsLocked = false;
+    setVerificationButtonsEnabled(false);
+    if (disableBtn) {
+      disableBtn.classList.add('d-none');
+      disableBtn.disabled = true;
+      disableBtn.dataset.userId = '';
+    }
+    if (notice) {
+      notice.textContent = '';
+      notice.classList.add('d-none');
+    }
+    return;
+  }
+
+  const roleCode = getRoleCode(user);
+  if (!isClientRoleCode(roleCode)) {
     verificationActionsLocked = false;
     setVerificationButtonsEnabled(false);
     if (disableBtn) {
@@ -2288,7 +2419,8 @@ function populateVerificationModal(user) {
   }
 
   const badgeEl = document.getElementById('verificacionEstadoBadge');
-  const badgeInfo = verificationBadgeInfo(verification);
+  const roleCode = getRoleCode(user);
+  const badgeInfo = verificationBadgeInfo(verification, roleCode);
   if (badgeEl) {
     badgeEl.className = `badge ${badgeInfo.className}`;
     badgeEl.textContent = badgeInfo.text;
@@ -2299,6 +2431,41 @@ function populateVerificationModal(user) {
   const commentSection = document.getElementById('verificacionComentarioSection');
   const obsPrevias = document.getElementById('verificacionObservacionesPrevias');
   const obsInput = document.getElementById('verificacionObservacionesInput');
+
+  const isClient = isClientRoleCode(roleCode);
+  const isAdmin = isAdminRoleCode(roleCode);
+
+  if (!isClient) {
+    if (emptyNotice) {
+      const message = isAdmin
+        ? 'Esta cuenta corresponde a un administrador del sistema. No requiere verificación de abogado.'
+        : 'La verificación de abogado solo aplica para usuarios cliente antes de habilitar el rol profesional.';
+      emptyNotice.textContent = message;
+      emptyNotice.classList.remove('d-none');
+      emptyNotice.classList.remove('alert-info');
+      emptyNotice.classList.add('alert-secondary');
+    }
+    dataSection?.classList.add('d-none');
+    commentSection?.classList.add('d-none');
+    if (obsInput) {
+      obsInput.value = '';
+      obsInput.setAttribute('readonly', 'readonly');
+    }
+    obsPrevias?.classList.add('d-none');
+    currentVerificationPersonaId = null;
+    setVerificationButtonsEnabled(false);
+    updateVerificationControls();
+    return;
+  }
+
+  if (emptyNotice) {
+    emptyNotice.textContent = 'Esta persona aún no ha enviado su postulación de abogado.';
+    emptyNotice.classList.remove('alert-secondary');
+    emptyNotice.classList.add('alert-info');
+  }
+  if (obsInput) {
+    obsInput.removeAttribute('readonly');
+  }
 
   const hasPersona = !!persona.id;
   const hasApplication = verification.exists && hasPersona;
@@ -2542,15 +2709,21 @@ async function handleVerificationAction(estado) {
   }
 
 
-  const personaId = currentVerificationPersonaId;
-  if (!personaId) {
-    showAlert('No hay una postulación asociada para este usuario.', 'danger');
-    return;
-  }
-
   const user = users.find(u => u.id === currentVerificationUserId);
   if (!user) {
     showAlert('Usuario no encontrado.', 'danger');
+    return;
+  }
+
+  const roleCode = getRoleCode(user);
+  if (!isClientRoleCode(roleCode)) {
+    showAlert('La verificación solo está disponible para usuarios cliente.', 'warning');
+    return;
+  }
+
+  const personaId = currentVerificationPersonaId;
+  if (!personaId) {
+    showAlert('No hay una postulación asociada para este usuario.', 'danger');
     return;
   }
 
