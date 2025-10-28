@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../../constants/colors.dart';
 import '../../../models/lawyer_profile_models.dart';
 import '../../../models/lawyer_search_result.dart';
 import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
 import '../../../widgets/custom_app_bar.dart';
 import '../../authentication/login_screen.dart';
+import '../home/client_home.dart';
+import '../home/client_settings_screen.dart';
+import '../widgets/client_navigation_drawer.dart';
 import 'client_lawyer_detail_screen.dart';
 
 class ClientLawyerSearchScreen extends StatefulWidget {
@@ -127,7 +131,7 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
         .where((option) => option.hasNombre && option.provincias.isNotEmpty)
         .toList()
       ..sort((a, b) => a.key.compareTo(b.key));
-      return list;
+    return list;
   }
 
   List<LawyerLocationProvince> get _provinciasDisponibles {
@@ -135,10 +139,10 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
     if (seleccionado == null) {
       return const [];
     }
-   return seleccionado.sortedProvinces
+    return seleccionado.sortedProvinces
         .where((province) => province.hasNombre && province.distritos.isNotEmpty)
         .toList();
-    }
+  }
 
   List<LawyerLocationDistrict> get _distritosDisponibles {
     final provincia = _selectedProvincia;
@@ -148,7 +152,14 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
     return provincia.sortedDistricts
         .where((district) => district.hasNombre)
         .toList();
-      }
+  }
+
+  bool get _filtersAreComplete {
+    return _selectedSpecialtyId != null &&
+        _selectedDepartamento != null &&
+        _selectedProvincia != null &&
+        _selectedDistrito != null;
+  }
 
   void _handleUnauthorized(String? message) {
     SessionService.instance.clear();
@@ -160,7 +171,7 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
           (message ?? 'Tu sesión ha expirado. Inicia sesión nuevamente.')
               .trim(),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.text3Color,
       ),
     );
     Navigator.of(context).pushAndRemoveUntil(
@@ -178,196 +189,366 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final departamentos = _departamentosOrdenados;
-    final provincias = _provinciasDisponibles;
-    final distritos = _distritosDisponibles;
-    final canSearch =
-        !_loadingResults &&
-        _selectedSpecialtyId != null &&
-        _selectedDepartamento != null &&
-        _selectedProvincia != null &&
-        _selectedDistrito != null;
-
     return Scaffold(
-      appBar: const CustomAppBar(title: 'Buscar Abogados'),
+      appBar: CustomAppBar(
+        title: 'Buscar Abogados',
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+      ),
+      drawer: ClientNavigationDrawer(
+        activeDestination: ClientDrawerDestination.search,
+        onSelectDashboard: _navigateToClientHome,
+        onSelectSearch: () {},
+        onSelectSettingsSubsection: _openSettingsFromDrawer,
+        onLogout: _handleLogoutFromDrawer,
+      ),
       body: SafeArea(
-        child:
-            _loadingFilters
-                ? const Center(child: CircularProgressIndicator())
-                : Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_errorMessage != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
+        child: _loadingFilters
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppColors.button2Color,
+                  ),
+                ),
+              )
+            : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_errorMessage != null && !_hasAttemptedSearch)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.text3Color.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.text3Color),
+                          ),
                           child: Text(
                             _errorMessage!,
                             style: const TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.w500,
+                              color: AppColors.text3Color,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
-                      Form(
-                        key: _formKey,
-                        child: Column(
-                          children: [
-                            DropdownButtonFormField<int>(
-                              value: _selectedSpecialtyId,
-                              decoration: const InputDecoration(
-                                labelText: 'Especialidad',
-                                border: OutlineInputBorder(),
-                              ),
-                              hint: const Text('Selecciona una especialidad'),
-                              menuMaxHeight: 260,
-                              items: _specialties
-                                  .map(
-                                    (specialty) => DropdownMenuItem<int>(
-                                      value: specialty.id,
-                                      child: Text(specialty.nombre),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedSpecialtyId = value;
-                                  _hasAttemptedSearch = false;
-                                  _results = const [];
-                                });
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<LawyerLocationOption>(
-                              value: _selectedDepartamento,
-                              decoration: const InputDecoration(
-                                labelText: 'Departamento',
-                                border: OutlineInputBorder(),
-                              ),
-                              hint: const Text('Selecciona un departamento'),
-                              menuMaxHeight: 260,
-                              items: departamentos
-                                  .map(
-                                    (option) => DropdownMenuItem<
-                                      LawyerLocationOption
-                                    >(
-                                      value: option,
-                                      child: Text(option.departamento),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedDepartamento = value;
-                                  _selectedProvincia = null;
-                                  _selectedDistrito = null;
-                                  _results = const [];
-                                  _hasAttemptedSearch = false;
-                                });
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<LawyerLocationProvince>(
-                              value: _selectedProvincia,
-                              decoration: const InputDecoration(
-                                labelText: 'Provincia',
-                                border: OutlineInputBorder(),
-                              ),
-                              hint: const Text('Selecciona una provincia'),
-                              menuMaxHeight: 260,
-                               items: provincias
-                                  .map(
-                                    (province) => DropdownMenuItem<
-                                      LawyerLocationProvince
-                                    >(
-                                      value: province,
-                                      child: Text(province.provincia),
-                                    ),
-                                  )
-                                  .toList(),
-                                  onChanged:
-                                  _selectedDepartamento == null
-                                      ? null
-                                      : (value) {
-                                        setState(() {
-                                          _selectedProvincia = value;
-                                          _selectedDistrito = null;
-                                          _results = const [];
-                                          _hasAttemptedSearch = false;
-                                        });
-                                      },
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<LawyerLocationDistrict>(
-                              value: _selectedDistrito,
-                              decoration: const InputDecoration(
-                                labelText: 'Distrito',
-                                border: OutlineInputBorder(),
-                              ),
-                              hint: const Text('Selecciona un distrito'),
-                              menuMaxHeight: 260,
-                               items: distritos
-                                  .map(
-                                    (district) => DropdownMenuItem<
-                                      LawyerLocationDistrict
-                                    >(
-                                      value: district,
-                                      child: Text(district.distrito),
-                                    ),
-                                  )
-                                  .toList(),
+                      ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final bool horizontal = constraints.maxWidth >= 720;
+                        final form = _buildFiltersForm();
+                        final indicator = _buildFilterStateIndicator();
 
-                              onChanged:
-                                  _selectedProvincia == null
-                                      ? null
-                                      : (value) {
-                                        setState(() {
-                                          _selectedDistrito = value;
-                                          _results = const [];
-                                          _hasAttemptedSearch = false;
-                                        });
-                                      },
+                        if (horizontal) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: form),
+                              const SizedBox(width: 24),
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 280),
+                                child: indicator,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 260),
+                                child: indicator,
+                              ),
                             ),
                             const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: canSearch ? _searchLawyers : null,
-                                icon: const Icon(Icons.search),
-                                label: Text(
-                                  _loadingResults ? 'Buscando...' : 'Buscar',
-                                ),
-                              ),
-                            ),
+                            form,
                           ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Expanded(child: _buildResults()),
-                    ],
-                  ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    Expanded(child: _buildResults()),
+                  ],
                 ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildFiltersForm() {
+    final departamentos = _departamentosOrdenados;
+    final provincias = _provinciasDisponibles;
+    final distritos = _distritosDisponibles;
+    final bool canSearch = !_loadingResults && _filtersAreComplete;
+
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          DropdownButtonFormField<int>(
+            value: _selectedSpecialtyId,
+            decoration: const InputDecoration(
+              labelText: 'Especialidad',
+            ),
+            hint: const Text('Selecciona una especialidad'),
+            menuMaxHeight: 260,
+            items: _specialties
+                .map(
+                  (specialty) => DropdownMenuItem<int>(
+                    value: specialty.id,
+                    child: Text(specialty.nombre),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedSpecialtyId = value;
+                _hasAttemptedSearch = false;
+                _results = const [];
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<LawyerLocationOption>(
+            value: _selectedDepartamento,
+            decoration: const InputDecoration(
+              labelText: 'Departamento',
+            ),
+            hint: const Text('Selecciona un departamento'),
+            menuMaxHeight: 260,
+            items: departamentos
+                .map(
+                  (option) => DropdownMenuItem<LawyerLocationOption>(
+                    value: option,
+                    child: Text(option.departamento),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedDepartamento = value;
+                _selectedProvincia = null;
+                _selectedDistrito = null;
+                _results = const [];
+                _hasAttemptedSearch = false;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<LawyerLocationProvince>(
+            value: _selectedProvincia,
+            decoration: const InputDecoration(
+              labelText: 'Provincia',
+            ),
+            hint: const Text('Selecciona una provincia'),
+            menuMaxHeight: 260,
+            items: provincias
+                .map(
+                  (province) => DropdownMenuItem<LawyerLocationProvince>(
+                    value: province,
+                    child: Text(province.provincia),
+                  ),
+                )
+                .toList(),
+            onChanged: _selectedDepartamento == null
+                ? null
+                : (value) {
+                    setState(() {
+                      _selectedProvincia = value;
+                      _selectedDistrito = null;
+                      _results = const [];
+                      _hasAttemptedSearch = false;
+                    });
+                  },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<LawyerLocationDistrict>(
+            value: _selectedDistrito,
+            decoration: const InputDecoration(
+              labelText: 'Distrito',
+            ),
+            hint: const Text('Selecciona un distrito'),
+            menuMaxHeight: 260,
+            items: distritos
+                .map(
+                  (district) => DropdownMenuItem<LawyerLocationDistrict>(
+                    value: district,
+                    child: Text(district.distrito),
+                  ),
+                )
+                .toList(),
+            onChanged: _selectedProvincia == null
+                ? null
+                : (value) {
+                    setState(() {
+                      _selectedDistrito = value;
+                      _results = const [];
+                      _hasAttemptedSearch = false;
+                    });
+                  },
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: canSearch ? _searchLawyers : null,
+              icon: const Icon(Icons.search),
+              label: Text(_loadingResults ? 'Buscando...' : 'Buscar'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterStateIndicator() {
+    final bool filtersReady = _filtersAreComplete;
+    final bool searching = _loadingResults;
+    final bool attempted = _hasAttemptedSearch;
+    final bool hasResults = _results.isNotEmpty;
+    final bool hasError = _errorMessage != null && attempted;
+
+    IconData icon;
+    Color iconColor;
+    String title;
+    String description;
+
+    if (searching) {
+      icon = Icons.autorenew;
+      iconColor = AppColors.button2Color;
+      title = 'Buscando abogados';
+      description = 'Estamos analizando disponibilidad según tus filtros.';
+    } else if (!filtersReady) {
+      icon = Icons.hourglass_empty;
+      iconColor = AppColors.text2Color;
+      title = 'Filtros incompletos';
+      description = 'Completa todos los campos para iniciar la búsqueda.';
+    } else if (hasError) {
+      icon = Icons.error_outline;
+      iconColor = AppColors.text3Color;
+      title = 'No se pudo buscar';
+      description = 'Revisa tu conexión e inténtalo nuevamente.';
+    } else if (attempted) {
+      if (hasResults) {
+        icon = Icons.check_circle_outline;
+        iconColor = AppColors.buttonColor;
+        title = 'Resultados listos';
+        description = 'Revisa la lista para elegir al abogado ideal.';
+      } else {
+        icon = Icons.search_off;
+        iconColor = AppColors.tabColor;
+        title = 'Sin coincidencias';
+        description = 'Ajusta los filtros e inténtalo otra vez.';
+      }
+    } else {
+      icon = Icons.manage_search;
+      iconColor = AppColors.buttonColor;
+      title = 'Listo para buscar';
+      description = 'Presiona “Buscar” cuando completes los filtros.';
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.strokeColor),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.buttonColor.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 36, color: iconColor),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text1Color,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.text2Color,
+            ),
+          ),
+          if (searching) ...[
+            const SizedBox(height: 16),
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppColors.button2Color,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
   Widget _buildResults() {
     if (_loadingResults) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (!_hasAttemptedSearch) {
       return const Center(
-        child: Text(
-          'Selecciona una especialidad y completa la ubicación para iniciar la búsqueda.',
-          textAlign: TextAlign.center,
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.button2Color),
         ),
       );
     }
 
+    if (!_hasAttemptedSearch) {
+      return _buildStatusMessage(
+        icon: Icons.travel_explore,
+        title: 'Completa los filtros para iniciar la búsqueda',
+        description:
+            'Selecciona especialidad, departamento, provincia y distrito.',
+        color: AppColors.buttonColor,
+      );
+    }
+
+    if (_errorMessage != null) {
+      return _buildStatusMessage(
+        icon: Icons.error_outline,
+        title: 'No se pudo completar la búsqueda',
+        description: _errorMessage,
+        color: AppColors.text3Color,
+      );
+    }
+
     if (_results.isEmpty) {
-      return const Center(
-        child: Text('uppssss no se encontró nada', textAlign: TextAlign.center),
+      return _buildStatusMessage(
+        icon: Icons.search_off,
+        title: 'No encontramos abogados para los filtros seleccionados',
+        description: 'Prueba ajustando la especialidad o la ubicación.',
+        color: AppColors.tabColor,
       );
     }
 
@@ -378,33 +559,42 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
         final result = _results[index];
         final avatarProvider = result.avatarImageProvider;
         final estudio = result.estudioPrincipal;
-        final locationParts =
-            <String?>[
-                  estudio?.distrito,
-                  estudio?.provincia,
-                  estudio?.departamento,
-                ]
-                .whereType<String>()
-                .map((value) => value.trim())
-                .where((value) => value.isNotEmpty)
-                .toList();
-        final locationLabel =
-            locationParts.isNotEmpty
-                ? locationParts.join(', ')
-                : 'Ubicación no disponible';
+        final locationParts = <String?>[
+          estudio?.distrito,
+          estudio?.provincia,
+          estudio?.departamento,
+        ]
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
+        final locationLabel = locationParts.isNotEmpty
+            ? locationParts.join(', ')
+            : 'Ubicación no disponible';
 
         return Card(
+          elevation: 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.all(16.0),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
                   radius: 28,
                   backgroundImage: avatarProvider,
-                  child: avatarProvider == null ? Text(result.initials) : null,
+                  backgroundColor: AppColors.buttonColor.withOpacity(0.1),
+                  child: avatarProvider == null
+                      ? Text(
+                          result.initials,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.buttonColor,
+                          ),
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -415,47 +605,153 @@ class _ClientLawyerSearchScreenState extends State<ClientLawyerSearchScreen> {
                         result.nombreCompleto ?? 'Abogado sin nombre',
                         style: const TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.text1Color,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         result.ratingLabel,
                         style: const TextStyle(
                           fontSize: 13,
-                          color: Colors.black54,
+                          color: AppColors.text2Color,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         locationLabel,
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Colors.black45,
+                          color: AppColors.text2Color,
                         ),
                       ),
                     ],
                   ),
                 ),
-                ElevatedButton(
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder:
-                            (_) => ClientLawyerDetailScreen(
-                              lawyerId: result.usuarioId,
-                              initialResult: result,
-                            ),
+                        builder: (_) => ClientLawyerDetailScreen(
+                          lawyerId: result.usuarioId,
+                          initialResult: result,
+                        ),
                       ),
                     );
                   },
-                  child: const Text('Ver perfil'),
+                  icon: const Icon(Icons.visibility),
+                  label: const Text('Ver perfil'),
                 ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildStatusMessage({
+    required IconData icon,
+    required String title,
+    String? description,
+    required Color color,
+  }) {
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 420),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.strokeColor),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.buttonColor.withOpacity(0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: color),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text1Color,
+              ),
+            ),
+            if (description != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                description,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.text2Color,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _navigateToClientHome() async {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ClientHome()),
+    );
+  }
+
+  void _openSettingsFromDrawer(ClientSettingsSubsection subsection) {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ClientHome(
+          showSettings: true,
+          initialSettingsSubsection: subsection,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleLogoutFromDrawer() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.buttonColor,
+              foregroundColor: AppColors.buttonTextColor,
+            ),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout != true || !mounted) return;
+
+    SessionService.instance.clear();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
     );
   }
 }
