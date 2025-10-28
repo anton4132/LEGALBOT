@@ -15,6 +15,10 @@ function createHttpError(statusCode, message, code) {
 const INVALID_DNI_SEQUENCES = ['00000000', '11111111', '12345678', '87654321'];
 const LAWYER_ROLE_CODE = 'abogado';
 const PANEL_ALLOWED_ROLE_CODES = new Set(['cliente', 'admin']);
+const ADMIN_ROLE_CODES = new Set(['admin', 'superadmin']);
+
+const normalizeRoleCode = (code) => (typeof code === 'string' ? code.toLowerCase() : '');
+const isAdminRoleCode = (code) => ADMIN_ROLE_CODES.has(normalizeRoleCode(code));
 
 function validateDniFormat(dni) {
   if (!/^\d{8}$/.test(dni)) return 'El DNI debe contener exactamente 8 dígitos';
@@ -1954,10 +1958,23 @@ const updateUserEspecialidades = async (req, res) => {
 const getUserEstudios = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({ message: 'ID de usuario inválido' });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
     const rows = await prisma.abogadoestudio.findMany({
       where: { usuario_id: userId, activo: true },
       include: { estudio: { include: { direccion: true } } },
-      orderBy: { principal: 'desc' }
+      orderBy: { principal: 'desc' },
     });
     res.json(rows);
   } catch (error) {
@@ -1968,6 +1985,9 @@ const getUserEstudios = async (req, res) => {
 
 const upsertUserEstudio = async (req, res) => {
   const userId = parseInt(req.params.id, 10);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'ID de usuario inválido' });
+  }
   let {
     estudio_id,
     principal,
@@ -1979,6 +1999,10 @@ const upsertUserEstudio = async (req, res) => {
   principal = !!principal;
   const direccionId = sanitizeString(direccionIdRaw);
   const lineaExactaDireccion = sanitizeString(lineaExactaRaw);
+
+  if (Number.isNaN(estudio_id)) {
+    return res.status(400).json({ message: 'El campo estudio_id es obligatorio.' });
+  }
 
   if (!direccionId) {
     return res.status(400).json({ message: 'El campo direccion_id es obligatorio.' });
@@ -1992,6 +2016,19 @@ const upsertUserEstudio = async (req, res) => {
     return res.status(400).json({ message: 'La dirección exacta es obligatoria.' });
   }
   try {
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (isAdminRoleCode(usuario.role?.codigo)) {
+      return res.status(403).json({ message: 'Los administradores no pueden modificar estudios.' });
+    }
+
     const direccion = await prisma.direccion.findUnique({
       where: { ubigeo_codigo: direccionId },
     });
@@ -2038,6 +2075,19 @@ const deleteUserEstudio = async (req, res) => {
 
     if (Number.isNaN(userId) || Number.isNaN(estudioId)) {
       return res.status(400).json({ message: 'Parámetros inválidos' });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (isAdminRoleCode(usuario.role?.codigo)) {
+      return res.status(403).json({ message: 'Los administradores no pueden modificar estudios.' });
     }
 
     const result = await prisma.abogadoestudio.updateMany({

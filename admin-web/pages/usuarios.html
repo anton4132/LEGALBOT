@@ -116,7 +116,13 @@
                               <label for="email" class="form-label">Correo electrónico *</label>
                               <input type="email" class="form-control" id="email" required autocomplete="off">
                               <div id="emailFeedback" class="form-text text-danger d-none"></div>
-                              <div id="emailVerificationStatus" class="small mt-1 text-muted">Debes verificar el correo antes de continuar.</div>
+                              <div id="emailVerificationStatus" class="small mt-1 d-flex align-items-center gap-2 flex-wrap">
+                                <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                  <i class="bi bi-envelope-exclamation me-1"></i>
+                                  Sin verificar
+                                </span>
+                                <span class="text-muted">Debes verificar el correo antes de continuar.</span>
+                              </div>
                             </div>
                             <div class="col-md-6 mb-3">
                               <label for="emailCodigo" class="form-label">Código de verificación</label>
