@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../models/lawyer_availability_day.dart';
+import '../../../constants/colors.dart';
 
 class ClientLawyerAvailabilityCalendar extends StatefulWidget {
   final List<LawyerAvailabilityDay> days;
@@ -96,7 +97,7 @@ class _ClientLawyerAvailabilityCalendarState
         : DateTime.now().add(const Duration(days: 30));
 
     final selectedDay = _selectedDay;
-final selectedSlots =
+    final selectedSlots =
         selectedDay != null ? _slotsForDay(selectedDay) : const <_CalendarSlot>[];
     return Column(
       children: [
@@ -116,11 +117,11 @@ final selectedSlots =
           enabledDayPredicate: (day) => _daysIndex.containsKey(DateUtils.dateOnly(day)),
           calendarStyle: const CalendarStyle(
             todayDecoration: BoxDecoration(
-              color: Colors.deepPurpleAccent,
+              color: AppColors.button2Color,
               shape: BoxShape.circle,
             ),
             selectedDecoration: BoxDecoration(
-              color: Colors.purple,
+              color: AppColors.buttonColor,
               shape: BoxShape.circle,
             ),
             outsideDaysVisible: false,
@@ -132,7 +133,7 @@ final selectedSlots =
             padding: EdgeInsets.symmetric(vertical: 24),
             child: Text(
               'No hay horarios disponibles para este día.',
-              style: TextStyle(fontSize: 14, color: Colors.black54),
+              style: TextStyle(fontSize: 14, color: AppColors.text2Color),
             ),
           )
         else
@@ -163,20 +164,20 @@ final selectedSlots =
             selected.block.end == slot.block.end;
         final isDisabled = !slot.isFree;
         final borderColor = isSelected
-            ? Colors.deepPurple
+            ? AppColors.buttonColor
             : isDisabled
-                ? Colors.grey.shade300
-                : Colors.deepPurpleAccent;
+                ? AppColors.strokeColor
+                : AppColors.button2Color.withOpacity(0.6);
         final backgroundColor = isSelected
-            ? Colors.deepPurpleAccent
+            ? AppColors.buttonColor
             : isDisabled
-                ? Colors.grey.shade200
+                ? AppColors.strokeColor.withOpacity(0.4)
                 : Colors.white;
         final textColor = isSelected
-            ? Colors.white
+            ? AppColors.buttonTextColor
             : isDisabled
-                ? Colors.black45
-                : Colors.black87;
+                ? AppColors.text2Color
+                : AppColors.text1Color;
 
         final label =
             '${localizations.formatTimeOfDay(slot.block.startTime, alwaysUse24HourFormat: true)} - '
@@ -204,9 +205,9 @@ final selectedSlots =
               boxShadow: [
                 if (!isDisabled)
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
+                    color: AppColors.buttonColor.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
                   ),
               ],
             ),
@@ -228,7 +229,8 @@ final selectedSlots =
                   slot.isFree ? 'Disponible' : 'Ocupado',
                   style: TextStyle(
                     fontSize: 12,
-                    color: slot.isFree ? Colors.green : Colors.redAccent,
+                    color:
+                        slot.isFree ? AppColors.buttonColor : AppColors.text3Color,
                   ),
                 ),
               ],

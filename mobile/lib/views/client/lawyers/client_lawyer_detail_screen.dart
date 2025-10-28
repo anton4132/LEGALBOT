@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../constants/colors.dart';
 import '../../../models/lawyer_availability_day.dart';
 import '../../../models/lawyer_profile_models.dart';
 import '../../../models/lawyer_search_result.dart';
@@ -9,6 +10,9 @@ import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
 import '../../../widgets/custom_app_bar.dart';
 import '../../authentication/login_screen.dart';
+import '../home/client_home.dart';
+import '../home/client_settings_screen.dart';
+import '../widgets/client_navigation_drawer.dart';
 import 'client_lawyer_availability_calendar.dart';
 
 class ClientLawyerDetailScreen extends StatefulWidget {
@@ -177,7 +181,10 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
     final resolvedMessage =
         (message ?? 'Tu sesión ha expirado. Inicia sesión nuevamente.').trim();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(resolvedMessage), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(resolvedMessage),
+        backgroundColor: AppColors.text3Color,
+      ),
     );
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -188,7 +195,10 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
   void _showSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.buttonColor,
+      ),
     );
   }
 
@@ -285,21 +295,53 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
         tarifa != null && tarifa > 0 ? _currencyFormatter.format(tarifa) : 'No especificada';
 
     return Scaffold(
-      appBar: CustomAppBar(title: _displayName),
+      appBar: CustomAppBar(
+        title: _displayName,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+      ),
+      drawer: ClientNavigationDrawer(
+        activeDestination: ClientDrawerDestination.search,
+        onSelectDashboard: _navigateToClientHome,
+        onSelectSearch: () {},
+        onSelectSettingsSubsection: _openSettingsFromDrawer,
+        onLogout: _handleLogoutFromDrawer,
+      ),
       body: SafeArea(
         child: _loadingProfile
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppColors.button2Color,
+                  ),
+                ),
+              )
             : _profileError != null
                 ? Center(
-                    child: Text(
-                      _profileError!,
-                      style: const TextStyle(color: Colors.red),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                      decoration: BoxDecoration(
+                        color: AppColors.text3Color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.text3Color),
+                      ),
+                      child: Text(
+                        _profileError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.text3Color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   )
                 : RefreshIndicator(
-                    onRefresh: () async {
-                      await _loadProfile();
-                    },
+                    onRefresh: _loadProfile,
                     child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(16),
@@ -311,8 +353,16 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
                               CircleAvatar(
                                 radius: 36,
                                 backgroundImage: avatar,
+                                backgroundColor:
+                                    AppColors.buttonColor.withOpacity(0.1),
                                 child: avatar == null
-                                    ? Text(_resolveInitials())
+                                    ? Text(
+                                        _resolveInitials(),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.buttonColor,
+                                        ),
+                                      )
                                     : null,
                               ),
                               const SizedBox(width: 16),
@@ -325,18 +375,23 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
                                       style: const TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
+                                        color: AppColors.text1Color,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Row(
                                       children: [
-                                        const Icon(Icons.star, color: Colors.amber, size: 20),
+                                        const Icon(
+                                          Icons.star,
+                                          color: Colors.amber,
+                                          size: 20,
+                                        ),
                                         const SizedBox(width: 4),
                                         Text(
                                           _ratingLabel,
                                           style: const TextStyle(
                                             fontSize: 14,
-                                            color: Colors.black87,
+                                            color: AppColors.text2Color,
                                           ),
                                         ),
                                       ],
@@ -344,7 +399,10 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
                                     const SizedBox(height: 4),
                                     Text(
                                       'Tarifa base: $tarifaLabel',
-                                      style: const TextStyle(fontSize: 14),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        color: AppColors.text2Color,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -357,7 +415,11 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
                               padding: const EdgeInsets.only(bottom: 16),
                               child: Text(
                                 _profile!.perfil!.bio!,
-                                style: const TextStyle(fontSize: 14, height: 1.4),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  height: 1.4,
+                                  color: AppColors.text1Color,
+                                ),
                               ),
                             ),
                           _buildSectionTitle('Dirección de atención'),
@@ -365,7 +427,10 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
                             _profile?.perfil?.direccionAtencion?.trim().isNotEmpty == true
                                 ? _profile!.perfil!.direccionAtencion!
                                 : 'No especificada',
-                            style: const TextStyle(fontSize: 14, color: Colors.black87),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.text2Color,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           _buildSectionTitle('Especialidades'),
@@ -378,14 +443,23 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
                           if (_loadingAvailability)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Center(child: CircularProgressIndicator()),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppColors.button2Color,
+                                  ),
+                                ),
+                              ),
                             )
                           else if (_availabilityError != null)
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               child: Text(
                                 _availabilityError!,
-                                style: const TextStyle(color: Colors.red),
+                                style: const TextStyle(
+                                  color: AppColors.text3Color,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             )
                           else if (_availabilityDays.isEmpty)
@@ -393,6 +467,9 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
                               padding: EdgeInsets.symmetric(vertical: 16),
                               child: Text(
                                 'Este abogado no tiene horarios disponibles en las próximas semanas.',
+                                style: TextStyle(
+                                  color: AppColors.text2Color,
+                                ),
                               ),
                             )
                           else
@@ -428,6 +505,57 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
     );
   }
 
+  Future<void> _navigateToClientHome() async {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ClientHome()),
+    );
+  }
+
+  void _openSettingsFromDrawer(ClientSettingsSubsection subsection) {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ClientHome(
+          showSettings: true,
+          initialSettingsSubsection: subsection,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleLogoutFromDrawer() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.buttonColor,
+              foregroundColor: AppColors.buttonTextColor,
+            ),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout != true || !mounted) return;
+
+    SessionService.instance.clear();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -436,6 +564,7 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
         style: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w600,
+          color: AppColors.text1Color,
         ),
       ),
     );
@@ -444,7 +573,10 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
   Widget _buildSpecialties() {
     final specialties = _profile?.specialtyNames ?? const [];
     if (specialties.isEmpty) {
-      return const Text('No se registraron especialidades.');
+      return const Text(
+        'No se registraron especialidades.',
+        style: TextStyle(color: AppColors.text2Color),
+      );
     }
     return Wrap(
       spacing: 8,
@@ -452,8 +584,14 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
       children: specialties
           .map(
             (name) => Chip(
-              label: Text(name),
-              backgroundColor: Colors.deepPurple.shade50,
+              label: Text(
+                name,
+                style: const TextStyle(color: AppColors.text1Color),
+              ),
+              backgroundColor: AppColors.button2Color.withOpacity(0.12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
           )
           .toList(),
@@ -472,24 +610,28 @@ class _ClientLawyerDetailScreenState extends State<ClientLawyerDetailScreen> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 study.principal ? Icons.star : Icons.business,
-                color: study.principal ? Colors.amber : Colors.grey.shade600,
+                color: study.principal
+                    ? AppColors.buttonColor
+                    : AppColors.text2Color,
               ),
               title: Text(
                 study.estudio?.nombreComercial?.isNotEmpty == true
                     ? study.estudio!.nombreComercial!
                     : 'Estudio sin nombre',
+                style: const TextStyle(color: AppColors.text1Color),
               ),
               subtitle: Text(
                 [
                   if (study.estudio?.formattedLocation?.isNotEmpty == true)
                     study.estudio!.formattedLocation!,
                 ].join(', '),
+                style: const TextStyle(color: AppColors.text2Color),
               ),
               trailing: study.principal
                   ? const Text(
                       'Principal',
                       style: TextStyle(
-                        color: Colors.green,
+                        color: AppColors.buttonColor,
                         fontWeight: FontWeight.w600,
                       ),
                     )

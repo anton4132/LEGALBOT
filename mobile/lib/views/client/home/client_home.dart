@@ -11,7 +11,6 @@ import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
 import '../../../widgets/consultation_input.dart';
 import '../../../widgets/custom_app_bar.dart';
-import '../../../widgets/custom_drawer.dart';
 import '../../../widgets/custombtn.dart';
 import '../../../widgets/gradient_container.dart';
 import '../../../widgets/section_header.dart';
@@ -21,10 +20,18 @@ import '../../lawyer/home/lawyer_home.dart';
 import '../lawyers/client_lawyer_search_screen.dart';
 import 'become_lawyer_screen.dart';
 import 'client_settings_screen.dart';
+import '../widgets/client_navigation_drawer.dart';
 
 
 class ClientHome extends StatefulWidget {
-  const ClientHome({super.key});
+  final bool showSettings;
+  final ClientSettingsSubsection initialSettingsSubsection;
+
+  const ClientHome({
+    super.key,
+    this.showSettings = false,
+    this.initialSettingsSubsection = ClientSettingsSubsection.overview,
+  });
 
   @override
   State<ClientHome> createState() => _ClientHomeState();
@@ -36,9 +43,8 @@ class _ClientHomeState extends State<ClientHome> {
   final TextEditingController _consultationController = TextEditingController();
   bool _isRecording = false;
   bool _isSwitchingAccount = false;
-  _ClientHomeView _activeView = _ClientHomeView.dashboard;
-  ClientSettingsSubsection _activeSettingsSubsection =
-      ClientSettingsSubsection.overview;
+  late _ClientHomeView _activeView;
+  late ClientSettingsSubsection _activeSettingsSubsection;
   bool _isLoadingCatalog = false;
   String? _catalogError;
   String? _catalogTariffWarning;
@@ -48,6 +54,9 @@ class _ClientHomeState extends State<ClientHome> {
   @override
   void initState() {
     super.initState();
+    _activeView =
+        widget.showSettings ? _ClientHomeView.settings : _ClientHomeView.dashboard;
+    _activeSettingsSubsection = widget.initialSettingsSubsection;
     WidgetsBinding.instance.addPostFrameCallback(
       (_) {
         _refreshApplicationStatus();
@@ -1096,119 +1105,49 @@ Widget _buildCatalogWarningCard(String message) {
       builder: (context, session, _) {
         final LawyerApplicationStatus application =
             session?.application ?? LawyerApplicationStatus.empty;
-        final bool hasLawyerAccount = session?.hasLawyerAccount ?? false;
         final String displayName =
             (session?.nombreCompleto?.trim().isNotEmpty ?? false)
                 ? session!.nombreCompleto!.trim()
                 : 'Cliente';
-        final String drawerSubtitle =
-            hasLawyerAccount
-                ? 'Gestiona tus roles desde LegalBot'
-                : 'Bienvenido a LegalBot';
-final UserAccount? lawyerAccount = _lawyerAccountForSession(session);
+        final UserAccount? lawyerAccount = _lawyerAccountForSession(session);
         final bool settingsActive = _activeView == _ClientHomeView.settings;
         return Scaffold(
           appBar: const CustomAppBar(title: 'LegalBot - Cliente'),
-          drawer: CustomDrawer(
-            userType: 'Cliente',
-            userIcon: Icons.person,
-            userName: displayName,
-            subtitle: drawerSubtitle,
-            items: [
-DrawerItem(
-                icon: Icons.home,
-                title: 'Inicio',
-                selected: _activeView == _ClientHomeView.dashboard,
-                onTap: _showHomeView,
-              ),              DrawerItem(
-                icon: Icons.search,
-                title: 'Buscar Abogados',
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ClientLawyerSearchScreen(),
-                    ),
-                  );
-                },
-              ),
-              DrawerItem(
-                icon: Icons.question_answer,
-                title: 'Consultas Legales',
-                onTap: () {
-                  // TODO
-                },
-              ),
-              DrawerItem(
-                icon: Icons.directions_car,
-                title: 'Búsqueda Vehicular',
-                onTap: () {
-                  // TODO
-                },
-              ),
-              DrawerItem(
-                icon: Icons.history,
-                title: 'Historial',
-                onTap: () {
-                  // TODO
-                },
-              ),
-              DrawerItem(
-                icon: Icons.workspace_premium_rounded,
-                title: 'Panel Abogado',
-                onTap:
-                    _isSwitchingAccount
-                        ? null
-                        : () => _navigateToLawyerPanel(session),
-              ),
-              DrawerItem(
-                icon: Icons.settings,
-                title: 'Configuración',
-                         selected: settingsActive,
-                initiallyExpanded: settingsActive,
-                children: [
-                  DrawerItem(
-                    title: 'Resumen general',
-                    selected: settingsActive &&
-                        _activeSettingsSubsection ==
-                            ClientSettingsSubsection.overview,
-                    onTap: () =>
-                        _openSettingsSubsection(ClientSettingsSubsection.overview),
-                  ),
-                  DrawerItem(
-                    title: 'Edición de datos de contacto',
-                    selected: settingsActive &&
-                        _activeSettingsSubsection ==
-                            ClientSettingsSubsection.contact,
-                    onTap: () =>
-                        _openSettingsSubsection(ClientSettingsSubsection.contact),
-                  ),
-                  DrawerItem(
-                    title: 'Seguridad',
-                    selected: settingsActive &&
-                        _activeSettingsSubsection ==
-                            ClientSettingsSubsection.security,
-                    onTap: () =>
-                        _openSettingsSubsection(ClientSettingsSubsection.security),
-                  ),
-                ],
-              ),
-            ],
+          drawer: ClientNavigationDrawer(
+            activeDestination: settingsActive
+                ? ClientDrawerDestination.settings
+                : ClientDrawerDestination.dashboard,
+            activeSettingsSubsection: _activeSettingsSubsection,
+            onSelectDashboard: _showHomeView,
+            onSelectSearch: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ClientLawyerSearchScreen(),
+                ),
+              );
+            },
+            onSelectSettingsSubsection: _openSettingsSubsection,
+            onSelectLawyerPanel: session == null
+                ? null
+                : (_) async {
+                    _navigateToLawyerPanel(session);
+                  },
             onLogout: _handleLogout,
+            isSwitchingAccount: _isSwitchingAccount,
           ),
           body: GradientContainer(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
             child: IndexedStack(
-                  index: _activeView.index,
-                  children: [
-                    _buildDashboardContent(
-                      session,
-                      application,
-                      displayName,
-                      lawyerAccount,
-                    ),
-                    ClientSettingsScreen(
-                      key: const ValueKey('client-settings'),
+              index: _activeView.index,
+              children: [
+                _buildDashboardContent(
+                  session,
+                  application,
+                  displayName,
+                  lawyerAccount,
+                ),
+                ClientSettingsScreen(
+                  key: const ValueKey('client-settings'),
                   subsection: _activeSettingsSubsection,
                   embedded: true,
                 ),
