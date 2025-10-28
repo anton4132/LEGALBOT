@@ -38,28 +38,30 @@ const DOCS_TARIFAS_URL =
   (typeof window !== 'undefined' && window.LEGALBOT_DOCS_TARIFAS_URL) ||
   'https://docs.legalbot.app/admin/tarifas-y-comisiones';
 
+function createEmptyScopeFilters() {
+  return {
+    estado: '',
+    servicio: '',
+    plan: '',
+  };
+}
+
 const state = {
   ready: false,
   monedaFallback: 'PEN',
   tabs: 'tarifas',
   tarifas: {
     items: [],
-    filters: {
-      estado: 'activas',
-      servicio: '',
-      plan: '',
-    },
+    filters: createEmptyScopeFilters(),
+    pendingFilters: createEmptyScopeFilters(),
     sort: { field: 'vigencia', direction: 'asc' },
     paginator: { page: 1, perPage: 10, total: 0 },
     form: { mode: 'create', data: null },
   },
   comisiones: {
     items: [],
-    filters: {
-      estado: 'activas',
-      servicio: '',
-      plan: '',
-    },
+    filters: createEmptyScopeFilters(),
+    pendingFilters: createEmptyScopeFilters(),
     sort: { field: 'vigencia', direction: 'asc' },
     paginator: { page: 1, perPage: 10, total: 0 },
     form: { mode: 'create', data: null },
@@ -174,7 +176,10 @@ function setupLayout() {
           <div class="card-body py-3 px-3">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
               <h2 class="fs-6 text-uppercase text-muted mb-0">Filtros de tarifas</h2>
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="tarifas-filter-reset">Limpiar</button>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="tarifas-filter-reset">Limpiar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="tarifas-filter-apply">Aplicar filtros</button>
+              </div>
             </div>
             <div class="row g-2 align-items-end">
               <div class="col-12 col-sm-6 col-lg-3">
@@ -263,7 +268,10 @@ function setupLayout() {
                 <h2 class="fs-6 text-uppercase text-muted mb-1">Filtros de comisiones</h2>
                 <p class="text-muted small mb-0">Define porcentajes por servicio o plan y consulta su estado.</p>
               </div>
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="comisiones-filter-reset">Limpiar</button>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="comisiones-filter-reset">Limpiar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="comisiones-filter-apply">Aplicar filtros</button>
+              </div>
             </div>
             <div class="row g-2 align-items-end">
               <div class="col-12 col-sm-6 col-lg-3">
@@ -888,6 +896,7 @@ function cacheDom() {
       servicio: document.getElementById('tarifas-filter-servicio'),
       plan: document.getElementById('tarifas-filter-plan'),
       reset: document.getElementById('tarifas-filter-reset'),
+      apply: document.getElementById('tarifas-filter-apply'),
     },
     paginator: document.getElementById('tarifas-pagination'),
     rowsPerPage: document.getElementById('tarifas-rows-per-page'),
@@ -921,6 +930,7 @@ function cacheDom() {
       servicio: document.getElementById('comisiones-filter-servicio'),
       plan: document.getElementById('comisiones-filter-plan'),
       reset: document.getElementById('comisiones-filter-reset'),
+      apply: document.getElementById('comisiones-filter-apply'),
     },
     paginator: document.getElementById('comisiones-pagination'),
     rowsPerPage: document.getElementById('comisiones-rows-per-page'),
@@ -1100,15 +1110,20 @@ function bindTarifasEvents() {
     if (key === 'reset') {
       input.addEventListener('click', () => {
         resetTarifaFilters();
-        renderTarifas();
+      });
+    } else if (key === 'apply') {
+      input.addEventListener('click', () => {
+        applyTarifaFilterChanges();
       });
     } else {
-      const handler = key === 'servicio' || key === 'plan' ? 'input' : 'change';
+      const handler = input.tagName === 'SELECT' ? 'change' : 'input';
       input.addEventListener(handler, () => {
-        updateTarifaFilter(key, input.value);
+        setTarifaFilterDraft(key, input.value);
       });
     }
   });
+
+  syncTarifaFilterInputs();
 
   tarifas.rowsPerPage?.addEventListener('change', () => {
     const perPage = Number(tarifas.rowsPerPage.value) || 10;
@@ -1241,20 +1256,27 @@ function applyTarifaFilters(items) {
 }
 
 function resetTarifaFilters() {
-  state.tarifas.filters = {
-    estado: 'activas',
-    servicio: '',
-    plan: '',
-  };
+  state.tarifas.pendingFilters = createEmptyScopeFilters();
+  syncTarifaFilterInputs();
+}
+
+function setTarifaFilterDraft(key, value) {
+  state.tarifas.pendingFilters[key] = typeof value === 'string' ? value.trim() : value;
+}
+
+function syncTarifaFilterInputs() {
   const { filters } = state.dom.tarifas;
   Object.entries(filters || {}).forEach(([key, input]) => {
-    if (!input || key === 'reset') return;
-    input.value = state.tarifas.filters[key] || '';
+    if (!input || key === 'reset' || key === 'apply') return;
+    const nextValue = state.tarifas.pendingFilters[key] || '';
+    if (input.value !== nextValue) {
+      input.value = nextValue;
+    }
   });
 }
 
-function updateTarifaFilter(key, value) {
-  state.tarifas.filters[key] = typeof value === 'string' ? value.trim() : value;
+function applyTarifaFilterChanges() {
+  state.tarifas.filters = { ...state.tarifas.pendingFilters };
   state.tarifas.paginator.page = 1;
   renderTarifas();
 }
@@ -1575,13 +1597,18 @@ function bindComisionesEvents() {
     if (key === 'reset') {
       input.addEventListener('click', () => {
         resetComisionFilters();
-        renderComisiones();
+      });
+    } else if (key === 'apply') {
+      input.addEventListener('click', () => {
+        applyComisionFilterChanges();
       });
     } else {
-      const handler = key === 'servicio' || key === 'plan' ? 'input' : 'change';
-      input.addEventListener(handler, () => updateComisionFilter(key, input.value));
+      const handler = input.tagName === 'SELECT' ? 'change' : 'input';
+      input.addEventListener(handler, () => setComisionFilterDraft(key, input.value));
     }
   });
+
+  syncComisionFilterInputs();
 
   comisiones.rowsPerPage?.addEventListener('change', () => {
     state.comisiones.paginator.perPage = Number(comisiones.rowsPerPage.value) || 10;
@@ -2019,23 +2046,28 @@ function applyComisionFilters(items) {
 }
 
 function resetComisionFilters() {
-  state.comisiones.filters = {
-    estado: 'activas',
-    servicio: '',
-    plan: '',
-  };
+  state.comisiones.pendingFilters = createEmptyScopeFilters();
+  syncComisionFilterInputs();
+}
+
+function setComisionFilterDraft(key, value) {
+  state.comisiones.pendingFilters[key] = typeof value === 'string' ? value.trim() : value;
+}
+
+function syncComisionFilterInputs() {
   const { filters } = state.dom.comisiones;
   Object.entries(filters || {}).forEach(([key, input]) => {
-    if (!input || key === 'reset') return;
-    input.value = state.comisiones.filters[key] || '';
+    if (!input || key === 'reset' || key === 'apply') return;
+    const nextValue = state.comisiones.pendingFilters[key] || '';
+    if (input.value !== nextValue) {
+      input.value = nextValue;
+    }
   });
 }
 
-function updateComisionFilter(key, value) {
-  state.comisiones.filters[key] = typeof value === 'string' ? value.trim() : value;
-  if (key !== 'search') {
-    state.comisiones.paginator.page = 1;
-  }
+function applyComisionFilterChanges() {
+  state.comisiones.filters = { ...state.comisiones.pendingFilters };
+  state.comisiones.paginator.page = 1;
   renderComisiones();
 }
 
