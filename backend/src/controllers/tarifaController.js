@@ -40,6 +40,13 @@ function decimalToNumber(value) {
   return Number(value);
 }
 
+function resolveEntityKey(resLocals, data) {
+  if (resLocals?.targetTipo === 'comision') return 'comision';
+  if (resLocals?.targetTipo === 'tarifa') return 'tarifa';
+  if (data?.tipo === 'comision') return 'comision';
+  return 'tarifa';
+}
+
 function serializeTarifa(tarifa) {
   if (!tarifa) return null;
   const vigenciaDesde = tarifa.vigencia_desde
@@ -130,8 +137,32 @@ function mapTarifaData(payload) {
   };
 }
 
+function mapTarifaPatch(payload) {
+  const data = {};
+  if (!payload || typeof payload !== 'object') {
+    return data;
+  }
+  if (payload.activo !== undefined) {
+    data.activo = !!payload.activo;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'vigencia_desde')) {
+    data.vigencia_desde = parseDate(payload.vigencia_desde);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'vigencia_hasta')) {
+    data.vigencia_hasta = parseDate(payload.vigencia_hasta);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'rol_aplica')) {
+    data.rol_aplica = payload.rol_aplica?.trim() || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'incluye_impuesto')) {
+    data.incluye_impuesto = !!payload.incluye_impuesto;
+  }
+  return data;
+}
+
 function buildListWhere(query) {
   const where = {};
+  const tipo = query.tipo?.trim() || 'tarifa';
   const servicioId = parseIntOrNull(query.servicio_id);
   const planId = parseIntOrNull(query.plan_id);
   const rol = query.rol_aplica?.trim();
@@ -144,6 +175,10 @@ function buildListWhere(query) {
   const search = query.search?.trim();
   const vigencia = query.vigencia?.trim();
   const andClauses = [];
+
+  if (tipo) {
+    where.tipo = tipo;
+  }
 
   if (servicioId !== null) {
     where.servicio_id = servicioId;
@@ -239,6 +274,7 @@ function buildOverlapWhere(data, excludeId) {
     'ambito_region',
     'metodo_pago',
     'moneda',
+    'tipo',
   ];
   eqFields.forEach((field) => {
     if (data[field] !== undefined) {
@@ -273,7 +309,15 @@ async function findConflicts(data, excludeId) {
   return overlaps.map((item) => serializeTarifa(item));
 }
 function sameScope(a, b) {
-  const fields = ['servicio_id', 'plan_id', 'rol_aplica', 'ambito_region', 'metodo_pago', 'moneda'];
+  const fields = [
+    'servicio_id',
+    'plan_id',
+    'rol_aplica',
+    'ambito_region',
+    'metodo_pago',
+    'moneda',
+    'tipo',
+  ];
   return fields.every((field) => {
     const valueA = a[field] ?? null;
     const valueB = b[field] ?? null;
@@ -383,6 +427,9 @@ async function getTarifa(req, res) {
     if (!tarifa) {
       return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
     }
+    if (res.locals.targetTipo && tarifa.tipo !== res.locals.targetTipo) {
+      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
+    }
     res.json(serializeTarifa(tarifa));
   } catch (error) {
     console.error('Error obteniendo tarifa:', error);
@@ -393,7 +440,11 @@ async function getTarifa(req, res) {
 async function createTarifa(req, res) {
   try {
     const data = mapTarifaData(req.body);
-    if (!data.rol_aplica) {
+    if (previous.tipo) {
+      data.tipo = previous.tipo;
+    }
+    const entityKey = resolveEntityKey(res.locals, data);
+    if (entityKey === 'comision' && !data.rol_aplica) {
       return res.status(400).json({ success: false, message: 'El rol aplica es obligatorio' });
     }
     if (!data.tipo_calculo) {
@@ -414,7 +465,9 @@ async function createTarifa(req, res) {
         plan: { select: { id: true, nombre: true } },
       },
     });
-    res.status(201).json({ success: true, tarifa: serializeTarifa(created) });
+    res
+      .status(201)
+      .json({ success: true, [entityKey]: serializeTarifa(created) });
   } catch (error) {
     console.error('Error creando tarifa:', error);
     if (error.statusCode === 400) {
@@ -437,6 +490,9 @@ async function updateTarifa(req, res) {
     if (!previous) {
       return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
     }
+    if (res.locals.targetTipo && previous.tipo !== res.locals.targetTipo) {
+      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
+    }
     const data = mapTarifaData(req.body);
     const conflicts = await findConflicts({ ...previous, ...data }, id);
     if (conflicts.length) {
@@ -454,7 +510,8 @@ async function updateTarifa(req, res) {
         plan: { select: { id: true, nombre: true } },
       },
     });
-    res.json({ success: true, tarifa: serializeTarifa(updated) });
+    const entityKey = resolveEntityKey(res.locals, updated);
+    res.json({ success: true, [entityKey]: serializeTarifa(updated) });
   } catch (error) {
     console.error('Error actualizando tarifa:', error);
     if (error.statusCode === 400) {
@@ -475,6 +532,9 @@ async function cloneTarifa(req, res) {
     }
     const source = await prisma.tarifacomision.findUnique({ where: { id } });
     if (!source) {
+      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
+    }
+    if (res.locals.targetTipo && source.tipo !== res.locals.targetTipo) {
       return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
     }
     const overrides = req.body || {};
@@ -500,7 +560,8 @@ async function cloneTarifa(req, res) {
         plan: { select: { id: true, nombre: true } },
       },
     });
-    res.status(201).json({ success: true, tarifa: serializeTarifa(created) });
+    const entityKey = resolveEntityKey(res.locals, created);
+    res.status(201).json({ success: true, [entityKey]: serializeTarifa(created) });
   } catch (error) {
     console.error('Error clonando tarifa:', error);
     if (error.statusCode === 400) {
@@ -523,6 +584,9 @@ async function toggleTarifa(req, res) {
     if (!tarifa) {
       return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
     }
+    if (res.locals.targetTipo && tarifa.tipo !== res.locals.targetTipo) {
+      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
+    }
     const updated = await prisma.tarifacomision.update({
       where: { id },
       data: { activo: !tarifa.activo },
@@ -531,10 +595,54 @@ async function toggleTarifa(req, res) {
         plan: { select: { id: true, nombre: true } },
       },
     });
-    res.json({ success: true, tarifa: serializeTarifa(updated) });
+    const entityKey = resolveEntityKey(res.locals, updated);
+    res.json({ success: true, [entityKey]: serializeTarifa(updated) });
   } catch (error) {
     console.error('Error alternando tarifa:', error);
     res.status(500).json({ success: false, message: 'Error modificando estado de la tarifa' });
+  }
+}
+
+async function patchTarifa(req, res) {
+  try {
+    const id = parseIntOrNull(req.params.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Identificador inválido' });
+    }
+    const existing = await prisma.tarifacomision.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
+    }
+    if (res.locals.targetTipo && existing.tipo !== res.locals.targetTipo) {
+      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
+    }
+    const changes = mapTarifaPatch(req.body);
+    if (!Object.keys(changes).length) {
+      const entityKey = resolveEntityKey(res.locals, existing);
+      return res.json({ success: true, [entityKey]: serializeTarifa(existing) });
+    }
+    const merged = { ...existing, ...changes };
+    const conflicts = await findConflicts(merged, id);
+    if (conflicts.length) {
+      return res.status(409).json({
+        success: false,
+        message: 'La regla actualizada entra en conflicto con reglas existentes',
+        conflicts,
+      });
+    }
+    const updated = await prisma.tarifacomision.update({
+      where: { id },
+      data: changes,
+      include: {
+        servicio: { select: { id: true, codigo: true, nombre: true } },
+        plan: { select: { id: true, nombre: true } },
+      },
+    });
+    const entityKey = resolveEntityKey(res.locals, updated);
+    res.json({ success: true, [entityKey]: serializeTarifa(updated) });
+  } catch (error) {
+    console.error('Error actualizando tarifa parcialmente:', error);
+    res.status(500).json({ success: false, message: 'Error actualizando la tarifa' });
   }
 }
 
@@ -851,6 +959,7 @@ module.exports = {
   getTarifa,
   createTarifa,
   updateTarifa,
+  patchTarifa,
   cloneTarifa,
   toggleTarifa,
   getCatalogs,
