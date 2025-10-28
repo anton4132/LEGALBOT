@@ -310,6 +310,36 @@
     font-size: 0.8rem;
     overflow: auto;
 }
+
+#tarifas-layout .compact-card .card-body {
+  padding: 1rem 1.25rem;
+}
+
+#tarifas-layout .filters-card .form-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+  color: var(--tc-muted);
+}
+
+#tarifas-layout .filters-card .form-select,
+#tarifas-layout .filters-card .form-control {
+  font-size: 0.875rem;
+  padding: 0.35rem 0.5rem;
+}
+
+#tarifas-layout .filters-card .btn-sm {
+  padding: 0.35rem 0.75rem;
+}
+
+#tarifas-layout .filters-card .row {
+  row-gap: 0.75rem;
+}
+
+#tarifas-layout .card-title {
+  margin-bottom: 0.5rem;
+}
 .schedule-header, .schedule-time, .schedule-slot {
     background-color: #fff;
     padding: 8px 4px;

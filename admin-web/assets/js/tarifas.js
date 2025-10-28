@@ -113,18 +113,18 @@ function setupLayout() {
   if (!main || document.getElementById('tarifas-layout')) return;
 
   const layout = `
-    <div class="d-flex flex-column gap-4" id="tarifas-layout">
-      <section class="card shadow-sm border-0">
-        <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+    <div class="d-flex flex-column gap-3" id="tarifas-layout">
+      <section class="card shadow-sm border-0 compact-card">
+        <div class="card-body py-3 px-3 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
           <div>
-            <h1 class="fw-bold mb-1">Tarifas &amp; Comisiones</h1>
-            <p class="text-muted mb-0">Administra las reglas económicas, comisiones e impuestos de LegalBot.</p>
+            <h2 class="fs-4 fw-semibold mb-1">Tarifas &amp; Comisiones</h2>
+            <p class="text-muted small mb-0">Administra las reglas económicas, comisiones e impuestos de LegalBot.</p>
           </div>
-          <div class="d-flex flex-wrap gap-2" id="tarifas-header-actions">
-            <button type="button" class="btn btn-outline-primary" id="tarifas-simulator-btn">Simulador de reglas</button>
+          <div class="d-flex flex-wrap gap-2 justify-content-end" id="tarifas-header-actions">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="tarifas-simulator-btn">Simulador de reglas</button>
             <button
               type="button"
-              class="btn btn-outline-secondary"
+              class="btn btn-outline-secondary btn-sm"
               id="tarifas-export-btn"
               data-scope="tarifas"
             >
@@ -132,7 +132,7 @@ function setupLayout() {
             </button>
             <button
               type="button"
-              class="btn btn-primary"
+              class="btn btn-primary btn-sm"
               id="tarifas-new-btn"
               data-scope="tarifas"
             >
@@ -140,7 +140,7 @@ function setupLayout() {
             </button>
             <button
               type="button"
-              class="btn btn-outline-secondary d-none"
+              class="btn btn-outline-secondary btn-sm d-none"
               id="comisiones-export-btn"
               data-scope="comisiones"
             >
@@ -148,7 +148,7 @@ function setupLayout() {
             </button>
             <button
               type="button"
-              class="btn btn-primary d-none"
+              class="btn btn-primary btn-sm d-none"
               id="comisiones-new-btn"
               data-scope="comisiones"
             >
@@ -158,50 +158,50 @@ function setupLayout() {
         </div>
       </section>
 
-      <section class="card shadow-sm border-0">
-        <div class="card-body d-flex flex-wrap gap-2">
-          <button type="button" class="btn btn-primary" data-lb-tab="tarifas">Tarifas</button>
-          <button type="button" class="btn btn-outline-primary" data-lb-tab="comisiones">Comisiones</button>
-          <button type="button" class="btn btn-outline-primary" data-lb-tab="impuestos">Impuestos</button>
-          <button type="button" class="btn btn-outline-primary" data-lb-tab="econconfig">Config. económica</button>
+      <section class="card shadow-sm border-0 compact-card">
+        <div class="card-body py-2 px-3 d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-primary btn-sm" data-lb-tab="tarifas">Tarifas</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" data-lb-tab="comisiones">Comisiones</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" data-lb-tab="impuestos">Impuestos</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" data-lb-tab="econconfig">Config. económica</button>
         </div>
       </section>
 
       <div id="tarifas-help-banner"></div>
 
-      <div data-lb-view="tarifas" class="d-flex flex-column gap-4">
-        <section class="card shadow-sm border-0">
-          <div class="card-body">
-            <h5 class="card-title mb-3">Filtros de tarifas</h5>
-            <div class="row g-3 align-items-end">
-              <div class="col-12 col-md-4 col-xl-3">
+      <div data-lb-view="tarifas" class="d-flex flex-column gap-3">
+        <section class="card shadow-sm border-0 compact-card filters-card">
+          <div class="card-body py-3 px-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <h2 class="fs-6 text-uppercase text-muted mb-0">Filtros de tarifas</h2>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="tarifas-filter-reset">Limpiar</button>
+            </div>
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-sm-6 col-lg-3">
                 <label for="tarifas-filter-estado" class="form-label">Estado</label>
-                <select id="tarifas-filter-estado" class="form-select">
+                <select id="tarifas-filter-estado" class="form-select form-select-sm">
                   <option value="activas">Activas</option>
                   <option value="inactivas">Inactivas</option>
                   <option value="">Todas</option>
                 </select>
               </div>
-              <div class="col-12 col-md-4 col-xl-3">
+              <div class="col-12 col-sm-6 col-lg-3">
                 <label for="tarifas-filter-servicio" class="form-label">Servicio</label>
                 <input
                   type="text"
-                  class="form-control"
+                  class="form-control form-control-sm"
                   id="tarifas-filter-servicio"
                   placeholder="Nombre o ID"
                 />
               </div>
-              <div class="col-12 col-md-4 col-xl-3">
+              <div class="col-12 col-sm-6 col-lg-3">
                 <label for="tarifas-filter-plan" class="form-label">Plan</label>
                 <input
                   type="text"
-                  class="form-control"
+                  class="form-control form-control-sm"
                   id="tarifas-filter-plan"
                   placeholder="Nombre o ID"
                 />
-              </div>
-              <div class="col-12 d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-outline-secondary" id="tarifas-filter-reset">Limpiar</button>
               </div>
             </div>
           </div>
@@ -255,40 +255,42 @@ function setupLayout() {
         
       </div>
 
-      <div data-lb-view="comisiones" class="d-none d-flex flex-column gap-4">
-        <section class="card shadow-sm border-0">
-          <div class="card-body">
-            <h5 class="card-title mb-3">Gestión de comisiones</h5>
-            <p class="text-muted small">Define porcentajes por servicio o plan y consulta su estado.</p>
-            <div class="row g-3 align-items-end">
-              <div class="col-12 col-md-4 col-xl-3">
+      <div data-lb-view="comisiones" class="d-none d-flex flex-column gap-3">
+        <section class="card shadow-sm border-0 compact-card filters-card">
+          <div class="card-body py-3 px-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <div>
+                <h2 class="fs-6 text-uppercase text-muted mb-1">Filtros de comisiones</h2>
+                <p class="text-muted small mb-0">Define porcentajes por servicio o plan y consulta su estado.</p>
+              </div>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="comisiones-filter-reset">Limpiar</button>
+            </div>
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-sm-6 col-lg-3">
                 <label for="comisiones-filter-estado" class="form-label">Estado</label>
-                <select id="comisiones-filter-estado" class="form-select">
+                <select id="comisiones-filter-estado" class="form-select form-select-sm">
                   <option value="activas">Activas</option>
                   <option value="inactivas">Inactivas</option>
                   <option value="">Todas</option>
                 </select>
               </div>
-              <div class="col-12 col-md-4 col-xl-3">
+              <div class="col-12 col-sm-6 col-lg-3">
                 <label for="comisiones-filter-servicio" class="form-label">Servicio</label>
                 <input
                   type="text"
                   id="comisiones-filter-servicio"
-                  class="form-control"
+                  class="form-control form-control-sm"
                   placeholder="Nombre o ID"
                 />
               </div>
-              <div class="col-12 col-md-4 col-xl-3">
+              <div class="col-12 col-sm-6 col-lg-3">
                 <label for="comisiones-filter-plan" class="form-label">Plan</label>
                 <input
                   type="text"
                   id="comisiones-filter-plan"
-                  class="form-control"
+                  class="form-control form-control-sm"
                   placeholder="Nombre o ID"
                 />
-              </div>
-              <div class="col-12 d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-outline-secondary" id="comisiones-filter-reset">Limpiar</button>
               </div>
             </div>
           </div>
