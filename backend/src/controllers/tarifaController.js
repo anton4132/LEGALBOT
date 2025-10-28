@@ -1,198 +1,317 @@
+const { Prisma } = require('@prisma/client');
 const { prisma } = require('../config/database');
 const {
   parseIntOrNull,
   parseDate,
   toDecimal,
   decimalToNumber,
-  collectConflictIds,
-  buildOverlapWhere,
 } = require('./helpers/ruleUtils');
 
-const PARAM_TEMPLATES = {
-  fijo: { monto: 0 },
-  minimo_mas_variable: { minimo: 0, porcentaje_variable: 0 },
-  paquete: { tamano_bloque: 0, precio_bloque: 0 },
-  consumo_ia: { rate: 0, minimo: 0 },
-  estacional: { multiplicadores: [{ desde: '', hasta: '', factor: 1 }] },
+const TARIFA_INCLUDE = {
+  plan: { select: { id: true, nombre: true, activo: true } },
+  servicio: { select: { id: true, nombre: true, codigo: true, activo: true } },
 };
 
-const TARIFFA_SCOPE_FIELDS = [
-  'servicio_id',
-  'plan_id',
-  'rol_aplica',
-  'ambito_region',
-  'metodo_pago',
-  'moneda',
-  'tipo',
-];
+const ALLOWED_TIPO_CALCULO = new Set(['fijo', 'consumo_ia']);
 
-function resolveEntityKey() {
-  return 'tarifa';
+function createHttpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function isPlainObject(value) {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function normalizeParametros(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return {};
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!isPlainObject(parsed)) {
+        throw createHttpError(400, 'Los parámetros deben ser un objeto JSON');
+      }
+      return parsed;
+    } catch (error) {
+      if (error.statusCode === 400) throw error;
+      throw createHttpError(400, 'Los parámetros deben ser un JSON válido');
+    }
+  }
+  if (!isPlainObject(value)) {
+    throw createHttpError(400, 'Los parámetros deben ser un objeto JSON');
+  }
+  return value;
+}
+
+function parseValor(value, { required } = {}) {
+  if (value === undefined) {
+    if (required) {
+      throw createHttpError(400, 'El valor es obligatorio');
+    }
+    return undefined;
+  }
+  if (value === null || value === '') {
+    if (required) {
+      throw createHttpError(400, 'El valor es obligatorio');
+    }
+    return null;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    throw createHttpError(400, 'El valor debe ser un número válido');
+  }
+  if (numeric < 0) {
+    throw createHttpError(400, 'El valor debe ser mayor o igual a cero');
+  }
+  return toDecimal(numeric);
+}
+
+function normalizeTipoCalculo(value, { required } = {}) {
+  if (value === undefined) {
+    if (required) {
+      throw createHttpError(400, 'El tipo de cálculo es obligatorio');
+    }
+    return undefined;
+  }
+  if (value === null || value === '') {
+    if (required) {
+      throw createHttpError(400, 'El tipo de cálculo es obligatorio');
+    }
+    return null;
+  }
+  const normalized = String(value).trim();
+  if (!ALLOWED_TIPO_CALCULO.has(normalized)) {
+    throw createHttpError(400, 'El tipo de cálculo proporcionado no es válido');
+  }
+  return normalized;
+}
+
+function determineAmbito(record) {
+  if (record.plan_id && record.servicio_id) return 'plan-servicio';
+  if (record.plan_id) return 'plan';
+  if (record.servicio_id) return 'servicio';
+  return 'general';
+}
+
+function determineNombreAmbito(record) {
+  const planName = record?.plan?.nombre || null;
+  const servicio = record?.servicio || {};
+  const servicioName = servicio.nombre || servicio.codigo || null;
+  if (planName && servicioName) return `${planName} · ${servicioName}`;
+  if (planName) return planName;
+  if (servicioName) return servicioName;
+  return null;
 }
 
 function serializeTarifa(tarifa) {
   if (!tarifa) return null;
-  const vigenciaDesde = tarifa.vigencia_desde
-    ? tarifa.vigencia_desde.toISOString().slice(0, 10)
-    : null;
-  const vigenciaHasta = tarifa.vigencia_hasta
-    ? tarifa.vigencia_hasta.toISOString().slice(0, 10)
-    : null;
-  const actualizado = tarifa.actualizado_el
-    ? tarifa.actualizado_el.toISOString()
-    : null;
-  const creado = tarifa.creado_el ? tarifa.creado_el.toISOString() : null;
   return {
     id: tarifa.id,
     descripcion: tarifa.descripcion,
-    tipo: tarifa.tipo,
-    rol_aplica: tarifa.rol_aplica,
-    plan_id: tarifa.plan_id,
-    plan: tarifa.plan || null,
-    servicio_id: tarifa.servicio_id,
-    servicio: tarifa.servicio || null,
-    moneda: tarifa.moneda,  
-    metodo_pago: tarifa.metodo_pago,
-    ambito_region: tarifa.ambito_region,
-    tipo_calculo: tarifa.tipo_calculo,
     valor: decimalToNumber(tarifa.valor),
     incluye_impuesto: tarifa.incluye_impuesto,
-    parametros: tarifa.parametros ?? {},
-    vigencia_desde: vigenciaDesde,
-    vigencia_hasta: vigenciaHasta,
-    prioridad: tarifa.prioridad,
+    tipo_calculo: tarifa.tipo_calculo,
+    parametros: tarifa.parametros || {},
     activo: tarifa.activo,
-    ambito: tarifa.ambito,
-    referencia_id: tarifa.referencia_id,
-    creado_el: creado,
-    actualizado_el: actualizado,
+    vigencia_desde: tarifa.vigencia_desde
+      ? tarifa.vigencia_desde.toISOString().slice(0, 10)
+      : null,
+    vigencia_hasta: tarifa.vigencia_hasta
+      ? tarifa.vigencia_hasta.toISOString().slice(0, 10)
+      : null,
+    plan_id: tarifa.plan_id,
+    servicio_id: tarifa.servicio_id,
+    plan: tarifa.plan
+      ? {
+          id: tarifa.plan.id,
+          nombre: tarifa.plan.nombre,
+          activo: tarifa.plan.activo !== false,
+        }
+      : null,
+    servicio: tarifa.servicio
+      ? {
+          id: tarifa.servicio.id,
+          nombre: tarifa.servicio.nombre,
+          codigo: tarifa.servicio.codigo,
+          activo: tarifa.servicio.activo !== false,
+        }
+      : null,
+    ambito: determineAmbito(tarifa),
+    nombre_ambito: determineNombreAmbito(tarifa),
+    creado_el: tarifa.creado_el ? tarifa.creado_el.toISOString() : null,
+    actualizado_el: tarifa.actualizado_el
+      ? tarifa.actualizado_el.toISOString()
+      : null,
   };
 }
 
-function normalizeJsonField(value) {
-  if (value === undefined || value === null || value === '') return null;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    return JSON.parse(trimmed);
+function validateDateRange(desde, hasta) {
+  if (desde && hasta && hasta < desde) {
+    throw createHttpError(
+      400,
+      'La vigencia hasta debe ser mayor o igual a la vigencia desde'
+    );
   }
-  if (typeof value === 'object') {
-    return value;
-  }
-  throw new Error('INVALID_JSON');
 }
 
-function mapTarifaData(payload) {
-  let parametros = null;
-  try {
-    parametros = normalizeJsonField(payload.parametros);
-  } catch (error) {
-    if (error.message === 'INVALID_JSON') {
-      const invalid = new Error('Los parámetros deben ser un JSON válido');
-      invalid.statusCode = 400;
-      throw invalid;
-    }
-    throw error;
-  }
-  const prioridadValue =
-    payload.prioridad === '' || payload.prioridad === undefined
-      ? null
-      : Number(payload.prioridad);
-  return {
-    descripcion: payload.descripcion?.trim() || null,
-    plan_id: parseIntOrNull(payload.plan_id),
-    servicio_id: parseIntOrNull(payload.servicio_id),
-    valor: toDecimal(payload.valor),
-    tipo_calculo: payload.tipo_calculo,
-    parametros,
-    incluye_impuesto: payload.incluye_impuesto === undefined ? false : !!payload.incluye_impuesto,
-    vigencia_desde: parseDate(payload.vigencia_desde),
-    vigencia_hasta: parseDate(payload.vigencia_hasta),
-    activo: payload.activo ?? true,
-    rol_aplica: payload.rol_aplica ?? null,
-    moneda: payload.moneda?.trim() || null,
-    metodo_pago: payload.metodo_pago?.trim() || null,
-    ambito_region: payload.ambito_region?.trim() || null,
-    prioridad: Number.isNaN(prioridadValue) ? null : prioridadValue,
-    tipo: payload.tipo?.trim() || 'tarifa',
-    ambito: payload.ambito ?? null,
-    referencia_id: payload.referencia_id ?? null,
-  };
-}
-
-function mapTarifaPatch(payload) {
-  const data = {};
+function normalizeTarifaInput(payload, { partial = false } = {}) {
   if (!payload || typeof payload !== 'object') {
-    return data;
+    throw createHttpError(400, 'No se recibieron datos de tarifa');
   }
-  if (payload.activo !== undefined) {
-    data.activo = !!payload.activo;
+  const data = {};
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'descripcion')) {
+    data.descripcion = payload.descripcion?.trim() || null;
   }
-  if (Object.prototype.hasOwnProperty.call(payload, 'vigencia_desde')) {
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'valor')) {
+    data.valor = parseValor(payload.valor, { required: !partial });
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'incluye_impuesto')) {
+    const raw = payload.incluye_impuesto;
+    data.incluye_impuesto = raw === undefined ? false : !!raw;
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'tipo_calculo')) {
+    data.tipo_calculo = normalizeTipoCalculo(payload.tipo_calculo, {
+      required: !partial,
+    });
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'parametros')) {
+    data.parametros = normalizeParametros(payload.parametros);
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'vigencia_desde')) {
     data.vigencia_desde = parseDate(payload.vigencia_desde);
   }
-  if (Object.prototype.hasOwnProperty.call(payload, 'vigencia_hasta')) {
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'vigencia_hasta')) {
     data.vigencia_hasta = parseDate(payload.vigencia_hasta);
   }
-  if (Object.prototype.hasOwnProperty.call(payload, 'rol_aplica')) {
-    data.rol_aplica = payload.rol_aplica?.trim() || null;
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'activo')) {
+    const raw = payload.activo;
+    data.activo = raw === undefined ? true : !!raw;
   }
-  if (Object.prototype.hasOwnProperty.call(payload, 'incluye_impuesto')) {
-    data.incluye_impuesto = !!payload.incluye_impuesto;
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'plan_id')) {
+    data.plan_id = parseIntOrNull(payload.plan_id);
   }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'servicio_id')) {
+    data.servicio_id = parseIntOrNull(payload.servicio_id);
+  }
+
   return data;
 }
 
-function ensureTipoCalculo(data) {
+function ensureTarifaModel(data) {
+  if (data.valor === null || data.valor === undefined) {
+    throw createHttpError(400, 'El valor es obligatorio');
+  }
+  if (!(data.valor instanceof Prisma.Decimal)) {
+    throw createHttpError(400, 'El valor debe ser un número válido');
+  }
   if (!data.tipo_calculo) {
-    const error = new Error('El tipo de cálculo es obligatorio');
-    error.statusCode = 400;
-    throw error;
+    throw createHttpError(400, 'El tipo de cálculo es obligatorio');
+  }
+  if (!ALLOWED_TIPO_CALCULO.has(data.tipo_calculo)) {
+    throw createHttpError(400, 'El tipo de cálculo proporcionado no es válido');
+  }
+  if (data.parametros !== undefined && data.parametros !== null) {
+    if (!isPlainObject(data.parametros)) {
+      throw createHttpError(400, 'Los parámetros deben ser un objeto JSON');
+    }
+  }
+  validateDateRange(data.vigencia_desde, data.vigencia_hasta);
+}
+
+async function ensureReferences(data, { checkPlan = true, checkServicio = true } = {}) {
+  if (checkPlan && Object.prototype.hasOwnProperty.call(data, 'plan_id')) {
+    if (data.plan_id !== null && data.plan_id !== undefined) {
+      const plan = await prisma.plan.findUnique({
+        where: { id: data.plan_id },
+        select: { id: true },
+      });
+      if (!plan) {
+        throw createHttpError(400, 'El plan especificado no existe');
+      }
+    }
+  }
+  if (checkServicio && Object.prototype.hasOwnProperty.call(data, 'servicio_id')) {
+    if (data.servicio_id !== null && data.servicio_id !== undefined) {
+      const servicio = await prisma.servicio.findUnique({
+        where: { id: data.servicio_id },
+        select: { id: true },
+      });
+      if (!servicio) {
+        throw createHttpError(400, 'El servicio especificado no existe');
+      }
+    }
   }
 }
 
+function mergeTarifa(existing, changes) {
+  return {
+    ...existing,
+    descripcion: changes.descripcion ?? existing.descripcion,
+    valor: changes.valor ?? existing.valor,
+    incluye_impuesto: changes.incluye_impuesto ?? existing.incluye_impuesto,
+    tipo_calculo: changes.tipo_calculo ?? existing.tipo_calculo,
+    parametros: changes.parametros ?? existing.parametros,
+    activo: changes.activo ?? existing.activo,
+    vigencia_desde: Object.prototype.hasOwnProperty.call(changes, 'vigencia_desde')
+      ? changes.vigencia_desde
+      : existing.vigencia_desde,
+    vigencia_hasta: Object.prototype.hasOwnProperty.call(changes, 'vigencia_hasta')
+      ? changes.vigencia_hasta
+      : existing.vigencia_hasta,
+    plan_id: Object.prototype.hasOwnProperty.call(changes, 'plan_id')
+      ? changes.plan_id
+      : existing.plan_id,
+    servicio_id: Object.prototype.hasOwnProperty.call(changes, 'servicio_id')
+      ? changes.servicio_id
+      : existing.servicio_id,
+  };
+}
 
-function buildListWhere(query) {
+function ensureUnmodifiedSince(headerValue, entity) {
+  if (!headerValue) return;
+  const expected = new Date(headerValue);
+  if (Number.isNaN(expected.getTime())) {
+    throw createHttpError(400, 'El encabezado If-Unmodified-Since es inválido');
+  }
+  if (!entity.actualizado_el) return;
+  if (entity.actualizado_el.getTime() !== expected.getTime()) {
+    throw createHttpError(412, 'La tarifa fue modificada recientemente');
+  }
+}
+
+function buildListWhere(query = {}) {
   const where = {};
-  const tipo = query.tipo?.trim() || 'tarifa';
   const servicioId = parseIntOrNull(query.servicio_id);
   const planId = parseIntOrNull(query.plan_id);
-  const rol = query.rol_aplica?.trim();
-  const estado = query.activo?.trim();
-  const metodo = query.metodo_pago?.trim();
-  const moneda = query.moneda?.trim();
-  const region = query.ambito_region?.trim();
+  if (servicioId !== null) where.servicio_id = servicioId;
+  if (planId !== null) where.plan_id = planId;
+  if (query.activo === 'true') {
+    where.activo = true;
+  } else if (query.activo === 'false') {
+    where.activo = false;
+  }
   const fecha = parseDate(query.fecha);
-
-  const search = query.search?.trim();
   const vigencia = query.vigencia?.trim();
+  const search = query.search?.trim();
   const andClauses = [];
-
-  if (tipo) {
-    where.tipo = tipo;
-  }
-
-  if (servicioId !== null) {
-    where.servicio_id = servicioId;
-  }
-  if (planId !== null) {
-    where.plan_id = planId;
-  }
-  if (rol) {
-    where.rol_aplica = rol;
-  }
-  if (estado === 'true' || estado === 'false') {
-    where.activo = estado === 'true';
-  }
-  if (metodo) {
-    where.metodo_pago = metodo;
-  }
-  if (moneda) {
-    where.moneda = moneda;
-  }
-  if (region) {
-    where.ambito_region = region;
-  }
   if (fecha) {
     andClauses.push({
       OR: [
@@ -208,127 +327,65 @@ function buildListWhere(query) {
     });
   }
   if (vigencia) {
-    const reference = fecha || (() => {
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      return now;
-    })();
+    const baseDate = fecha || new Date();
     if (vigencia === 'vigentes') {
       andClauses.push({
         OR: [
           { vigencia_desde: null },
-          { vigencia_desde: { lte: reference } },
+          { vigencia_desde: { lte: baseDate } },
         ],
       });
       andClauses.push({
         OR: [
           { vigencia_hasta: null },
-          { vigencia_hasta: { gte: reference } },
+          { vigencia_hasta: { gte: baseDate } },
         ],
       });
     } else if (vigencia === 'futuras') {
-      andClauses.push({
-        vigencia_desde: { gt: reference },
-      });
+      andClauses.push({ vigencia_desde: { gt: baseDate } });
     } else if (vigencia === 'vencidas') {
-      andClauses.push({
-        vigencia_hasta: { lt: reference },
-      });
+      andClauses.push({ vigencia_hasta: { lt: baseDate } });
     }
   }
   if (search) {
     const parsedId = parseIntOrNull(search);
-    const orClauses = [
-      { descripcion: { contains: search, mode: 'insensitive' } },
-    ];
+    const or = [{ descripcion: { contains: search, mode: 'insensitive' } }];
     if (parsedId !== null) {
-      orClauses.push({ id: parsedId });
+      or.push({ id: parsedId });
     }
-    andClauses.push({ OR: orClauses });
+    andClauses.push({ OR: or });
   }
   if (andClauses.length) {
-    where.AND = where.AND ? where.AND.concat(andClauses) : andClauses;
+    where.AND = andClauses;
   }
   return where;
 }
-function buildTarifaOverlapWhere(data, excludeId) {
-  return buildOverlapWhere(data, TARIFFA_SCOPE_FIELDS, excludeId);
-}
 
-
-async function findConflicts(data, excludeId) {
-  if (data.activo === false) return [];
-  const where = buildTarifaOverlapWhere(data, excludeId);
-  const overlaps = await prisma.tarifacomision.findMany({
-    where,
-    include: {
-      servicio: { select: { id: true, nombre: true, codigo: true } },
-      plan: { select: { id: true, nombre: true } },
-    },
+async function fetchTarifa(id) {
+  return prisma.tarifa.findUnique({
+    where: { id },
+    include: TARIFA_INCLUDE,
   });
-  return overlaps.map((item) => serializeTarifa(item));
 }
-
 
 async function getTarifas(req, res) {
   try {
-    const page = parseIntOrNull(req.query.page) || 1;
-    const perPage = parseIntOrNull(req.query.per_page) || 20;
     const where = buildListWhere(req.query);
-    let filteredWhere = { ...where };
-    if (req.query.conflictos === 'true') {
-      const scopeCandidates = await prisma.tarifacomision.findMany({
-        where,
-        select: {
-          id: true,
-          servicio_id: true,
-          plan_id: true,
-          rol_aplica: true,
-          ambito_region: true,
-          metodo_pago: true,
-          moneda: true,
-          vigencia_desde: true,
-          vigencia_hasta: true,
-          activo: true,
-        },
-      });
-      const conflictIds = collectConflictIds(scopeCandidates, TARIFFA_SCOPE_FIELDS);
-      if (!conflictIds.length) {
-        return res.json({ items: [], total: 0, page: 1, perPage });
-      }
-      filteredWhere = {
-        ...where,
-        id: { in: conflictIds },
-      };
-    }
-    const [items, total] = await Promise.all([
-      prisma.tarifacomision.findMany({
-        where: filteredWhere,
-        include: {
-          servicio: { select: { id: true, codigo: true, nombre: true } },
-          plan: { select: { id: true, nombre: true } },
-        },
-        orderBy: [
-          { prioridad: 'desc' },
-          { id: 'asc' },
-        ],
-        skip: (page - 1) * perPage,
-        take: perPage,
-      }),
-      prisma.tarifacomision.count({ where: filteredWhere }),
-    ]);
-    res.json({
-      items: items.map((item) => serializeTarifa(item)),
-      total,
-      page,
-      perPage,
+    const items = await prisma.tarifa.findMany({
+      where,
+      include: TARIFA_INCLUDE,
+      orderBy: [
+        { activo: 'desc' },
+        { actualizado_el: 'desc' },
+        { id: 'asc' },
+      ],
     });
+    res.json({ success: true, items: items.map(serializeTarifa) });
   } catch (error) {
     console.error('Error obteniendo tarifas:', error);
     res.status(500).json({ success: false, message: 'Error obteniendo tarifas' });
   }
 }
-
 
 async function getTarifa(req, res) {
   try {
@@ -336,20 +393,11 @@ async function getTarifa(req, res) {
     if (!id) {
       return res.status(400).json({ success: false, message: 'Identificador inválido' });
     }
-    const tarifa = await prisma.tarifacomision.findUnique({
-      where: { id },
-      include: {
-        servicio: { select: { id: true, codigo: true, nombre: true } },
-        plan: { select: { id: true, nombre: true } },
-      },
-    });
+    const tarifa = await fetchTarifa(id);
     if (!tarifa) {
       return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
     }
-    if (res.locals.targetTipo && tarifa.tipo !== res.locals.targetTipo) {
-      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
-    }
-    res.json(serializeTarifa(tarifa));
+    res.json({ success: true, tarifa: serializeTarifa(tarifa) });
   } catch (error) {
     console.error('Error obteniendo tarifa:', error);
     res.status(500).json({ success: false, message: 'Error obteniendo tarifa' });
@@ -358,34 +406,22 @@ async function getTarifa(req, res) {
 
 async function createTarifa(req, res) {
   try {
-    const data = mapTarifaData(req.body);
-    ensureTipoCalculo(data);
-
-    const conflicts = await findConflicts(data);
-    if (conflicts.length) {
-      return res.status(409).json({
-        success: false,
-        message: 'La nueva regla entra en conflicto con reglas existentes',
-        conflicts,
-      });
-    }
-    const created = await prisma.tarifacomision.create({
+    const data = normalizeTarifaInput(req.body, { partial: false });
+    ensureTarifaModel(data);
+    await ensureReferences(data);
+    const created = await prisma.tarifa.create({
       data,
-      include: {
-        servicio: { select: { id: true, codigo: true, nombre: true } },
-        plan: { select: { id: true, nombre: true } },
-      },
+      include: TARIFA_INCLUDE,
     });
     res.status(201).json({ success: true, tarifa: serializeTarifa(created) });
-
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return res.status(400).json({ success: false, message: 'Las referencias proporcionadas no existen' });
+    }
     console.error('Error creando tarifa:', error);
-    if (error.statusCode === 400) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
-    if (error.code === 'P2002') {
-      return res.status(400).json({ success: false, message: 'La combinación ya existe' });
-    }
     res.status(500).json({ success: false, message: 'Error creando tarifa' });
   }
 }
@@ -396,120 +432,29 @@ async function updateTarifa(req, res) {
     if (!id) {
       return res.status(400).json({ success: false, message: 'Identificador inválido' });
     }
-    const previous = await prisma.tarifacomision.findUnique({ where: { id } });
-    if (!previous) {
+    const existing = await prisma.tarifa.findUnique({ where: { id } });
+    if (!existing) {
       return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
     }
-    if (res.locals.targetTipo && previous.tipo !== res.locals.targetTipo) {
-      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
-    }
-    const data = mapTarifaData(req.body);
-    const conflicts = await findConflicts({ ...previous, ...data }, id);
-    if (conflicts.length) {
-      return res.status(409).json({
-        success: false,
-        message: 'La regla actualizada entra en conflicto con reglas existentes',
-        conflicts,
-      });
-    }
-    const updated = await prisma.tarifacomision.update({
+    ensureUnmodifiedSince(req.get('if-unmodified-since'), existing);
+    const data = normalizeTarifaInput(req.body, { partial: false });
+    ensureTarifaModel(data);
+    await ensureReferences(data);
+    const updated = await prisma.tarifa.update({
       where: { id },
       data,
-      include: {
-        servicio: { select: { id: true, codigo: true, nombre: true } },
-        plan: { select: { id: true, nombre: true } },
-      },
+      include: TARIFA_INCLUDE,
     });
-    const entityKey = resolveEntityKey(res.locals, updated);
-    res.json({ success: true, [entityKey]: serializeTarifa(updated) });
+    res.json({ success: true, tarifa: serializeTarifa(updated) });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return res.status(400).json({ success: false, message: 'Las referencias proporcionadas no existen' });
+    }
     console.error('Error actualizando tarifa:', error);
-    if (error.statusCode === 400) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
-    if (error.code === 'P2002') {
-      return res.status(400).json({ success: false, message: 'La combinación ya existe' });
-    }
     res.status(500).json({ success: false, message: 'Error actualizando tarifa' });
-  }
-}
-
-async function cloneTarifa(req, res) {
-  try {
-    const id = parseIntOrNull(req.params.id);
-    if (!id) {
-      return res.status(400).json({ success: false, message: 'Identificador inválido' });
-    }
-    const source = await prisma.tarifacomision.findUnique({ where: { id } });
-    if (!source) {
-      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
-    }
-    if (res.locals.targetTipo && source.tipo !== res.locals.targetTipo) {
-      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
-    }
-    const overrides = req.body || {};
-    const data = {
-      ...source,
-      ...mapTarifaData({ ...source, ...overrides }),
-    };
-    data.id = undefined;
-    data.created_at = undefined;
-    data.updated_at = undefined;
-    const conflicts = await findConflicts(data);
-    if (conflicts.length) {
-      return res.status(409).json({
-        success: false,
-        message: 'La copia propuesta entra en conflicto con reglas existentes',
-        conflicts,
-      });
-    }
-    const created = await prisma.tarifacomision.create({
-      data,
-      include: {
-        servicio: { select: { id: true, codigo: true, nombre: true } },
-        plan: { select: { id: true, nombre: true } },
-      },
-    });
-    const entityKey = resolveEntityKey(res.locals, created);
-    res.status(201).json({ success: true, [entityKey]: serializeTarifa(created) });
-  } catch (error) {
-    console.error('Error clonando tarifa:', error);
-    if (error.statusCode === 400) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
-    if (error.code === 'P2002') {
-      return res.status(400).json({ success: false, message: 'La combinación ya existe' });
-    }
-    res.status(500).json({ success: false, message: 'Error clonando tarifa' });
-  }
-}
-
-async function toggleTarifa(req, res) {
-  try {
-    const id = parseIntOrNull(req.params.id);
-    if (!id) {
-      return res.status(400).json({ success: false, message: 'Identificador inválido' });
-    }
-    const tarifa = await prisma.tarifacomision.findUnique({ where: { id } });
-    if (!tarifa) {
-      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
-    }
-    if (res.locals.targetTipo && tarifa.tipo !== res.locals.targetTipo) {
-      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
-    }
-    const updated = await prisma.tarifacomision.update({
-      where: { id },
-      data: { activo: !tarifa.activo },
-      include: {
-        servicio: { select: { id: true, codigo: true, nombre: true } },
-        plan: { select: { id: true, nombre: true } },
-      },
-    });
-    const entityKey = resolveEntityKey(res.locals, updated);
-    res.json({ success: true, [entityKey]: serializeTarifa(updated) });
-  } catch (error) {
-    console.error('Error alternando tarifa:', error);
-    res.status(500).json({ success: false, message: 'Error modificando estado de la tarifa' });
   }
 }
 
@@ -519,348 +464,70 @@ async function patchTarifa(req, res) {
     if (!id) {
       return res.status(400).json({ success: false, message: 'Identificador inválido' });
     }
-    const existing = await prisma.tarifacomision.findUnique({ where: { id } });
+    const existing = await prisma.tarifa.findUnique({ where: { id } });
     if (!existing) {
       return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
     }
-    if (res.locals.targetTipo && existing.tipo !== res.locals.targetTipo) {
-      return res.status(404).json({ success: false, message: 'Tarifa no encontrada' });
-    }
-    const changes = mapTarifaPatch(req.body);
+    const changes = normalizeTarifaInput(req.body, { partial: true });
     if (!Object.keys(changes).length) {
-      const entityKey = resolveEntityKey(res.locals, existing);
-      return res.json({ success: true, [entityKey]: serializeTarifa(existing) });
+      const fresh = await fetchTarifa(id);
+      return res.json({ success: true, tarifa: serializeTarifa(fresh) });
     }
-    const merged = { ...existing, ...changes };
-    const conflicts = await findConflicts(merged, id);
-    if (conflicts.length) {
-      return res.status(409).json({
-        success: false,
-        message: 'La regla actualizada entra en conflicto con reglas existentes',
-        conflicts,
-      });
-    }
-    const updated = await prisma.tarifacomision.update({
+    const merged = mergeTarifa(existing, changes);
+    ensureTarifaModel({
+      ...merged,
+      valor: merged.valor instanceof Prisma.Decimal ? merged.valor : parseValor(merged.valor, { required: true }),
+      tipo_calculo: merged.tipo_calculo,
+      parametros: merged.parametros,
+      vigencia_desde: merged.vigencia_desde,
+      vigencia_hasta: merged.vigencia_hasta,
+    });
+    await ensureReferences(merged, {
+      checkPlan: Object.prototype.hasOwnProperty.call(changes, 'plan_id'),
+      checkServicio: Object.prototype.hasOwnProperty.call(changes, 'servicio_id'),
+    });
+    const updated = await prisma.tarifa.update({
       where: { id },
       data: changes,
-      include: {
-        servicio: { select: { id: true, codigo: true, nombre: true } },
-        plan: { select: { id: true, nombre: true } },
-      },
+      include: TARIFA_INCLUDE,
     });
-    const entityKey = resolveEntityKey(res.locals, updated);
-    res.json({ success: true, [entityKey]: serializeTarifa(updated) });
+    res.json({ success: true, tarifa: serializeTarifa(updated) });
   } catch (error) {
-    console.error('Error actualizando tarifa parcialmente:', error);
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return res.status(400).json({ success: false, message: 'Las referencias proporcionadas no existen' });
+    }
+    console.error('Error actualizando parcialmente la tarifa:', error);
     res.status(500).json({ success: false, message: 'Error actualizando la tarifa' });
   }
 }
 
-function valueToRate(value) {
-  const num = decimalToNumber(value) || 0;
-  return num > 1 ? num / 100 : num;
-}
-
-function resolveVigenciaMatch(entity, fecha) {
-  if (!entity) return true;
-  const desde = entity.vigencia_desde ? new Date(entity.vigencia_desde) : null;
-  const hasta = entity.vigencia_hasta ? new Date(entity.vigencia_hasta) : null;
-  if (desde && fecha < desde) return false;
-  if (hasta && fecha > hasta) return false;
-  return true;
-}
-
-async function fetchEconomyContext() {
-  const [econconfig, impuestosRaw] = await Promise.all([
-    prisma.econconfig.findFirst({
-      where: { activo: true },
-      orderBy: { actualizado_el: 'desc' },
-    }),
-    prisma.impuesto.findMany({ where: { activo: true } }),
-  ]);
-  const impuestos = impuestosRaw.map((imp) => ({
-    ...imp,
-    porcentaje: valueToRate(imp.porcentaje),
-  }));
-  return {
-    econconfig,
-    impuestos,
-  };
-}
-
-function applyRounding(value, econconfig) {
-  if (!econconfig) return Number((value ?? 0).toFixed(2));
-  const decimales = econconfig.decimales ?? 2;
-  const regla = econconfig.regla_redondeo || 'dos_decimales';
-  const factor = 10 ** decimales;
-  const raw = Number(value ?? 0);
-  if (Number.isNaN(raw)) return 0;
-  switch (regla) {
-    case 'a_0_05':
-      return Math.ceil(raw * 20) / 20;
-    case 'entero_superior':
-      return Math.ceil(raw);
-    case 'dos_decimales':
-    default:
-      return Math.round(raw * factor) / factor;
-  }
-}
 async function getCatalogs(req, res) {
   try {
-    const [servicios, planes, planServicios, reglas, econ] = await Promise.all([
-      prisma.servicio.findMany({
-        select: { id: true, codigo: true, nombre: true, activo: true },
-        orderBy: { nombre: 'asc' },
-      }),
+    const [planes, servicios, planServicios] = await Promise.all([
       prisma.plan.findMany({
         select: { id: true, nombre: true, activo: true },
         orderBy: { nombre: 'asc' },
       }),
+      prisma.servicio.findMany({
+        select: { id: true, nombre: true, codigo: true, activo: true },
+        orderBy: { nombre: 'asc' },
+      }),
       prisma.planservicio.findMany({
-        select: {
-          id: true,
-          plan_id: true,
-          servicio_id: true,
-          activo: true,
-        },
+        select: { id: true, plan_id: true, servicio_id: true, activo: true },
       }),
-      prisma.tarifacomision.findMany({
-        select: {
-          moneda: true,
-          metodo_pago: true,
-          ambito_region: true,
-        },
-      }),
-      fetchEconomyContext(),
     ]);
-    const monedasSet = new Set();
-    const metodosSet = new Set();
-    const regionesSet = new Set();
-    reglas.forEach((r) => {
-      if (r.moneda) monedasSet.add(r.moneda);
-      if (r.metodo_pago) metodosSet.add(r.metodo_pago);
-      if (r.ambito_region) regionesSet.add(r.ambito_region);
-    });
-    if (econ.econconfig?.moneda_defecto) {
-      monedasSet.add(econ.econconfig.moneda_defecto);
-    }
-    const response = {
-      servicios,
+    res.json({
+      success: true,
       planes,
+      servicios,
       planServicios,
-      monedas: Array.from(monedasSet).sort(),
-      metodos_pago: Array.from(metodosSet).sort(),
-      regiones: Array.from(regionesSet).sort(),
-      roles: ['cliente', 'abogado', 'ambos'],
-      econconfig: econ.econconfig,
-      impuestos: econ.impuestos,
-      parametrosPlantilla: PARAM_TEMPLATES,
-    };
-    res.json(response);
+    });
   } catch (error) {
     console.error('Error obteniendo catálogos de tarifas:', error);
     res.status(500).json({ success: false, message: 'Error obteniendo catálogos' });
-  }
-}
-
-function matchesRule(rule, context) {
-  const {
-    servicio_id,
-    plan_id,
-    rol_aplica,
-    moneda,
-    metodo_pago,
-    ambito_region,
-    fecha,
-  } = context;
-  if (!rule.activo) return false;
-  if (!resolveVigenciaMatch(rule, fecha)) return false;
-  if (servicio_id && rule.servicio_id && rule.servicio_id !== servicio_id) return false;
-  if (plan_id && rule.plan_id && rule.plan_id !== plan_id) return false;
-  if (rol_aplica && rule.rol_aplica !== 'ambos' && rule.rol_aplica !== rol_aplica) return false;
-  if (moneda && rule.moneda && rule.moneda !== moneda) return false;
-  if (metodo_pago && rule.metodo_pago && rule.metodo_pago !== '*' && rule.metodo_pago !== metodo_pago) return false;
-  if (ambito_region && rule.ambito_region && rule.ambito_region !== '*' && rule.ambito_region !== ambito_region) return false;
-  return true;
-}
-
-function getSpecificity(rule, context) {
-  if (rule.servicio_id && rule.plan_id) return 3;
-  if (rule.servicio_id) return 2;
-  if (rule.plan_id) return 1;
-  return 0;
-}
-
-function computeSubtotal(rule, consumo) {
-  const params = rule.parametros || {};
-  switch (rule.tipo_calculo) {
-    case 'fijo':
-      return Number(params.monto ?? rule.valor ?? 0);
-    case 'minimo_mas_variable': {
-      const minimo = Number(params.minimo ?? 0);
-      const porcentaje = Number(params.porcentaje_variable ?? 0);
-      const variable = Number(consumo || 0) * porcentaje;
-      return Math.max(minimo, minimo + variable);
-    }
-    case 'paquete': {
-      const tamano = Number(params.tamano_bloque || 1);
-      const precio = Number(params.precio_bloque || 0);
-      const consumoReal = Number(consumo || 0);
-      const bloques = tamano <= 0 ? 0 : Math.ceil(consumoReal / tamano);
-      return bloques * precio;
-    }
-    case 'consumo_ia': {
-      const rate = Number(params.rate || 0);
-      const minimo = Number(params.minimo || 0);
-      const monto = Number(consumo || 0) * rate;
-      return Math.max(minimo, monto);
-    }
-    case 'estacional': {
-      const base = Number(rule.valor || 0);
-      if (!Array.isArray(params.multiplicadores)) return base;
-      return params.multiplicadores.reduce((acc, periodo) => {
-        if (!periodo) return acc;
-        const factor = Number(periodo.factor || 1);
-        if (!periodo.desde && !periodo.hasta) {
-          return acc * factor;
-        }
-        const desde = parseDate(periodo.desde) || null;
-        const hasta = parseDate(periodo.hasta) || null;
-        if (resolveVigenciaMatch({ vigencia_desde: desde, vigencia_hasta: hasta }, new Date())) {
-          return acc * factor;
-        }
-        return acc;
-      }, base);
-    }
-    default:
-      return Number(rule.valor || 0);
-  }
-}
-
-
-async function simulateTarifa(req, res) {
-  try {
-    const servicioId = parseIntOrNull(req.body.servicio_id);
-    const planId = parseIntOrNull(req.body.plan_id);
-    const rol = req.body.rol_aplica || null;
-    const metodo = req.body.metodo_pago?.trim() || null;
-    const region = req.body.ambito_region?.trim() || null;
-    const fecha = parseDate(req.body.fecha) || new Date();
-    const consumo = Number(req.body.consumo || 0);
-
-    const context = await fetchEconomyContext();
-    const moneda = req.body.moneda?.trim() || context.econconfig?.moneda_defecto || null;
-
-    const reglas = await prisma.tarifacomision.findMany({
-      where: {
-        activo: true,
-        AND: [
-          {
-            OR: [
-              { vigencia_desde: null },
-              { vigencia_desde: { lte: fecha } },
-            ],
-          },
-          {
-            OR: [
-              { vigencia_hasta: null },
-              { vigencia_hasta: { gte: fecha } },
-            ],
-          },
-        ],
-      },
-      include: {
-        servicio: { select: { id: true, codigo: true, nombre: true } },
-        plan: { select: { id: true, nombre: true } },
-      },
-    });
-
-    if (req.body.regla_preview) {
-      const previewPayload = req.body.regla_preview;
-      const previewRule = {
-        ...previewPayload,
-        id: 0,
-        servicio_id: parseIntOrNull(previewPayload.servicio_id),
-        plan_id: parseIntOrNull(previewPayload.plan_id),
-        rol_aplica: previewPayload.rol_aplica,
-        moneda: previewPayload.moneda || moneda,
-        metodo_pago: previewPayload.metodo_pago || null,
-        ambito_region: previewPayload.ambito_region || null,
-        tipo_calculo: previewPayload.tipo_calculo,
-        valor: previewPayload.valor ?? null,
-        parametros: previewPayload.parametros ?? null,
-        incluye_impuesto: previewPayload.incluye_impuesto ?? false,
-        vigencia_desde: parseDate(previewPayload.vigencia_desde),
-        vigencia_hasta: parseDate(previewPayload.vigencia_hasta),
-        prioridad: previewPayload.prioridad ?? null,
-        activo: previewPayload.activo !== false,
-        servicio: previewPayload.servicio || null,
-        plan: previewPayload.plan || null,
-      };
-      reglas.push(previewRule);
-    }
-
-    const matchContext = {
-      servicio_id: servicioId,
-      plan_id: planId,
-      rol_aplica: rol,
-      moneda,
-      metodo_pago: metodo,
-      ambito_region: region,
-      fecha,
-    };
-
-    const candidatos = reglas.filter((rule) => matchesRule(rule, matchContext));
-    if (candidatos.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No se encontró una regla aplicable',
-        econconfig: context.econconfig,
-      });
-    }
-    candidatos.sort((a, b) => {
-      const specDiff = getSpecificity(b, matchContext) - getSpecificity(a, matchContext);
-      if (specDiff !== 0) return specDiff;
-      const priorityDiff = (b.prioridad ?? -Infinity) - (a.prioridad ?? -Infinity);
-      if (priorityDiff !== 0) return priorityDiff;
-      const desdeA = a.vigencia_desde ? a.vigencia_desde.getTime() : 0;
-      const desdeB = b.vigencia_desde ? b.vigencia_desde.getTime() : 0;
-      return desdeB - desdeA;
-    });
-
-    const selected = candidatos[0];
-    const subtotalBase = computeSubtotal(selected, consumo);
-    const applicableTaxes = context.impuestos.filter((imp) => resolveVigenciaMatch(imp, fecha));
-    const impuestoTotal = selected.incluye_impuesto
-      ? 0
-      : applicableTaxes.reduce((acc, imp) => acc + subtotalBase * imp.porcentaje, 0);
-
-    const subtotal = applyRounding(subtotalBase, context.econconfig);
-    const impuestos = applyRounding(impuestoTotal, context.econconfig);
-    const total = applyRounding(subtotalBase + impuestoTotal, context.econconfig);
-    const neto = subtotal;
-    res.json({
-      success: true,
-      regla: serializeTarifa(selected),
-      desglose: {
-        subtotal,
-        impuestos,
-        totalCliente: total,
-        netoAbogado: neto,
-        moneda,
-        impuestos_detalle: applicableTaxes.map((imp) => ({
-          codigo: imp.codigo,
-          nombre: imp.nombre,
-          porcentaje: imp.porcentaje,
-        })),
-      },
-      contexto: {
-        econconfig: context.econconfig,
-      },
-    });
-  } catch (error) {
-    console.error('Error simulando tarifa:', error);
-    res.status(500).json({ success: false, message: 'Error simulando tarifa' });
   }
 }
 
@@ -870,8 +537,5 @@ module.exports = {
   createTarifa,
   updateTarifa,
   patchTarifa,
-  cloneTarifa,
-  toggleTarifa,
   getCatalogs,
-  simulateTarifa,
 };
