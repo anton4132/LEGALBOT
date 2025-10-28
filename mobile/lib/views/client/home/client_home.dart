@@ -43,8 +43,6 @@ class _ClientHomeState extends State<ClientHome> {
   String? _catalogError;
   String? _catalogTariffWarning;
   List<_ServicePlanCatalogItem> _catalogItems = const [];
-   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final Set<String> _activeCatalogFilters = <String>{};
 
   final DateFormat _dateFormatter = DateFormat('dd/MM/yyyy');
   @override
@@ -458,17 +456,12 @@ throw UnauthorizedException(resolvedMessage);
         return null;
     }
   }
-Widget _buildServicePlanSection() {
-    final header = <Widget>[
-      _buildCatalogFilterToolbar(),
-      const SizedBox(height: 20),
-    ];
 
+  Widget _buildServicePlanSection() {
     if (_isLoadingCatalog) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...header,
           _buildCatalogStatusBlock(
             title: 'Servicios individuales',
             child: _buildCatalogLoadingCard(),
@@ -486,7 +479,6 @@ Widget _buildServicePlanSection() {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...header,
           _buildCatalogStatusBlock(
             title: 'Servicios individuales',
             child: _buildCatalogErrorCard(_catalogError!),
@@ -504,7 +496,6 @@ Widget _buildServicePlanSection() {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...header,
           if (_catalogTariffWarning != null) ...[
             _buildCatalogWarningCard(_catalogTariffWarning!),
             const SizedBox(height: 24),
@@ -536,8 +527,7 @@ Widget _buildServicePlanSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ...header,
-        if (_catalogTariffWarning != null) ...[
+         if (_catalogTariffWarning != null) ...[
           _buildCatalogWarningCard(_catalogTariffWarning!),
           const SizedBox(height: 28),
         ],
@@ -553,116 +543,6 @@ Widget _buildServicePlanSection() {
           type: _CatalogItemType.plan,
         ),
       ],
-    );
-  }
-
-  bool get _hasActiveCatalogFilters => _activeCatalogFilters.isNotEmpty;
-
-  List<String> get _sortedActiveCatalogFilters {
-    final filters = _activeCatalogFilters.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return filters;
-  }
-
-  Widget _buildCatalogFilterToolbar() {
-    final bool hasFilters = _hasActiveCatalogFilters;
-    final Color accentColor =
-        hasFilters ? AppColors.buttonColor : AppColors.text3Color;
-    final IconData icon = hasFilters
-        ? Icons.manage_search_rounded
-        : Icons.hourglass_empty_rounded;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: accentColor.withOpacity(hasFilters ? 0.12 : 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: accentColor.withOpacity(hasFilters ? 0.35 : 0.25),
-        ),
-      ),
-      child: hasFilters
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(icon, color: accentColor),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Filtros activos',
-                        style: TextStyle(
-                          color: accentColor,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accentColor.withOpacity(0.14),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${_activeCatalogFilters.length}',
-                        style: TextStyle(
-                          color: accentColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _sortedActiveCatalogFilters
-                      .map(
-                        (filter) => Chip(
-                          label: Text(filter),
-                          backgroundColor: accentColor.withOpacity(0.12),
-                          labelStyle: TextStyle(
-                            color: accentColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                            side: BorderSide(
-                              color: accentColor.withOpacity(0.45),
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
-            )
-          : SizedBox(
-              height: 40,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: accentColor, size: 26),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Sin filtros activos',
-                    style: TextStyle(
-                      color: accentColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
     );
   }
 
@@ -1228,18 +1108,8 @@ Widget _buildCatalogWarningCard(String message) {
 final UserAccount? lawyerAccount = _lawyerAccountForSession(session);
         final bool settingsActive = _activeView == _ClientHomeView.settings;
         return Scaffold(
-  key: _scaffoldKey,
-          appBar: CustomAppBar(
-            title: 'LegalBot - Cliente',
-            leading: IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
-              tooltip: 'Abrir menú',
-              onPressed: () {
-                FocusScope.of(context).unfocus();
-                _scaffoldKey.currentState?.openDrawer();
-              },
-            ),
-          ),          drawer: CustomDrawer(
+          appBar: const CustomAppBar(title: 'LegalBot - Cliente'),
+          drawer: CustomDrawer(
             userType: 'Cliente',
             userIcon: Icons.person,
             userName: displayName,

@@ -1007,6 +1007,28 @@ class LawyerProfileScreenState extends State<LawyerProfileScreen> {
     return RefreshIndicator(onRefresh: _loadInitialData, child: scrollable);
   }
 
+   Widget _buildDrawerButton() {
+    return Builder(
+      builder: (context) {
+        final scaffoldState = Scaffold.maybeOf(context);
+        if (scaffoldState == null || !scaffoldState.hasDrawer) {
+          return const SizedBox.shrink();
+        }
+        return OutlinedButton.icon(
+          onPressed: () => scaffoldState.openDrawer(),
+          icon: const Icon(Icons.menu, color: AppColors.buttonColor),
+          label: const Text(
+            'Abrir menú',
+            style: TextStyle(color: AppColors.buttonColor),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: AppColors.buttonColor),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildCurrentSection() {
     switch (_currentSubsection) {
       case LawyerProfileSubsection.profile:
