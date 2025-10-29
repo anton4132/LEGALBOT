@@ -650,131 +650,76 @@ const getLawyerAvailabilityWithBookings = async (req, res) => {
   }
 };
 
-/**
- * Lista combinaciones únicas de país y ciudad para filtros públicos.
- * Respuesta: Array<{ pais, ciudad }>.
- */
-const listLawyerLocations = async (_req, res) => {
-  try {
-    const departamentosMap = new Map();
+function buildLawyerLocationCatalog(rows = []) {
+  const departamentosMap = new Map();
 
-    const buildKey = (...parts) => parts
-      .filter(Boolean)
-      .map((part) => part.toString().toLowerCase())
-      .join('|');
+  const buildKey = (...parts) => parts
+    .filter(Boolean)
+    .map((part) => part.toString().toLowerCase())
+    .join('|');
 
-    const upsertFromRows = (rows = []) => {
-      rows.forEach((direccion) => {
-        const departamento = sanitizeString(direccion?.departamento);
-        const provincia = sanitizeString(direccion?.provincia);
-        const distrito = sanitizeString(direccion?.distrito);
-        const ubigeoCodigo = sanitizeString(direccion?.ubigeo_codigo);
+  rows.forEach((direccion) => {
+    const departamento = sanitizeString(direccion?.departamento);
+    const provincia = sanitizeString(direccion?.provincia);
+    const distrito = sanitizeString(direccion?.distrito);
+    const ubigeoCodigo = sanitizeString(direccion?.ubigeo_codigo);
 
-        if (!departamento || !provincia || !distrito) return;
+    if (!departamento || !provincia || !distrito) return;
 
-        const departamentoCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 2) : null;
-        const provinciaCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 4) : null;
-        const distritoCodigo = ubigeoCodigo || null;
+    const departamentoCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 2) : null;
+    const provinciaCodigo = ubigeoCodigo ? ubigeoCodigo.slice(0, 4) : null;
+    const distritoCodigo = ubigeoCodigo || null;
 
-        const departamentoKey = buildKey(departamentoCodigo, departamento);
+    const departamentoKey = buildKey(departamentoCodigo, departamento);
 
-        if (!departamentosMap.has(departamentoKey)) {
-          departamentosMap.set(departamentoKey, {
-            departamento,
-            departamento_codigo: departamentoCodigo,
-            provincias: new Map(),
-          });
-        }
-
-        const departamentoEntry = departamentosMap.get(departamentoKey);
-        if (!departamentoEntry.departamento && departamento) {
-          departamentoEntry.departamento = departamento;
-        }
-        if (!departamentoEntry.departamento_codigo && departamentoCodigo) {
-          departamentoEntry.departamento_codigo = departamentoCodigo;
-        }
-
-        const provinciasMap = departamentoEntry.provincias;
-
-        const provinciaKey = buildKey(provinciaCodigo, provincia);
-        if (!provinciasMap.has(provinciaKey)) {
-          provinciasMap.set(provinciaKey, {
-            provincia,
-            provincia_codigo: provinciaCodigo,
-            distritos: new Map(),
-          });
-        }
-
-        const provinciaEntry = provinciasMap.get(provinciaKey);
-        if (!provinciaEntry.provincia && provincia) {
-          provinciaEntry.provincia = provincia;
-        }
-        if (!provinciaEntry.provincia_codigo && provinciaCodigo) {
-          provinciaEntry.provincia_codigo = provinciaCodigo;
-        }
-
-        const distritosMap = provinciaEntry.distritos;
-
-        const distritoKey = buildKey(distritoCodigo, distrito);
-        if (!distritosMap.has(distritoKey)) {
-          distritosMap.set(distritoKey, {
-            distrito,
-            distrito_codigo: distritoCodigo,
-            ubigeo_codigo: ubigeoCodigo || distritoCodigo,
-          });
-        }
+    if (!departamentosMap.has(departamentoKey)) {
+      departamentosMap.set(departamentoKey, {
+        departamento,
+        departamento_codigo: departamentoCodigo,
+        provincias: new Map(),
       });
-    };
-
-    const activeDirecciones = await prisma.direccion.findMany({
-        where: {
-          departamento: { not: '' },
-          provincia: { not: '' },
-          distrito: { not: '' },
-          estudio: {
-          some: {
-            activo: true,
-            abogadoestudios: {
-              some: {
-                activo: true,
-                usuario: {
-                  activo: true,
-                  role: { codigo: { equals: 'abogado', mode: 'insensitive' } },
-                },
-              },
-            },
-          },
-        },
-        
-      },
-      select: {
-        departamento: true,
-        provincia: true,
-        distrito: true,
-        ubigeo_codigo: true,
-      },
-    });
-
-    upsertFromRows(activeDirecciones);
-
-    if (!departamentosMap.size) {
-      const fallbackDirecciones = await prisma.direccion.findMany({
-        where: {
-          departamento: { not: '' },
-          provincia: { not: '' },
-          distrito: { not: '' },
-        },
-        select: {
-          departamento: true,
-          provincia: true,
-          distrito: true,
-          ubigeo_codigo: true,
-        },
-      });
-      upsertFromRows(fallbackDirecciones);
     }
 
-    const response = Array.from(departamentosMap.values())
+    const departamentoEntry = departamentosMap.get(departamentoKey);
+    if (!departamentoEntry.departamento && departamento) {
+      departamentoEntry.departamento = departamento;
+    }
+    if (!departamentoEntry.departamento_codigo && departamentoCodigo) {
+      departamentoEntry.departamento_codigo = departamentoCodigo;
+    }
+
+    const provinciasMap = departamentoEntry.provincias;
+
+    const provinciaKey = buildKey(provinciaCodigo, provincia);
+    if (!provinciasMap.has(provinciaKey)) {
+      provinciasMap.set(provinciaKey, {
+        provincia,
+        provincia_codigo: provinciaCodigo,
+        distritos: new Map(),
+      });
+    }
+
+    const provinciaEntry = provinciasMap.get(provinciaKey);
+    if (!provinciaEntry.provincia && provincia) {
+      provinciaEntry.provincia = provincia;
+    }
+    if (!provinciaEntry.provincia_codigo && provinciaCodigo) {
+      provinciaEntry.provincia_codigo = provinciaCodigo;
+    }
+
+    const distritosMap = provinciaEntry.distritos;
+
+    const distritoKey = buildKey(distritoCodigo, distrito);
+    if (!distritosMap.has(distritoKey)) {
+      distritosMap.set(distritoKey, {
+        distrito,
+        distrito_codigo: distritoCodigo,
+        ubigeo_codigo: ubigeoCodigo || distritoCodigo,
+      });
+    }
+  });
+
+  return Array.from(departamentosMap.values())
     .map((departamentoEntry) => {
       const provincias = Array.from(departamentoEntry.provincias.values())
         .map((provinciaEntry) => {
@@ -796,16 +741,39 @@ const listLawyerLocations = async (_req, res) => {
           { sensitivity: 'base' },
         ));
       return {
-          departamento: departamentoEntry.departamento,
-          departamento_codigo: departamentoEntry.departamento_codigo,
-          provincias,
-        };
-      })
-      .sort((a, b) => (a.departamento || '').localeCompare(
-        b.departamento || '',
-        undefined,
-        { sensitivity: 'base' },
-      ));
+        departamento: departamentoEntry.departamento,
+        departamento_codigo: departamentoEntry.departamento_codigo,
+        provincias,
+      };
+    })
+    .sort((a, b) => (a.departamento || '').localeCompare(
+      b.departamento || '',
+      undefined,
+      { sensitivity: 'base' },
+    ));
+}
+
+/**
+ * Construye el catálogo completo de ubicaciones de abogados usando el padrón general de direcciones.
+ * Respuesta: Array<{ departamento, departamento_codigo, provincias: Array<{ provincia, provincia_codigo, distritos: Array<{ distrito, distrito_codigo, ubigeo_codigo }> }> }>.
+ */
+const listLawyerLocations = async (_req, res) => {
+  try {
+    const padronDirecciones = await prisma.direccion.findMany({
+      where: {
+        departamento: { not: '' },
+        provincia: { not: '' },
+        distrito: { not: '' },
+      },
+      select: {
+        departamento: true,
+        provincia: true,
+        distrito: true,
+        ubigeo_codigo: true,
+      },
+    });
+
+    const response = buildLawyerLocationCatalog(padronDirecciones);
 
     res.json(response);
   } catch (error) {
@@ -2200,5 +2168,8 @@ module.exports = {
   getPublicLawyerProfile,
   getLawyerAvailabilityWithBookings,
   listLawyerLocations,
+  __testables: {
+    buildLawyerLocationCatalog,
+  },
 
 };
