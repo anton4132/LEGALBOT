@@ -75,11 +75,16 @@ const state = {
       usuarioId: '',
       fecha: new Date().toISOString().slice(0, 10),
       consumo: 0,
+      planId: null,
+      servicioId: null,
+      consumoIa: 0,
     },
   },
   quick: {
     impuestos: [],
     econconfig: null,
+    impuestoCache: new Map(),
+    comisionesCache: new Map(),
   },
   econconfigForm: {
     mode: 'update',
@@ -678,28 +683,67 @@ function setupLayout() {
             <div class="modal-body">
               <p class="text-muted">Completa los datos para estimar montos para cliente y abogado.</p>
               <form id="simulator-form" class="row g-3" autocomplete="off">
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-lg-4">
                   <label for="simulator-ambito" class="form-label">Ámbito</label>
                   <select id="simulator-ambito" name="ambito" class="form-select">
                     <option value="servicio">Servicio</option>
                     <option value="plan">Plan</option>
+                    <option value="plan-servicio">Plan + Servicio</option>
+                    <option value="general">General</option>
                   </select>
+                  <div
+                    class="invalid-feedback d-block d-none"
+                    id="simulator-scope-error"
+                    data-default-message="Selecciona el ámbito y los identificadores requeridos."
+                  >
+                    Selecciona el ámbito y los identificadores requeridos.
+                  </div>
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-lg-4">
                   <label for="simulator-referencia" class="form-label">Referencia (ID)</label>
-                  <input type="text" id="simulator-referencia" name="referencia" class="form-control" placeholder="ID del servicio/plan" />
+                  <input
+                    type="text"
+                    id="simulator-referencia"
+                    name="referencia"
+                    class="form-control"
+                    placeholder="ID directo de la tarifa"
+                  />
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-lg-4">
                   <label for="simulator-usuario" class="form-label">Usuario ID</label>
                   <input type="text" id="simulator-usuario" name="usuario_id" class="form-control" placeholder="Opcional" />
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-6 d-none" data-simulator-plan-group>
+                  <label for="simulator-plan" class="form-label">Plan</label>
+                  <select id="simulator-plan" name="plan_id" class="form-select">
+                    <option value="">Selecciona un plan</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-6 d-none" data-simulator-servicio-group>
+                  <label for="simulator-servicio" class="form-label">Servicio</label>
+                  <select id="simulator-servicio" name="servicio_id" class="form-select" disabled>
+                    <option value="">Selecciona un servicio</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-6">
                   <label for="simulator-fecha" class="form-label">Fecha</label>
                   <input type="date" id="simulator-fecha" name="fecha" class="form-control" />
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-6">
                   <label for="simulator-consumo" class="form-label">Consumo</label>
                   <input type="number" id="simulator-consumo" name="consumo" class="form-control" min="0" step="0.01" />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="simulator-consumo-ia" class="form-label">Consumo IA</label>
+                  <input
+                    type="number"
+                    id="simulator-consumo-ia"
+                    name="consumo_ia"
+                    class="form-control"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                  />
                 </div>
                 <div class="col-12 d-flex justify-content-end">
                   <button type="submit" class="btn btn-primary">Simular</button>
@@ -963,6 +1007,17 @@ function cacheDom() {
     form: document.getElementById('simulator-form'),
     result: document.getElementById('simulator-result'),
     loading: document.getElementById('simulator-loading'),
+    ambito: document.getElementById('simulator-ambito'),
+    referencia: document.getElementById('simulator-referencia'),
+    usuario: document.getElementById('simulator-usuario'),
+    fecha: document.getElementById('simulator-fecha'),
+    consumo: document.getElementById('simulator-consumo'),
+    consumoIa: document.getElementById('simulator-consumo-ia'),
+    planSelect: document.getElementById('simulator-plan'),
+    servicioSelect: document.getElementById('simulator-servicio'),
+    planGroup: document.querySelector('[data-simulator-plan-group]'),
+    servicioGroup: document.querySelector('[data-simulator-servicio-group]'),
+    scopeError: document.getElementById('simulator-scope-error'),
   };
 
   if (dom.simulator.modal && window.bootstrap?.Modal) {
@@ -971,9 +1026,21 @@ function cacheDom() {
     );
   }
 
-  if (dom.simulator.form?.fecha) {
-    dom.simulator.form.fecha.value =
+  if (dom.simulator.fecha) {
+    dom.simulator.fecha.value =
       state.simulator.inputs.fecha || new Date().toISOString().slice(0, 10);
+  }
+  if (dom.simulator.consumo) {
+    dom.simulator.consumo.value =
+      typeof state.simulator.inputs.consumo === 'number'
+        ? state.simulator.inputs.consumo
+        : '';
+  }
+  if (dom.simulator.consumoIa) {
+    dom.simulator.consumoIa.value =
+      typeof state.simulator.inputs.consumoIa === 'number'
+        ? state.simulator.inputs.consumoIa
+        : '';
   }
 
   dom.helpBanner = document.getElementById('tarifas-help-banner');
@@ -2408,33 +2475,271 @@ function bindSimulatorEvents() {
     renderSimulator();
   });
 
+  simulator.ambito?.addEventListener('change', () => {
+    updateSimulatorScopeUi({ resetService: true }).catch((error) => {
+      console.error('Error actualizando el ámbito del simulador', error);
+    });
+  });
+
+  simulator.planSelect?.addEventListener('change', () => {
+    simulator.planSelect.classList.remove('is-invalid');
+    updateSimulatorScopeUi({ preserveSelections: true }).catch((error) => {
+      console.error('Error actualizando el plan del simulador', error);
+    });
+    hideSimulatorScopeError();
+  });
+
+  simulator.servicioSelect?.addEventListener('change', () => {
+    simulator.servicioSelect.classList.remove('is-invalid');
+    hideSimulatorScopeError();
+  });
+
   simulator.modal?.addEventListener('shown.bs.modal', () => {
-    if (simulator.form) {
-      const inputs = state.simulator.inputs || {};
-      simulator.form.ambito.value = inputs.ambito || 'servicio';
-      simulator.form.referencia.value = inputs.referencia || '';
-      simulator.form.usuario_id.value = inputs.usuarioId || '';
-      simulator.form.fecha.value =
-        inputs.fecha || new Date().toISOString().slice(0, 10);
-      simulator.form.consumo.value =
-        typeof inputs.consumo === 'number' ? inputs.consumo : '';
-    }
-    renderSimulator();
-    simulator.form?.referencia?.focus();
+    prepareSimulatorForm()
+      .then(() => {
+        renderSimulator();
+        simulator.referencia?.focus();
+      })
+      .catch((error) => {
+        console.error('Error preparando el simulador', error);
+        renderSimulator();
+      });
   });
 
   simulator.modal?.addEventListener('hidden.bs.modal', () => {
     state.simulator.loading = false;
     state.simulator.result = null;
+    simulator.planSelect?.classList.remove('is-invalid');
+    simulator.servicioSelect?.classList.remove('is-invalid');
+    hideSimulatorScopeError();
     renderSimulator();
   });
 
   simulator.form?.addEventListener('submit', submitSimulator);
 }
 
+async function prepareSimulatorForm() {
+  const { simulator } = state.dom;
+  if (!simulator?.form) return;
+  const inputs = state.simulator.inputs || {};
+  if (simulator.ambito) {
+    const fallback = inputs.ambito || 'servicio';
+    simulator.ambito.value = fallback;
+  }
+  if (simulator.referencia) {
+    simulator.referencia.value = inputs.referencia || '';
+  }
+  if (simulator.usuario) {
+    simulator.usuario.value = inputs.usuarioId || '';
+  }
+  if (simulator.fecha) {
+    simulator.fecha.value = inputs.fecha || new Date().toISOString().slice(0, 10);
+  }
+  if (simulator.consumo) {
+    simulator.consumo.value =
+      typeof inputs.consumo === 'number' && Number.isFinite(inputs.consumo)
+        ? inputs.consumo
+        : '';
+  }
+  if (simulator.consumoIa) {
+    simulator.consumoIa.value =
+      typeof inputs.consumoIa === 'number' && Number.isFinite(inputs.consumoIa)
+        ? inputs.consumoIa
+        : '';
+  }
+
+  await updateSimulatorScopeUi({
+    planId: inputs.planId,
+    servicioId: inputs.servicioId,
+    preserveSelections: true,
+  });
+
+  if (simulator.planSelect && inputs.planId) {
+    simulator.planSelect.value = String(inputs.planId);
+  }
+  if (simulator.servicioSelect && inputs.servicioId) {
+    simulator.servicioSelect.value = String(inputs.servicioId);
+  }
+}
+
+function hideSimulatorScopeError() {
+  const { simulator } = state.dom;
+  if (!simulator?.scopeError) return;
+  simulator.scopeError.classList.add('d-none');
+  simulator.scopeError.textContent =
+    simulator.scopeError.dataset.defaultMessage ||
+    'Selecciona el ámbito y los identificadores requeridos.';
+}
+
+function showSimulatorScopeError(message) {
+  const { simulator } = state.dom;
+  if (!simulator?.scopeError) return;
+  if (simulator.scopeError.dataset) {
+    simulator.scopeError.dataset.defaultMessage = simulator.scopeError.dataset.defaultMessage
+      || simulator.scopeError.textContent
+      || 'Selecciona el ámbito y los identificadores requeridos.';
+  }
+  simulator.scopeError.textContent = message || simulator.scopeError.dataset.defaultMessage;
+  simulator.scopeError.classList.remove('d-none');
+}
+
+async function updateSimulatorScopeUi(options = {}) {
+  const { simulator } = state.dom;
+  if (!simulator) return;
+
+  const scopeType = simulator.ambito?.value || 'servicio';
+  const planRequired = scopeType === SCOPE_TYPES.PLAN || scopeType === 'plan'
+    || scopeType === SCOPE_TYPES.PLAN_SERVICIO;
+  const servicioRequired = scopeType === SCOPE_TYPES.SERVICIO || scopeType === 'servicio'
+    || scopeType === SCOPE_TYPES.PLAN_SERVICIO;
+
+  if (simulator.planGroup) {
+    simulator.planGroup.classList.toggle('d-none', !planRequired);
+  }
+  if (simulator.servicioGroup) {
+    simulator.servicioGroup.classList.toggle('d-none', !servicioRequired);
+  }
+
+  const selectedPlanId =
+    options.planId !== undefined
+      ? options.planId
+      : parseOptionalId(simulator.planSelect?.value);
+
+  const selectedServicioId = options.resetService
+    ? null
+    : options.servicioId !== undefined
+    ? options.servicioId
+    : parseOptionalId(simulator.servicioSelect?.value);
+
+  if (simulator.planSelect) {
+    if (planRequired) {
+      simulator.planSelect.setAttribute('required', '');
+      try {
+        await ensurePlanCatalogs();
+        populatePlanOptions(simulator.planSelect, selectedPlanId);
+      } catch (error) {
+        console.error('Error cargando planes para el simulador', error);
+      }
+      if (selectedPlanId) {
+        simulator.planSelect.value = String(selectedPlanId);
+      }
+    } else {
+      simulator.planSelect.removeAttribute('required');
+      simulator.planSelect.value = '';
+    }
+  }
+
+  await populateSimulatorServiceOptions({
+    scopeType,
+    planId: selectedPlanId,
+    selectedServiceId: selectedServicioId,
+    reset: options.resetService,
+  });
+
+  if (!planRequired && !servicioRequired) {
+    hideSimulatorScopeError();
+  }
+}
+
+async function populateSimulatorServiceOptions({
+  scopeType,
+  planId,
+  selectedServiceId,
+  reset,
+}) {
+  const { simulator } = state.dom;
+  if (!simulator?.servicioSelect) return;
+
+  const select = simulator.servicioSelect;
+  const normalizedScope = scopeType || 'servicio';
+  let services = [];
+  let placeholder = 'Selecciona un servicio';
+  let disable = false;
+
+  select.innerHTML = '<option value="">Cargando servicios...</option>';
+  select.disabled = true;
+
+  try {
+    if (normalizedScope === SCOPE_TYPES.PLAN_SERVICIO || normalizedScope === 'plan-servicio') {
+      if (planId) {
+        await ensurePlanCatalogs();
+        await ensureServiceCatalogs();
+        await ensurePlanAssignments(planId);
+        services = getServicesForPlan(planId);
+        placeholder = services.length
+          ? 'Selecciona un servicio'
+          : 'No hay servicios vinculados al plan';
+        disable = services.length === 0;
+      } else {
+        disable = true;
+        placeholder = 'Selecciona un plan para ver servicios';
+      }
+    } else if (normalizedScope === SCOPE_TYPES.SERVICIO || normalizedScope === 'servicio') {
+      await ensureServiceCatalogs();
+      services = [...(state.catalogs.servicios || [])];
+      placeholder = services.length
+        ? 'Selecciona un servicio'
+        : 'No hay servicios disponibles';
+      disable = services.length === 0;
+    } else {
+      disable = true;
+      placeholder = 'Selecciona un ámbito para continuar';
+    }
+  } catch (error) {
+    console.error('Error cargando servicios para el simulador', error);
+    services = [];
+    disable = true;
+    placeholder = 'No se pudieron cargar los servicios';
+  }
+
+  const desiredId = reset ? null : normalizeId(selectedServiceId);
+  const seen = new Set();
+  const unique = [];
+  services.forEach((service) => {
+    const sanitized = sanitizeService(service);
+    if (!sanitized || seen.has(sanitized.id)) return;
+    seen.add(sanitized.id);
+    unique.push({
+      ...sanitized,
+      __assignmentActivo: service?.__assignmentActivo !== undefined
+        ? service.__assignmentActivo
+        : sanitized.activo,
+    });
+  });
+
+  unique.sort((a, b) => {
+    const labelA = (a.nombre || a.codigo || '').toString();
+    const labelB = (b.nombre || b.codigo || '').toString();
+    return labelA.localeCompare(labelB, 'es', { sensitivity: 'base' });
+  });
+
+  select.innerHTML = `<option value="">${placeholder}</option>`;
+  unique.forEach((service) => {
+    const option = document.createElement('option');
+    option.value = service.id;
+    const parts = [];
+    if (service.nombre) parts.push(service.nombre);
+    if (service.codigo && service.codigo !== service.nombre) parts.push(service.codigo);
+    const baseLabel = parts.length ? parts.join(' · ') : `ID ${service.id}`;
+    const suffixes = [];
+    if (service.activo === false) suffixes.push('servicio inactivo');
+    if (service.__assignmentActivo === false) suffixes.push('vinculación inactiva');
+    const suffix = suffixes.length ? ` (${suffixes.join(' · ')})` : '';
+    option.textContent = `${baseLabel}${suffix}`;
+    select.appendChild(option);
+  });
+
+  select.disabled = disable;
+  if (!disable && desiredId) {
+    select.value = String(desiredId);
+  } else {
+    select.value = '';
+  }
+}
+
 function renderSimulator() {
   const { simulator } = state.dom;
-  if (!simulator?.result) return;
+  if (!simulator) return;
 
   if (state.simulator.loading) {
     simulator.loading?.classList.remove('d-none');
@@ -2449,40 +2754,149 @@ function renderSimulator() {
 async function submitSimulator(event) {
   event.preventDefault();
   const form = event.target;
+  const { simulator } = state.dom;
+
   state.simulator.loading = true;
   renderSimulator();
 
-  const payload = {
-    ambito: form.ambito.value,
-    referencia: form.referencia.value,
-    usuario_id: form.usuario_id.value,
-    fecha: form.fecha.value || new Date().toISOString().slice(0, 10),
-    consumo: Number(form.consumo.value) || 0,
-  };
+  const scopeRaw = form.ambito?.value || 'servicio';
+  const scopeNormalized = scopeRaw || 'servicio';
+  const referenciaRaw = form.referencia?.value?.trim() || '';
+  const explicitTarifaId = parseOptionalId(referenciaRaw);
+  const planId = parseOptionalId(form.plan_id?.value);
+  const servicioId = parseOptionalId(form.servicio_id?.value);
+  const fecha = form.fecha?.value || new Date().toISOString().slice(0, 10);
+  const usuarioId = form.usuario_id?.value?.trim() || '';
+  const consumoValue = Number(form.consumo?.value);
+  const consumo = Number.isFinite(consumoValue) && consumoValue >= 0 ? consumoValue : 0;
+  const consumoIaValue = Number(form.consumo_ia?.value);
+  const consumoIa = Number.isFinite(consumoIaValue) && consumoIaValue >= 0 ? consumoIaValue : 0;
+
+  let hasError = false;
+  const requiresPlan =
+    scopeNormalized === 'plan' || scopeNormalized === SCOPE_TYPES.PLAN || scopeNormalized === SCOPE_TYPES.PLAN_SERVICIO;
+  const requiresServicio =
+    scopeNormalized === 'servicio' || scopeNormalized === SCOPE_TYPES.SERVICIO || scopeNormalized === SCOPE_TYPES.PLAN_SERVICIO;
+
+  if (requiresPlan && !planId && !explicitTarifaId) {
+    simulator?.planSelect?.classList.add('is-invalid');
+    showSimulatorScopeError('Selecciona un plan para simular en este ámbito.');
+    hasError = true;
+  } else {
+    simulator?.planSelect?.classList.remove('is-invalid');
+  }
+
+  if (requiresServicio && !servicioId && !explicitTarifaId) {
+    simulator?.servicioSelect?.classList.add('is-invalid');
+    showSimulatorScopeError('Selecciona un servicio para simular en este ámbito.');
+    hasError = true;
+  } else if (!hasError) {
+    simulator?.servicioSelect?.classList.remove('is-invalid');
+  }
+
+  if (!requiresPlan && !requiresServicio) {
+    hideSimulatorScopeError();
+  }
+
+  if (Number(form.consumo?.value) < 0) {
+    form.consumo.classList.add('is-invalid');
+    hasError = true;
+  } else {
+    form.consumo?.classList.remove('is-invalid');
+  }
+
+  if (Number(form.consumo_ia?.value) < 0) {
+    form.consumo_ia.classList.add('is-invalid');
+    hasError = true;
+  } else {
+    form.consumo_ia?.classList.remove('is-invalid');
+  }
+
+  if (hasError) {
+    state.simulator.loading = false;
+    renderSimulator();
+    return;
+  }
+
+  hideSimulatorScopeError();
 
   state.simulator.inputs = {
-    ambito: payload.ambito,
-    referencia: payload.referencia,
-    usuarioId: payload.usuario_id,
-    fecha: payload.fecha,
-    consumo: payload.consumo,
+    ambito: scopeNormalized,
+    referencia: referenciaRaw,
+    usuarioId,
+    fecha,
+    consumo,
+    planId,
+    servicioId,
+    consumoIa,
   };
 
   try {
-    const response = await apiPost('/simulaciones/tarifas', payload);
-    const data = await response.json();
-    state.simulator.result = data;
+    const tarifa = await fetchSimulatorTarifa({
+      tarifaId: explicitTarifaId,
+      scope: scopeNormalized,
+      planId,
+      servicioId,
+      fecha,
+    });
+
+    if (!tarifa) {
+      throw new Error('No se encontró una tarifa vigente para los datos ingresados.');
+    }
+
+    const econ = await ensureQuickEconconfigData();
+    const impuesto = await ensureQuickImpuestoData(fecha);
+    const comisionCliente = await ensureQuickComisionData({
+      rol: 'cliente',
+      planId,
+      servicioId,
+      fecha,
+    });
+    const comisionAbogado = await ensureQuickComisionData({
+      rol: 'abogado',
+      planId,
+      servicioId,
+      fecha,
+    });
+
+    state.simulator.result = buildSimulationBreakdown({
+      tarifa,
+      econ,
+      impuesto,
+      comisionCliente,
+      comisionAbogado,
+      consumo,
+      consumoIa,
+      scope: scopeNormalized,
+      planId,
+      servicioId,
+      fecha,
+      usuarioId,
+    });
   } catch (error) {
     console.error('Error simulando', error);
+    const moneda = state.quick.econconfig?.moneda_defecto || state.monedaFallback;
     state.simulator.result = {
+      error: error.message || 'No se pudo generar la simulación.',
       subtotal: 0,
+      descuento: 0,
       impuestos: 0,
-      comision: 0,
-      total_cliente: 0,
-      neto_abogado: 0,
-      reglas_aplicadas: [],
-      reglas_ignoradas: [],
-      moneda: state.quick.econconfig?.moneda_defecto || state.monedaFallback,
+      tarifaIa: 0,
+      comisionPlataforma: 0,
+      retencion: 0,
+      totalCliente: 0,
+      netoAbogado: 0,
+      moneda,
+      tarifa: null,
+      comisionClienteRegla: null,
+      comisionAbogadoRegla: null,
+      impuesto: null,
+      econconfig: state.quick.econconfig || null,
+      scope: { tipo: scopeNormalized, planId, servicioId },
+      consumo,
+      consumoIa,
+      fecha,
+      usuarioId,
     };
   } finally {
     state.simulator.loading = false;
@@ -2491,6 +2905,7 @@ async function submitSimulator(event) {
 }
 
 function simulatorResultTemplate(result) {
+  const moneda = result?.moneda || state.quick.econconfig?.moneda_defecto || state.monedaFallback;
   if (!result) {
     return `
       <div class="card card-body text-center text-muted">
@@ -2498,42 +2913,409 @@ function simulatorResultTemplate(result) {
       </div>
     `;
   }
+
+  const subtotal = formatCurrency(result.subtotal ?? 0, moneda);
+  const descuentoValue = Number(result.descuento ?? 0);
+  const descuento =
+    descuentoValue > 0
+      ? `- ${formatCurrency(descuentoValue, moneda)}`
+      : formatCurrency(0, moneda);
+  const impuestos = formatCurrency(result.impuestos ?? 0, moneda);
+  const tarifaIa = formatCurrency(result.tarifaIa ?? 0, moneda);
+  const comisionPlataforma = formatCurrency(result.comisionPlataforma ?? 0, moneda);
+  const retencion = formatCurrency(result.retencion ?? 0, moneda);
+  const totalCliente = formatCurrency(result.totalCliente ?? 0, moneda);
+  const netoAbogado = formatCurrency(result.netoAbogado ?? 0, moneda);
+
+  const tarifaInfo = result.tarifa || {};
+  const comisionClienteInfo = result.comisionClienteRegla || {};
+  const comisionAbogadoInfo = result.comisionAbogadoRegla || {};
+  const impuestoInfo = result.impuesto || {};
+  const econInfo = result.econconfig || {};
+  const scopeInfo = result.scope || {};
+
+  const tipoLabel = tarifaInfo.tipo_calculo
+    ? TARIFA_TIPO_CALCULO_LABEL[tarifaInfo.tipo_calculo] || tarifaInfo.tipo_calculo
+    : '—';
+  const incluyeImpuestoLabel = tarifaInfo.incluye_impuesto === false ? 'No' : tarifaInfo.incluye_impuesto === true ? 'Sí' : '—';
+  const scopeLabel = scopeInfo.tipo || '—';
+  const planLabel = scopeInfo.planId != null ? scopeInfo.planId : '—';
+  const servicioLabel = scopeInfo.servicioId != null ? scopeInfo.servicioId : '—';
+
+  const comisionClientePct =
+    comisionClienteInfo?.porcentaje != null
+      ? formatPercentage(comisionClienteInfo.porcentaje)
+      : '—';
+  const comisionAbogadoPct =
+    comisionAbogadoInfo?.porcentaje != null
+      ? formatPercentage(comisionAbogadoInfo.porcentaje)
+      : '—';
+  const impuestoPct =
+    impuestoInfo?.porcentaje != null ? formatPercentage(impuestoInfo.porcentaje) : '—';
+
+  const usuarioDetalle = result.usuarioId ? escapeHtml(result.usuarioId) : '—';
+  const consumoValor = Number.isFinite(result.consumo) ? result.consumo : 0;
+  const consumoIaValor = Number.isFinite(result.consumoIa) ? result.consumoIa : 0;
+
   return `
     <div class="card">
       <div class="card-body">
+        ${
+          result.error
+            ? `<div class="alert alert-danger" role="alert">${escapeHtml(result.error)}</div>`
+            : ''
+        }
         <h5 class="card-title">Desglose del pago</h5>
         <dl class="row mb-0">
           <dt class="col-sm-6">Subtotal</dt>
-          <dd class="col-sm-6 text-end">${formatCurrency(result.subtotal, result.moneda)}</dd>
+          <dd class="col-sm-6 text-end">${subtotal}</dd>
+          <dt class="col-sm-6">Descuento</dt>
+          <dd class="col-sm-6 text-end">${descuento}</dd>
           <dt class="col-sm-6">Impuestos</dt>
-          <dd class="col-sm-6 text-end">${formatCurrency(result.impuestos, result.moneda)}</dd>
-          <dt class="col-sm-6">Comisión</dt>
-          <dd class="col-sm-6 text-end">${formatCurrency(result.comision, result.moneda)}</dd>
+          <dd class="col-sm-6 text-end">${impuestos}</dd>
+          <dt class="col-sm-6">Tarifa IA</dt>
+          <dd class="col-sm-6 text-end">${tarifaIa}</dd>
+          <dt class="col-sm-6">Comisión plataforma</dt>
+          <dd class="col-sm-6 text-end">${comisionPlataforma}</dd>
+          <dt class="col-sm-6">Retención</dt>
+          <dd class="col-sm-6 text-end">${retencion}</dd>
           <dt class="col-sm-6">Total cliente</dt>
-          <dd class="col-sm-6 text-end">${formatCurrency(result.total_cliente, result.moneda)}</dd>
+          <dd class="col-sm-6 text-end">${totalCliente}</dd>
           <dt class="col-sm-6">Neto abogado</dt>
-          <dd class="col-sm-6 text-end">${formatCurrency(result.neto_abogado, result.moneda)}</dd>
+          <dd class="col-sm-6 text-end">${netoAbogado}</dd>
         </dl>
-        <hr>
-        <h6>Reglas aplicadas</h6>
-        <ul class="mb-3">
-          ${
-            result.reglas_aplicadas?.length
-              ? result.reglas_aplicadas.map((rule) => `<li>${rule}</li>`).join('')
-              : '<li class="text-muted">Ninguna</li>'
-          }
-        </ul>
-        <h6>Reglas ignoradas</h6>
-        <ul class="mb-0">
-          ${
-            result.reglas_ignoradas?.length
-              ? result.reglas_ignoradas.map((rule) => `<li>${rule}</li>`).join('')
-              : '<li class="text-muted">Ninguna</li>'
-          }
+      </div>
+      <div class="card-footer bg-light">
+        <h6 class="mb-2">Metadatos</h6>
+        <ul class="list-unstyled mb-0 small">
+          <li>Tarifa ID: ${tarifaInfo.id != null ? escapeHtml(String(tarifaInfo.id)) : '—'} (${escapeHtml(tipoLabel)})</li>
+          <li>Incluye impuesto: ${escapeHtml(incluyeImpuestoLabel)}</li>
+          <li>Comisión cliente ID: ${
+            comisionClienteInfo.id != null ? escapeHtml(String(comisionClienteInfo.id)) : '—'
+          } (${escapeHtml(comisionClientePct)})</li>
+          <li>Comisión abogado ID: ${
+            comisionAbogadoInfo.id != null ? escapeHtml(String(comisionAbogadoInfo.id)) : '—'
+          } (${escapeHtml(comisionAbogadoPct)})</li>
+          <li>Impuesto ID: ${impuestoInfo.id != null ? escapeHtml(String(impuestoInfo.id)) : '—'} (${escapeHtml(
+            impuestoPct
+          )})</li>
+          <li>Config. económica ID: ${econInfo.id != null ? escapeHtml(String(econInfo.id)) : '—'} (${escapeHtml(
+            econInfo.regla_redondeo || '—'
+          )}, decimales: ${escapeHtml(String(econInfo.decimales ?? '—'))})</li>
+          <li>Moneda usada: ${escapeHtml(moneda)}</li>
+          <li>Ámbito simulado: ${escapeHtml(scopeLabel)}</li>
+          <li>Plan ID: ${escapeHtml(String(planLabel))}</li>
+          <li>Servicio ID: ${escapeHtml(String(servicioLabel))}</li>
+          <li>Consumo declarado: ${escapeHtml(String(consumoValor))}</li>
+          <li>Consumo IA declarado: ${escapeHtml(String(consumoIaValor))}</li>
+          <li>Fecha de simulación: ${escapeHtml(result.fecha || '—')}</li>
+          <li>Usuario ID: ${usuarioDetalle}</li>
         </ul>
       </div>
     </div>
   `;
+}
+
+async function fetchSimulatorTarifa({ tarifaId, scope, planId, servicioId, fecha }) {
+  try {
+    if (tarifaId) {
+      const response = await apiGet(`/tarifas/${tarifaId}`);
+      const body = await response.json();
+      const tarifa = body?.tarifa || body;
+      return tarifa?.id ? tarifa : null;
+    }
+
+    const params = { vigencia: 'vigentes' };
+    if (fecha) params.fecha = fecha;
+    if (planId) params.plan_id = planId;
+    if (servicioId) params.servicio_id = servicioId;
+
+    const response = await apiGet('/tarifas', params);
+    const body = await response.json();
+    const items = Array.isArray(body?.items)
+      ? body.items
+      : Array.isArray(body)
+      ? body
+      : [];
+    return selectBestScopedRule(items, { planId, servicioId, fecha });
+  } catch (error) {
+    console.error('Error obteniendo tarifa para el simulador', error);
+    throw error;
+  }
+}
+
+async function ensureQuickEconconfigData() {
+  if (!state.quick.econconfig) {
+    await loadEconconfig();
+  }
+  return state.quick.econconfig || null;
+}
+
+async function ensureQuickImpuestoData(fecha) {
+  if (!(state.quick.impuestoCache instanceof Map)) {
+    state.quick.impuestoCache = new Map();
+  }
+  const key = fecha || '__default__';
+  if (state.quick.impuestoCache.has(key)) {
+    return state.quick.impuestoCache.get(key);
+  }
+
+  if (!Array.isArray(state.quick.impuestos) || !state.quick.impuestos.length) {
+    await loadImpuestos();
+  }
+  const impuesto = selectActiveImpuesto(state.quick.impuestos, fecha);
+  state.quick.impuestoCache.set(key, impuesto || null);
+  return impuesto || null;
+}
+
+async function ensureQuickComisionData({ rol, planId, servicioId, fecha }) {
+  const normalizedRol = rol || 'cliente';
+  if (!(state.quick.comisionesCache instanceof Map)) {
+    state.quick.comisionesCache = new Map();
+  }
+  const key = `${normalizedRol}|${planId || 0}|${servicioId || 0}|${fecha || ''}`;
+  if (state.quick.comisionesCache.has(key)) {
+    return state.quick.comisionesCache.get(key);
+  }
+
+  const params = {
+    rol_aplica: normalizedRol,
+    vigencia: 'vigentes',
+  };
+  if (fecha) params.fecha = fecha;
+  if (planId) params.plan_id = planId;
+  if (servicioId) params.servicio_id = servicioId;
+
+  let items = [];
+  try {
+    const response = await apiGet('/comisiones', params);
+    const body = await response.json();
+    items = Array.isArray(body?.items)
+      ? body.items
+      : Array.isArray(body)
+      ? body
+      : [];
+  } catch (error) {
+    console.error('Error obteniendo comisión aplicable', error);
+    items = [];
+  }
+
+  const selected = selectBestScopedRule(items, { planId, servicioId, fecha });
+  state.quick.comisionesCache.set(key, selected || null);
+  return selected || null;
+}
+
+function selectActiveImpuesto(items, fecha) {
+  if (!Array.isArray(items)) return null;
+  const targetDate = fecha || new Date().toISOString().slice(0, 10);
+  const candidates = items.filter((item) => {
+    if (!item || item.activo === false) return false;
+    return isDateWithinRange(targetDate, item.vigencia_desde, item.vigencia_hasta);
+  });
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => {
+    const dateA = a.actualizado_el || a.actualizadoEl || a.vigencia_desde || '';
+    const dateB = b.actualizado_el || b.actualizadoEl || b.vigencia_desde || '';
+    return String(dateB).localeCompare(String(dateA));
+  });
+  return candidates[0] || null;
+}
+
+function selectBestScopedRule(items, { planId, servicioId, fecha }) {
+  if (!Array.isArray(items)) return null;
+  const targetPlan = normalizeId(planId);
+  const targetServicio = normalizeId(servicioId);
+  const targetDate = fecha || new Date().toISOString().slice(0, 10);
+
+  let best = null;
+  let bestScore = -1;
+
+  items.forEach((item) => {
+    if (!item || item.activo === false) return;
+    const desde = item.vigencia_desde ?? item.vigenciaDesde;
+    const hasta = item.vigencia_hasta ?? item.vigenciaHasta;
+    if (!isDateWithinRange(targetDate, desde, hasta)) return;
+
+    const itemPlan = normalizeId(item.plan_id ?? item.planId ?? item.plan?.id);
+    const itemServicio = normalizeId(item.servicio_id ?? item.servicioId ?? item.servicio?.id);
+
+    let score = -1;
+    if (targetPlan && targetServicio) {
+      if (itemPlan === targetPlan && itemServicio === targetServicio) score = 4;
+      else if (itemPlan === targetPlan && itemServicio == null) score = 3;
+      else if (itemPlan == null && itemServicio === targetServicio) score = 2;
+      else if (itemPlan == null && itemServicio == null) score = 1;
+    } else if (targetPlan) {
+      if (itemPlan === targetPlan && itemServicio == null) score = 3;
+      else if (itemPlan == null && itemServicio == null) score = 1;
+    } else if (targetServicio) {
+      if (itemPlan == null && itemServicio === targetServicio) score = 2;
+      else if (itemPlan == null && itemServicio == null) score = 1;
+    } else {
+      if (itemPlan == null && itemServicio == null) score = 1;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
+    } else if (score >= 0 && score === bestScore) {
+      const currentDate = item.actualizado_el || item.actualizadoEl || item.vigencia_desde || '';
+      const bestDate = best?.actualizado_el || best?.actualizadoEl || best?.vigencia_desde || '';
+      if (String(currentDate).localeCompare(String(bestDate)) > 0) {
+        best = item;
+      }
+    }
+  });
+
+  return best || null;
+}
+
+function isDateWithinRange(date, desde, hasta) {
+  const target = date || new Date().toISOString().slice(0, 10);
+  const start = desde || '0000-00-00';
+  const end = hasta || '9999-12-31';
+  return start <= target && target <= end;
+}
+
+function resolveIaUnitPrice(parametros) {
+  if (!parametros || typeof parametros !== 'object') return 0;
+  const candidates = ['tarifa_ia', 'tarifaIA', 'precio_unitario', 'precioUnitario', 'costo_unitario'];
+  for (const key of candidates) {
+    if (parametros[key] !== undefined && parametros[key] !== null && parametros[key] !== '') {
+      const value = Number(parametros[key]);
+      if (Number.isFinite(value)) return value;
+    }
+  }
+  return 0;
+}
+
+function resolveSimulationDiscount(parametros, subtotalRaw) {
+  if (!parametros || typeof parametros !== 'object') return 0;
+  let discount = 0;
+  const percentageKeys = ['descuento_porcentaje', 'porcentaje_descuento', 'descuentoPercent'];
+  for (const key of percentageKeys) {
+    if (parametros[key] !== undefined && parametros[key] !== null && parametros[key] !== '') {
+      const pct = Number(parametros[key]);
+      if (Number.isFinite(pct)) {
+        discount += subtotalRaw * (pct / 100);
+        break;
+      }
+    }
+  }
+  const amountKeys = ['descuento_monto', 'monto_descuento', 'descuento'];
+  for (const key of amountKeys) {
+    if (parametros[key] !== undefined && parametros[key] !== null && parametros[key] !== '') {
+      const amount = Number(parametros[key]);
+      if (Number.isFinite(amount)) {
+        discount += amount;
+        break;
+      }
+    }
+  }
+  return Math.max(0, discount);
+}
+
+// QA: Validar manualmente con una tarifa fija de 100 PEN, impuesto IGV activo al 18 %
+// y comisión al cliente del 15 %. El simulador debe calcular subtotal S/ 100.00,
+// impuestos S/ 18.00, comisión plataforma S/ 17.70, total cliente S/ 135.70 y neto abogado S/ 100.00.
+function buildSimulationBreakdown({
+  tarifa,
+  econ,
+  impuesto,
+  comisionCliente,
+  comisionAbogado,
+  consumo,
+  consumoIa,
+  scope,
+  planId,
+  servicioId,
+  fecha,
+  usuarioId,
+}) {
+  const regla = econ?.regla_redondeo || econ?.reglaRedondeo || 'dos_decimales';
+  const decimales = Number.isInteger(econ?.decimales) ? econ.decimales : 2;
+  const round = (value) => applyRoundingRule(value, regla, decimales);
+
+  const rawValor = Number(tarifa?.valor) || 0;
+  const impuestoRate = impuesto?.porcentaje != null ? Number(impuesto.porcentaje) / 100 : 0;
+  const comisionClienteRate = comisionCliente?.porcentaje != null ? Number(comisionCliente.porcentaje) / 100 : 0;
+  const comisionAbogadoRate = comisionAbogado?.porcentaje != null ? Number(comisionAbogado.porcentaje) / 100 : 0;
+
+  const incluyeImpuesto = tarifa?.incluye_impuesto === true || tarifa?.incluyeImpuesto === true;
+  const baseNetRaw = incluyeImpuesto && impuestoRate > 0 ? rawValor / (1 + impuestoRate) : rawValor;
+
+  const safeConsumo = Number.isFinite(consumo) && consumo >= 0 ? consumo : 0;
+  const safeConsumoIa = Number.isFinite(consumoIa) && consumoIa >= 0 ? consumoIa : 0;
+  const tarifaIaRaw = resolveIaUnitPrice(tarifa?.parametros) * safeConsumoIa;
+
+  const subtotalRaw = baseNetRaw + tarifaIaRaw;
+  const descuentoRaw = resolveSimulationDiscount(tarifa?.parametros, subtotalRaw);
+  const descuentoAplicadoRaw = Math.min(Math.max(descuentoRaw, 0), subtotalRaw);
+
+  const impuestosRaw = Math.max(0, (subtotalRaw - descuentoAplicadoRaw) * impuestoRate);
+  const comisionClienteRaw = Math.max(
+    0,
+    (subtotalRaw - descuentoAplicadoRaw + impuestosRaw) * comisionClienteRate
+  );
+  const retencionRaw = Math.max(0, (subtotalRaw - descuentoAplicadoRaw) * comisionAbogadoRate);
+
+  const totalClienteRaw = subtotalRaw - descuentoAplicadoRaw + impuestosRaw + comisionClienteRaw;
+  const netoAbogadoRaw = subtotalRaw - descuentoAplicadoRaw - retencionRaw;
+
+  const moneda = econ?.moneda_defecto || econ?.monedaDefecto || state.monedaFallback;
+
+  return {
+    subtotal: round(subtotalRaw),
+    descuento: round(descuentoAplicadoRaw),
+    impuestos: round(impuestosRaw),
+    tarifaIa: round(tarifaIaRaw),
+    comisionPlataforma: round(comisionClienteRaw),
+    retencion: round(retencionRaw),
+    totalCliente: round(totalClienteRaw),
+    netoAbogado: round(netoAbogadoRaw),
+    moneda,
+    tarifa: tarifa
+      ? {
+          id: tarifa.id ?? null,
+          tipo_calculo: tarifa.tipo_calculo || tarifa.tipoCalculo || null,
+          incluye_impuesto: incluyeImpuesto,
+        }
+      : null,
+    comisionClienteRegla: comisionCliente
+      ? {
+          id: comisionCliente.id ?? null,
+          porcentaje: Number(comisionCliente.porcentaje ?? 0),
+          rol_aplica: comisionCliente.rol_aplica || comisionCliente.rolAplica || null,
+        }
+      : null,
+    comisionAbogadoRegla: comisionAbogado
+      ? {
+          id: comisionAbogado.id ?? null,
+          porcentaje: Number(comisionAbogado.porcentaje ?? 0),
+          rol_aplica: comisionAbogado.rol_aplica || comisionAbogado.rolAplica || null,
+        }
+      : null,
+    impuesto: impuesto
+      ? {
+          id: impuesto.id ?? null,
+          codigo: impuesto.codigo || null,
+          porcentaje: Number(impuesto.porcentaje ?? 0),
+        }
+      : null,
+    econconfig: econ
+      ? {
+          id: econ.id ?? null,
+          regla_redondeo: econ.regla_redondeo || econ.reglaRedondeo || 'dos_decimales',
+          decimales: econ.decimales ?? 2,
+          moneda_defecto: econ.moneda_defecto || econ.monedaDefecto || moneda,
+        }
+      : null,
+    scope: { tipo: scope, planId, servicioId },
+    consumo: safeConsumo,
+    consumoIa: safeConsumoIa,
+    fecha,
+    usuarioId,
+  };
 }
 
 
@@ -2559,9 +3341,15 @@ async function loadImpuestos() {
     const response = await apiGet('/impuestos');
     const { items } = await response.json();
     state.quick.impuestos = items || [];
+    if (state.quick.impuestoCache instanceof Map) {
+      state.quick.impuestoCache.clear();
+    }
   } catch (error) {
     console.error('Error cargando impuestos', error);
     state.quick.impuestos = [];
+    if (state.quick.impuestoCache instanceof Map) {
+      state.quick.impuestoCache.clear();
+    }
   }
 }
 
@@ -3318,9 +4106,15 @@ async function loadComisiones() {
     const response = await apiGet('/comisiones');
     const { items } = await response.json();
     state.comisiones.items = items || [];
+    if (state.quick.comisionesCache instanceof Map) {
+      state.quick.comisionesCache.clear();
+    }
   } catch (error) {
     console.error('Error cargando comisiones', error);
     state.comisiones.items = [];
+    if (state.quick.comisionesCache instanceof Map) {
+      state.quick.comisionesCache.clear();
+    }
   }
 }
 
