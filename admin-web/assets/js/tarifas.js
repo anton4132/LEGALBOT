@@ -71,19 +71,27 @@ const state = {
     result: null,
     inputs: {
       ambito: 'servicio',
-      referencia: '',
-      usuarioId: '',
-      fecha: new Date().toISOString().slice(0, 10),
       consumo: 0,
       planId: null,
       servicioId: null,
       consumoIa: 0,
+      tarifaId: null,
+      comisionClienteId: null,
+      comisionAbogadoId: null,
+      moneda: null,
     },
     meta: {
       tipoCalculo: null,
       showConsumo: true,
       consumoRequired: false,
       requiresConsumoIa: false,
+      showMonedaSelect: false,
+    },
+    options: {
+      tarifas: [],
+      comisionesCliente: [],
+      comisionesAbogado: [],
+      monedas: [],
     },
   },
   quick: {
@@ -706,20 +714,6 @@ function setupLayout() {
                     Selecciona el ámbito y los identificadores requeridos.
                   </div>
                 </div>
-                <div class="col-12 col-lg-4">
-                  <label for="simulator-referencia" class="form-label">Referencia (ID)</label>
-                  <input
-                    type="text"
-                    id="simulator-referencia"
-                    name="referencia"
-                    class="form-control"
-                    placeholder="ID directo de la tarifa"
-                  />
-                </div>
-                <div class="col-12 col-lg-4">
-                  <label for="simulator-usuario" class="form-label">Usuario ID</label>
-                  <input type="text" id="simulator-usuario" name="usuario_id" class="form-control" placeholder="Opcional" />
-                </div>
                 <div class="col-12 col-md-6 d-none" data-simulator-plan-group>
                   <label for="simulator-plan" class="form-label">Plan</label>
                   <select id="simulator-plan" name="plan_id" class="form-select">
@@ -732,9 +726,30 @@ function setupLayout() {
                     <option value="">Selecciona un servicio</option>
                   </select>
                 </div>
-                <div class="col-12 col-md-6">
-                  <label for="simulator-fecha" class="form-label">Fecha</label>
-                  <input type="date" id="simulator-fecha" name="fecha" class="form-control" />
+                <div class="col-12 col-lg-4" data-simulator-tarifa-group>
+                  <label for="simulator-tarifa" class="form-label">Tarifa vigente</label>
+                  <select id="simulator-tarifa" name="tarifa_id" class="form-select">
+                    <option value="">Selecciona un ámbito para cargar tarifas</option>
+                  </select>
+                  <div class="invalid-feedback d-block d-none" id="simulator-tarifa-error">
+                    No hay tarifa vigente para esta operación
+                  </div>
+                </div>
+                <div class="col-12 col-lg-4" data-simulator-comision-cliente-group>
+                  <label for="simulator-comision-cliente" class="form-label">Comisión cliente</label>
+                  <select id="simulator-comision-cliente" name="comision_cliente_id" class="form-select">
+                    <option value="">Selecciona un ámbito para cargar comisiones</option>
+                  </select>
+                </div>
+                <div class="col-12 col-lg-4" data-simulator-comision-abogado-group>
+                  <label for="simulator-comision-abogado" class="form-label">Comisión abogado</label>
+                  <select id="simulator-comision-abogado" name="comision_abogado_id" class="form-select">
+                    <option value="">Selecciona un ámbito para cargar comisiones</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-6 d-none" data-simulator-moneda-group>
+                  <label for="simulator-moneda" class="form-label">Moneda</label>
+                  <select id="simulator-moneda" name="moneda" class="form-select"></select>
                 </div>
                 <div class="col-12 col-md-6">
                   <label for="simulator-consumo" class="form-label">Consumo</label>
@@ -1015,16 +1030,22 @@ function cacheDom() {
     result: document.getElementById('simulator-result'),
     loading: document.getElementById('simulator-loading'),
     ambito: document.getElementById('simulator-ambito'),
-    referencia: document.getElementById('simulator-referencia'),
-    usuario: document.getElementById('simulator-usuario'),
-    fecha: document.getElementById('simulator-fecha'),
     consumo: document.getElementById('simulator-consumo'),
     consumoIa: document.getElementById('simulator-consumo-ia'),
     planSelect: document.getElementById('simulator-plan'),
     servicioSelect: document.getElementById('simulator-servicio'),
+    tarifaSelect: document.getElementById('simulator-tarifa'),
+    comisionClienteSelect: document.getElementById('simulator-comision-cliente'),
+    comisionAbogadoSelect: document.getElementById('simulator-comision-abogado'),
+    monedaSelect: document.getElementById('simulator-moneda'),
     planGroup: document.querySelector('[data-simulator-plan-group]'),
     servicioGroup: document.querySelector('[data-simulator-servicio-group]'),
+    tarifaGroup: document.querySelector('[data-simulator-tarifa-group]'),
+    comisionClienteGroup: document.querySelector('[data-simulator-comision-cliente-group]'),
+    comisionAbogadoGroup: document.querySelector('[data-simulator-comision-abogado-group]'),
+    monedaGroup: document.querySelector('[data-simulator-moneda-group]'),
     scopeError: document.getElementById('simulator-scope-error'),
+    tarifaError: document.getElementById('simulator-tarifa-error'),
   };
 
   if (dom.simulator.consumo) {
@@ -1040,10 +1061,6 @@ function cacheDom() {
     );
   }
 
-  if (dom.simulator.fecha) {
-    dom.simulator.fecha.value =
-      state.simulator.inputs.fecha || new Date().toISOString().slice(0, 10);
-  }
   if (dom.simulator.consumo) {
     dom.simulator.consumo.value =
       typeof state.simulator.inputs.consumo === 'number'
@@ -2000,6 +2017,305 @@ async function updateScopeServiceOptions(formKey, selectedId, fallbackService) {
   }
 }
 
+async function refreshSimulatorRuleSelectors(context = {}) {
+  const { simulator } = state.dom;
+  if (!simulator) return;
+
+  const scopeType = context.scopeType || simulator.ambito?.value || 'servicio';
+  const planId =
+    context.planId !== undefined
+      ? context.planId
+      : parseOptionalId(simulator.planSelect?.value);
+  const servicioId =
+    context.servicioId !== undefined
+      ? context.servicioId
+      : parseOptionalId(simulator.servicioSelect?.value);
+  const fechaReferencia = new Date().toISOString().slice(0, 10);
+
+  let tarifas = [];
+  let comisionesCliente = [];
+  let comisionesAbogado = [];
+
+  try {
+    const [tarifaItems, comClienteItems, comAbogadoItems] = await Promise.all([
+      fetchSimulatorTarifasList({ scope: scopeType, planId, servicioId, fecha: fechaReferencia }),
+      fetchSimulatorComisionesList({ rol: 'cliente', planId, servicioId, fecha: fechaReferencia }),
+      fetchSimulatorComisionesList({ rol: 'abogado', planId, servicioId, fecha: fechaReferencia }),
+    ]);
+    tarifas = tarifaItems;
+    comisionesCliente = comClienteItems;
+    comisionesAbogado = comAbogadoItems;
+  } catch (error) {
+    console.error('Error obteniendo reglas económicas para el simulador', error);
+  }
+
+  state.simulator.options.tarifas = tarifas;
+  state.simulator.options.comisionesCliente = comisionesCliente;
+  state.simulator.options.comisionesAbogado = comisionesAbogado;
+
+  const selectedTarifa = selectBestScopedRule(tarifas, {
+    planId,
+    servicioId,
+    fecha: fechaReferencia,
+  });
+  const currentTarifaId = state.simulator.inputs.tarifaId;
+  const availableTarifaIds = new Set(
+    tarifas.map((item) => normalizeId(item.id)).filter((id) => id != null)
+  );
+  const selectedTarifaId = availableTarifaIds.has(normalizeId(currentTarifaId))
+    ? currentTarifaId
+    : selectedTarifa?.id ?? null;
+
+  populateSimulatorTarifaOptions(tarifas, selectedTarifaId);
+  state.simulator.inputs.tarifaId = selectedTarifaId ?? null;
+  handleSimulatorTarifaChange();
+
+  const selectedCliente = selectBestScopedRule(comisionesCliente, {
+    planId,
+    servicioId,
+    fecha: fechaReferencia,
+  });
+  const currentClienteId = state.simulator.inputs.comisionClienteId;
+  const availableClienteIds = new Set(
+    comisionesCliente.map((item) => normalizeId(item.id)).filter((id) => id != null)
+  );
+  const selectedClienteId = availableClienteIds.has(normalizeId(currentClienteId))
+    ? currentClienteId
+    : selectedCliente?.id ?? null;
+  populateSimulatorComisionOptions(
+    simulator.comisionClienteSelect,
+    comisionesCliente,
+    selectedClienteId,
+    'Sin comisión activa para cliente'
+  );
+  state.simulator.inputs.comisionClienteId = selectedClienteId ?? null;
+
+  const selectedAbogado = selectBestScopedRule(comisionesAbogado, {
+    planId,
+    servicioId,
+    fecha: fechaReferencia,
+  });
+  const currentAbogadoId = state.simulator.inputs.comisionAbogadoId;
+  const availableAbogadoIds = new Set(
+    comisionesAbogado.map((item) => normalizeId(item.id)).filter((id) => id != null)
+  );
+  const selectedAbogadoId = availableAbogadoIds.has(normalizeId(currentAbogadoId))
+    ? currentAbogadoId
+    : selectedAbogado?.id ?? null;
+  populateSimulatorComisionOptions(
+    simulator.comisionAbogadoSelect,
+    comisionesAbogado,
+    selectedAbogadoId,
+    'Sin retención definida para abogado'
+  );
+  state.simulator.inputs.comisionAbogadoId = selectedAbogadoId ?? null;
+
+  try {
+    await prepareSimulatorMonedaOptions();
+  } catch (error) {
+    console.error('Error preparando monedas para el simulador', error);
+  }
+  updateSimulatorDynamicFields();
+}
+
+function populateSimulatorTarifaOptions(items, selectedId) {
+  const { simulator } = state.dom;
+  const select = simulator?.tarifaSelect;
+  const error = simulator?.tarifaError;
+  if (!select) return;
+
+  if (!Array.isArray(items)) items = [];
+
+  if (!items.length) {
+    select.innerHTML = '<option value="">No hay tarifas vigentes disponibles</option>';
+    select.value = '';
+    select.setAttribute('disabled', '');
+    select.classList.add('is-invalid');
+    if (error) error.classList.remove('d-none');
+    return;
+  }
+
+  const optionsHtml = items
+    .map((item) => {
+      const id = item?.id != null ? String(item.id) : '';
+      const label = formatTarifaOptionLabel(item);
+      const selected = normalizeId(selectedId) === normalizeId(item?.id) ? ' selected' : '';
+      return `<option value="${escapeHtml(id)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+    .join('');
+
+  select.removeAttribute('disabled');
+  select.classList.remove('is-invalid');
+  select.innerHTML = optionsHtml;
+  if (normalizeId(selectedId) != null) {
+    select.value = String(selectedId);
+  } else {
+    select.selectedIndex = 0;
+  }
+  if (error) error.classList.add('d-none');
+}
+
+function populateSimulatorComisionOptions(select, items, selectedId, emptyLabel) {
+  if (!select) return;
+  const normalized = Array.isArray(items) ? items : [];
+
+  if (!normalized.length) {
+    const placeholder = emptyLabel || 'Sin registros disponibles';
+    select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`;
+    select.value = '';
+    select.setAttribute('disabled', '');
+    return;
+  }
+
+  const optionsHtml = normalized
+    .map((item) => {
+      const id = item?.id != null ? String(item.id) : '';
+      const label = formatComisionOptionLabel(item);
+      const selected = normalizeId(selectedId) === normalizeId(item?.id) ? ' selected' : '';
+      return `<option value="${escapeHtml(id)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+    .join('');
+
+  select.removeAttribute('disabled');
+  select.innerHTML = optionsHtml;
+  if (normalizeId(selectedId) != null) {
+    select.value = String(selectedId);
+  } else {
+    select.selectedIndex = 0;
+  }
+}
+
+function handleSimulatorTarifaChange() {
+  const { simulator } = state.dom;
+  const select = simulator?.tarifaSelect;
+  const tarifaId = parseOptionalId(select?.value);
+  state.simulator.inputs.tarifaId = tarifaId;
+
+  const tarifa =
+    tarifaId != null
+      ? state.simulator.options.tarifas.find((item) => normalizeId(item.id) === normalizeId(tarifaId)) || null
+      : null;
+  const tipoCalculo = (tarifa?.tipo_calculo || tarifa?.tipoCalculo || '').toLowerCase();
+  const iaUnitPrice = resolveIaUnitPrice(tarifa?.parametros);
+
+  const prevMeta = state.simulator.meta || {};
+  state.simulator.meta = {
+    ...prevMeta,
+    tipoCalculo: tipoCalculo || null,
+    showConsumo: true,
+    consumoRequired: tipoCalculo === 'consumo_ia',
+    requiresConsumoIa: tipoCalculo === 'consumo_ia' && iaUnitPrice > 0,
+  };
+
+  updateSimulatorDynamicFields();
+}
+
+function handleSimulatorComisionChange(role) {
+  const { simulator } = state.dom;
+  if (role === 'cliente') {
+    const id = parseOptionalId(simulator?.comisionClienteSelect?.value);
+    state.simulator.inputs.comisionClienteId = id;
+  } else if (role === 'abogado') {
+    const id = parseOptionalId(simulator?.comisionAbogadoSelect?.value);
+    state.simulator.inputs.comisionAbogadoId = id;
+  }
+}
+
+async function prepareSimulatorMonedaOptions() {
+  const econ = await ensureQuickEconconfigData();
+  const { simulator } = state.dom;
+  const select = simulator?.monedaSelect;
+
+  if (!select) {
+    state.simulator.meta.showMonedaSelect = false;
+    return;
+  }
+
+  const monedas = extractAvailableMonedas(econ);
+  state.simulator.options.monedas = monedas;
+
+  if (!monedas.length) {
+    select.innerHTML = '';
+    select.value = '';
+    state.simulator.meta.showMonedaSelect = false;
+    state.simulator.inputs.moneda =
+      econ?.moneda_defecto || econ?.monedaDefecto || state.monedaFallback;
+    return;
+  }
+
+  if (monedas.length === 1) {
+    const unica = monedas[0];
+    select.innerHTML = `<option value="${escapeHtml(unica)}">${escapeHtml(unica)}</option>`;
+    select.value = unica;
+    state.simulator.meta.showMonedaSelect = false;
+    state.simulator.inputs.moneda = unica;
+    return;
+  }
+
+  const current =
+    state.simulator.inputs.moneda
+      || econ?.moneda_defecto
+      || econ?.monedaDefecto
+      || state.monedaFallback;
+  const optionsHtml = monedas
+    .map((code) => {
+      const selected = code === current ? ' selected' : '';
+      return `<option value="${escapeHtml(code)}"${selected}>${escapeHtml(code)}</option>`;
+    })
+    .join('');
+  select.innerHTML = optionsHtml;
+  const resolvedMoneda = monedas.includes(current) ? current : monedas[0];
+  select.value = resolvedMoneda;
+  state.simulator.meta.showMonedaSelect = true;
+  state.simulator.inputs.moneda = resolvedMoneda;
+}
+
+function extractAvailableMonedas(econconfig) {
+  if (!econconfig || typeof econconfig !== 'object') return [];
+  const candidates = [
+    econconfig.monedas_disponibles,
+    econconfig.monedasDisponibles,
+    econconfig.monedas,
+  ].find((value) => Array.isArray(value));
+  if (!Array.isArray(candidates)) return [];
+  return candidates
+    .map((item) => String(item || '').trim().toUpperCase())
+    .filter((item) => item.length === 3)
+    .filter((item, index, arr) => arr.indexOf(item) === index);
+}
+
+function formatTarifaOptionLabel(tarifa) {
+  if (!tarifa || typeof tarifa !== 'object') return 'Tarifa sin identificación';
+  const idPart = tarifa.id != null ? `Tarifa ${tarifa.id}` : 'Tarifa sin ID';
+  const tipoRaw = (tarifa.tipo_calculo || tarifa.tipoCalculo || '').toLowerCase();
+  const tipo = TARIFA_TIPO_CALCULO_LABEL[tipoRaw] || capitalize(tipoRaw || 'Desconocido');
+  const vigenciaDesde = tarifa.vigencia_desde || tarifa.vigenciaDesde || '';
+  const vigenciaHasta = tarifa.vigencia_hasta || tarifa.vigenciaHasta || '';
+  let vigencia = '';
+  if (vigenciaDesde || vigenciaHasta) {
+    const desde = vigenciaDesde ? formatShortDate(vigenciaDesde) : '—';
+    const hasta = vigenciaHasta ? formatShortDate(vigenciaHasta) : '—';
+    vigencia = ` · Vigencia ${desde} - ${hasta}`;
+  }
+  return `${idPart} · ${tipo}${vigencia}`;
+}
+
+function formatComisionOptionLabel(comision) {
+  if (!comision || typeof comision !== 'object') return 'Comisión';
+  const idPart = comision.id != null ? `Regla ${comision.id}` : 'Regla sin ID';
+  const porcentaje = Number(comision.porcentaje);
+  const pctLabel = Number.isFinite(porcentaje) ? `${porcentaje.toFixed(2)}%` : '0%';
+  const vigenciaDesde = comision.vigencia_desde || comision.vigenciaDesde || '';
+  const vigenciaHasta = comision.vigencia_hasta || comision.vigenciaHasta || '';
+  let vigencia = '';
+  if (vigenciaDesde || vigenciaHasta) {
+    const desde = vigenciaDesde ? formatShortDate(vigenciaDesde) : '—';
+    const hasta = vigenciaHasta ? formatShortDate(vigenciaHasta) : '—';
+    vigencia = ` · Vigencia ${desde} - ${hasta}`;
+  }
+  return `${idPart} · ${pctLabel}${vigencia}`;
+}
+
 function getServicesForPlan(planId) {
   const targetId = normalizeId(planId);
   if (!targetId) return [];
@@ -2493,6 +2809,7 @@ function bindSimulatorEvents() {
   });
 
   simulator.ambito?.addEventListener('change', () => {
+    state.simulator.inputs.ambito = simulator.ambito?.value || 'servicio';
     updateSimulatorScopeUi({ resetService: true }).catch((error) => {
       console.error('Error actualizando el ámbito del simulador', error);
     });
@@ -2500,6 +2817,7 @@ function bindSimulatorEvents() {
 
   simulator.planSelect?.addEventListener('change', () => {
     simulator.planSelect.classList.remove('is-invalid');
+    state.simulator.inputs.planId = parseOptionalId(simulator.planSelect.value);
     updateSimulatorScopeUi({ preserveSelections: true }).catch((error) => {
       console.error('Error actualizando el plan del simulador', error);
     });
@@ -2508,14 +2826,35 @@ function bindSimulatorEvents() {
 
   simulator.servicioSelect?.addEventListener('change', () => {
     simulator.servicioSelect.classList.remove('is-invalid');
+    state.simulator.inputs.servicioId = parseOptionalId(simulator.servicioSelect.value);
     hideSimulatorScopeError();
+    refreshSimulatorRuleSelectors().catch((error) => {
+      console.error('Error cargando reglas del simulador', error);
+    });
+  });
+
+  simulator.tarifaSelect?.addEventListener('change', () => {
+    handleSimulatorTarifaChange();
+  });
+
+  simulator.comisionClienteSelect?.addEventListener('change', () => {
+    handleSimulatorComisionChange('cliente');
+  });
+
+  simulator.comisionAbogadoSelect?.addEventListener('change', () => {
+    handleSimulatorComisionChange('abogado');
+  });
+
+  simulator.monedaSelect?.addEventListener('change', () => {
+    const moneda = simulator.monedaSelect.value || null;
+    state.simulator.inputs.moneda = moneda;
   });
 
   simulator.modal?.addEventListener('shown.bs.modal', () => {
     prepareSimulatorForm()
       .then(() => {
         renderSimulator();
-        simulator.referencia?.focus();
+        simulator.ambito?.focus();
       })
       .catch((error) => {
         console.error('Error preparando el simulador', error);
@@ -2528,6 +2867,8 @@ function bindSimulatorEvents() {
     state.simulator.result = null;
     simulator.planSelect?.classList.remove('is-invalid');
     simulator.servicioSelect?.classList.remove('is-invalid');
+    simulator.tarifaSelect?.classList.remove('is-invalid');
+    simulator.tarifaError?.classList.add('d-none');
     hideSimulatorScopeError();
     state.simulator.meta = {
       tipoCalculo: null,
@@ -2549,15 +2890,6 @@ async function prepareSimulatorForm() {
   if (simulator.ambito) {
     const fallback = inputs.ambito || 'servicio';
     simulator.ambito.value = fallback;
-  }
-  if (simulator.referencia) {
-    simulator.referencia.value = inputs.referencia || '';
-  }
-  if (simulator.usuario) {
-    simulator.usuario.value = inputs.usuarioId || '';
-  }
-  if (simulator.fecha) {
-    simulator.fecha.value = inputs.fecha || new Date().toISOString().slice(0, 10);
   }
   if (simulator.consumo) {
     simulator.consumo.value =
@@ -2585,6 +2917,19 @@ async function prepareSimulatorForm() {
   }
   if (simulator.servicioSelect && inputs.servicioId) {
     simulator.servicioSelect.value = String(inputs.servicioId);
+  }
+
+  if (simulator.tarifaSelect && inputs.tarifaId != null) {
+    simulator.tarifaSelect.value = String(inputs.tarifaId);
+  }
+  if (simulator.comisionClienteSelect && inputs.comisionClienteId != null) {
+    simulator.comisionClienteSelect.value = String(inputs.comisionClienteId);
+  }
+  if (simulator.comisionAbogadoSelect && inputs.comisionAbogadoId != null) {
+    simulator.comisionAbogadoSelect.value = String(inputs.comisionAbogadoId);
+  }
+  if (simulator.monedaSelect && inputs.moneda) {
+    simulator.monedaSelect.value = inputs.moneda;
   }
 }
 
@@ -2664,6 +3009,14 @@ async function updateSimulatorScopeUi(options = {}) {
 
   if (!planRequired && !servicioRequired) {
     hideSimulatorScopeError();
+  }
+
+  if (options.skipRules !== true) {
+    await refreshSimulatorRuleSelectors({
+      scopeType,
+      planId: selectedPlanId,
+      servicioId: selectedServicioId,
+    });
   }
 }
 
@@ -2811,6 +3164,18 @@ function updateSimulatorDynamicFields() {
       consumoIaInput.removeAttribute('required');
     }
   }
+
+  if (simulator.monedaGroup) {
+    simulator.monedaGroup.classList.toggle('d-none', meta.showMonedaSelect !== true);
+  }
+
+  if (simulator.monedaSelect) {
+    if (meta.showMonedaSelect) {
+      simulator.monedaSelect.removeAttribute('disabled');
+    } else {
+      simulator.monedaSelect.setAttribute('disabled', '');
+    }
+  }
 }
 
 function renderSimulator() {
@@ -2837,12 +3202,13 @@ async function submitSimulator(event) {
 
   const scopeRaw = form.ambito?.value || 'servicio';
   const scopeNormalized = scopeRaw || 'servicio';
-  const referenciaRaw = form.referencia?.value?.trim() || '';
-  const explicitTarifaId = parseOptionalId(referenciaRaw);
   const planId = parseOptionalId(form.plan_id?.value);
   const servicioId = parseOptionalId(form.servicio_id?.value);
-  const fecha = form.fecha?.value || new Date().toISOString().slice(0, 10);
-  const usuarioId = form.usuario_id?.value?.trim() || '';
+  const tarifaId = parseOptionalId(form.tarifa_id?.value);
+  const comisionClienteId = parseOptionalId(form.comision_cliente_id?.value);
+  const comisionAbogadoId = parseOptionalId(form.comision_abogado_id?.value);
+  const monedaSeleccionada = form.moneda?.value?.trim().toUpperCase() || null;
+  const fechaReferencia = new Date().toISOString().slice(0, 10);
   const consumoValue = Number(form.consumo?.value);
   const consumo = Number.isFinite(consumoValue) && consumoValue >= 0 ? consumoValue : 0;
   const consumoIaValue = Number(form.consumo_ia?.value);
@@ -2854,7 +3220,7 @@ async function submitSimulator(event) {
   const requiresServicio =
     scopeNormalized === 'servicio' || scopeNormalized === SCOPE_TYPES.SERVICIO || scopeNormalized === SCOPE_TYPES.PLAN_SERVICIO;
 
-  if (requiresPlan && !planId && !explicitTarifaId) {
+  if (requiresPlan && !planId) {
     simulator?.planSelect?.classList.add('is-invalid');
     showSimulatorScopeError('Selecciona un plan para simular en este ámbito.');
     hasError = true;
@@ -2862,7 +3228,7 @@ async function submitSimulator(event) {
     simulator?.planSelect?.classList.remove('is-invalid');
   }
 
-  if (requiresServicio && !servicioId && !explicitTarifaId) {
+  if (requiresServicio && !servicioId) {
     simulator?.servicioSelect?.classList.add('is-invalid');
     showSimulatorScopeError('Selecciona un servicio para simular en este ámbito.');
     hasError = true;
@@ -2888,6 +3254,17 @@ async function submitSimulator(event) {
     form.consumo_ia?.classList.remove('is-invalid');
   }
 
+  if (!tarifaId) {
+    simulator?.tarifaSelect?.classList.add('is-invalid');
+    if (simulator?.tarifaError) {
+      simulator.tarifaError.textContent = 'No hay tarifa vigente para esta operación';
+      simulator.tarifaError.classList.remove('d-none');
+    }
+  } else {
+    simulator?.tarifaSelect?.classList.remove('is-invalid');
+    simulator?.tarifaError?.classList.add('d-none');
+  }
+
   if (hasError) {
     state.simulator.loading = false;
     renderSimulator();
@@ -2898,31 +3275,34 @@ async function submitSimulator(event) {
 
   state.simulator.inputs = {
     ambito: scopeNormalized,
-    referencia: referenciaRaw,
-    usuarioId,
-    fecha,
     consumo,
     planId,
     servicioId,
     consumoIa,
+    tarifaId,
+    comisionClienteId,
+    comisionAbogadoId,
+    moneda: monedaSeleccionada || state.simulator.inputs.moneda,
   };
 
   try {
-    const tarifa = await fetchSimulatorTarifa({
-      tarifaId: explicitTarifaId,
-      scope: scopeNormalized,
-      planId,
-      servicioId,
-      fecha,
-    });
+    if (!tarifaId) {
+      throw new Error('No hay tarifa vigente para esta operación');
+    }
+
+    const tarifa =
+      state.simulator.options.tarifas.find((item) => normalizeId(item.id) === normalizeId(tarifaId))
+        || (await fetchSimulatorTarifa({ tarifaId }))
+        || null;
 
     if (!tarifa) {
-      throw new Error('No se encontró una tarifa vigente para los datos ingresados.');
+      throw new Error('No hay tarifa vigente para esta operación');
     }
 
     const tipoCalculo = (tarifa.tipo_calculo || tarifa.tipoCalculo || '').toLowerCase();
     const iaUnitPrice = resolveIaUnitPrice(tarifa.parametros);
     state.simulator.meta = {
+      ...state.simulator.meta,
       tipoCalculo: tipoCalculo || null,
       showConsumo: true,
       consumoRequired: tipoCalculo === 'consumo_ia',
@@ -2930,19 +3310,36 @@ async function submitSimulator(event) {
     };
 
     const econ = await ensureQuickEconconfigData();
-    const impuesto = await ensureQuickImpuestoData(fecha);
-    const comisionCliente = await ensureQuickComisionData({
-      rol: 'cliente',
-      planId,
-      servicioId,
-      fecha,
-    });
-    const comisionAbogado = await ensureQuickComisionData({
-      rol: 'abogado',
-      planId,
-      servicioId,
-      fecha,
-    });
+    const impuesto = await ensureQuickImpuestoData(fechaReferencia);
+    const comisionCliente = comisionClienteId
+      ? state.simulator.options.comisionesCliente.find(
+          (item) => normalizeId(item.id) === normalizeId(comisionClienteId)
+        ) || null
+      : await ensureQuickComisionData({
+          rol: 'cliente',
+          planId,
+          servicioId,
+          fecha: fechaReferencia,
+        });
+    const comisionAbogado = comisionAbogadoId
+      ? state.simulator.options.comisionesAbogado.find(
+          (item) => normalizeId(item.id) === normalizeId(comisionAbogadoId)
+        ) || null
+      : await ensureQuickComisionData({
+          rol: 'abogado',
+          planId,
+          servicioId,
+          fecha: fechaReferencia,
+        });
+
+    const moneda =
+      monedaSeleccionada
+      || state.simulator.inputs.moneda
+      || econ?.moneda_defecto
+      || econ?.monedaDefecto
+      || state.monedaFallback;
+
+    state.simulator.inputs.moneda = moneda;
 
     state.simulator.result = buildSimulationBreakdown({
       tarifa,
@@ -2955,8 +3352,8 @@ async function submitSimulator(event) {
       scope: scopeNormalized,
       planId,
       servicioId,
-      fecha,
-      usuarioId,
+      fecha: fechaReferencia,
+      monedaSeleccionada: moneda,
     });
   } catch (error) {
     console.error('Error simulando', error);
@@ -2968,8 +3365,13 @@ async function submitSimulator(event) {
       requiresConsumoIa: false,
     };
     state.simulator.result = {
-      error: error.message || 'No se pudo generar la simulación.',
+      error: error.message === 'No hay tarifa vigente para esta operación'
+        ? 'No hay tarifa vigente para esta operación'
+        : error.message || 'No se pudo generar la simulación.',
       subtotal: 0,
+      subtotalGravado: 0,
+      base: 0,
+      consumoVariable: 0,
       descuento: 0,
       impuestos: 0,
       tarifaIa: 0,
@@ -2977,7 +3379,8 @@ async function submitSimulator(event) {
       retencion: 0,
       totalCliente: 0,
       netoAbogado: 0,
-      moneda,
+      moneda: monedaSeleccionada || state.simulator.inputs.moneda || moneda,
+      totalNoGravado: 0,
       tarifa: null,
       comisionClienteRegla: null,
       comisionAbogadoRegla: null,
@@ -2986,8 +3389,9 @@ async function submitSimulator(event) {
       scope: { tipo: scopeNormalized, planId, servicioId },
       consumo,
       consumoIa,
-      fecha,
-      usuarioId,
+      fecha: fechaReferencia,
+      lineasNoGravables: [],
+      monedaSeleccionada: monedaSeleccionada || state.simulator.inputs.moneda || moneda,
     };
   } finally {
     state.simulator.loading = false;
@@ -3007,6 +3411,9 @@ function simulatorResultTemplate(result) {
   }
 
   const subtotal = formatCurrency(result.subtotal ?? 0, moneda);
+  const subtotalGravado = formatCurrency(result.subtotalGravado ?? result.subtotal ?? 0, moneda);
+  const base = formatCurrency(result.base ?? 0, moneda);
+  const consumoVariable = formatCurrency(result.consumoVariable ?? 0, moneda);
   const descuentoValue = Number(result.descuento ?? 0);
   const descuento =
     descuentoValue > 0
@@ -3014,6 +3421,7 @@ function simulatorResultTemplate(result) {
       : formatCurrency(0, moneda);
   const impuestos = formatCurrency(result.impuestos ?? 0, moneda);
   const tarifaIa = formatCurrency(result.tarifaIa ?? 0, moneda);
+  const totalNoGravado = formatCurrency(result.totalNoGravado ?? 0, moneda);
   const comisionPlataforma = formatCurrency(result.comisionPlataforma ?? 0, moneda);
   const retencion = formatCurrency(result.retencion ?? 0, moneda);
   const totalCliente = formatCurrency(result.totalCliente ?? 0, moneda);
@@ -3045,9 +3453,28 @@ function simulatorResultTemplate(result) {
   const impuestoPct =
     impuestoInfo?.porcentaje != null ? formatPercentage(impuestoInfo.porcentaje) : '—';
 
-  const usuarioDetalle = result.usuarioId ? escapeHtml(result.usuarioId) : '—';
   const consumoValor = Number.isFinite(result.consumo) ? result.consumo : 0;
   const consumoIaValor = Number.isFinite(result.consumoIa) ? result.consumoIa : 0;
+  const lineasNoGravables = Array.isArray(result.lineasNoGravables)
+    ? result.lineasNoGravables.filter((linea) => linea && Number(linea.monto) > 0)
+    : [];
+
+  const detalleNoGravado = lineasNoGravables.length
+    ? `
+      <div class="mt-3">
+        <h6 class="mb-2">Detalle de líneas no gravables</h6>
+        <ul class="list-unstyled small mb-0">
+          ${lineasNoGravables
+            .map((linea) => {
+              const monto = formatCurrency(linea.monto ?? 0, moneda);
+              const incluye = linea.incluyeImpuesto ? ' (incluye impuesto)' : '';
+              return `<li>${escapeHtml(linea.descripcion || 'Concepto')}: ${monto}${escapeHtml(incluye)}</li>`;
+            })
+            .join('')}
+        </ul>
+      </div>
+    `
+    : '';
 
   return `
     <div class="card">
@@ -3059,14 +3486,25 @@ function simulatorResultTemplate(result) {
         }
         <h5 class="card-title">Desglose del pago</h5>
         <dl class="row mb-0">
+          <dt class="col-sm-6">Base gravable</dt>
+          <dd class="col-sm-6 text-end">${base}</dd>
+          ${
+            Number(result.consumoVariable ?? 0) > 0
+              ? `<dt class="col-sm-6">Consumo adicional</dt><dd class="col-sm-6 text-end">${consumoVariable}</dd>`
+              : ''
+          }
+          <dt class="col-sm-6">Tarifa IA</dt>
+          <dd class="col-sm-6 text-end">${tarifaIa}</dd>
+          <dt class="col-sm-6">Subtotal gravado</dt>
+          <dd class="col-sm-6 text-end">${subtotalGravado}</dd>
+          <dt class="col-sm-6">Líneas no gravables</dt>
+          <dd class="col-sm-6 text-end">${totalNoGravado}</dd>
           <dt class="col-sm-6">Subtotal</dt>
           <dd class="col-sm-6 text-end">${subtotal}</dd>
           <dt class="col-sm-6">Descuento</dt>
           <dd class="col-sm-6 text-end">${descuento}</dd>
           <dt class="col-sm-6">Impuestos</dt>
           <dd class="col-sm-6 text-end">${impuestos}</dd>
-          <dt class="col-sm-6">Tarifa IA</dt>
-          <dd class="col-sm-6 text-end">${tarifaIa}</dd>
           <dt class="col-sm-6">Comisión plataforma</dt>
           <dd class="col-sm-6 text-end">${comisionPlataforma}</dd>
           <dt class="col-sm-6">Retención</dt>
@@ -3076,18 +3514,22 @@ function simulatorResultTemplate(result) {
           <dt class="col-sm-6">Neto abogado</dt>
           <dd class="col-sm-6 text-end">${netoAbogado}</dd>
         </dl>
+        ${detalleNoGravado}
       </div>
       <div class="card-footer bg-light">
         <h6 class="mb-2">Metadatos</h6>
         <ul class="list-unstyled mb-0 small">
           <li>Tarifa ID: ${tarifaInfo.id != null ? escapeHtml(String(tarifaInfo.id)) : '—'} (${escapeHtml(tipoLabel)})</li>
+          <li>Descripción tarifa: ${escapeHtml(tarifaInfo.descripcion || '—')}</li>
           <li>Incluye impuesto: ${escapeHtml(incluyeImpuestoLabel)}</li>
           <li>Comisión cliente ID: ${
             comisionClienteInfo.id != null ? escapeHtml(String(comisionClienteInfo.id)) : '—'
           } (${escapeHtml(comisionClientePct)})</li>
+          <li>Descripción comisión cliente: ${escapeHtml(comisionClienteInfo.descripcion || '—')}</li>
           <li>Comisión abogado ID: ${
             comisionAbogadoInfo.id != null ? escapeHtml(String(comisionAbogadoInfo.id)) : '—'
           } (${escapeHtml(comisionAbogadoPct)})</li>
+          <li>Descripción comisión abogado: ${escapeHtml(comisionAbogadoInfo.descripcion || '—')}</li>
           <li>Impuesto ID: ${impuestoInfo.id != null ? escapeHtml(String(impuestoInfo.id)) : '—'} (${escapeHtml(
             impuestoPct
           )})</li>
@@ -3095,13 +3537,12 @@ function simulatorResultTemplate(result) {
             econInfo.regla_redondeo || '—'
           )}, decimales: ${escapeHtml(String(econInfo.decimales ?? '—'))})</li>
           <li>Moneda usada: ${escapeHtml(moneda)}</li>
+          <li>Moneda seleccionada: ${escapeHtml(result.monedaSeleccionada || moneda)}</li>
           <li>Ámbito simulado: ${escapeHtml(scopeLabel)}</li>
           <li>Plan ID: ${escapeHtml(String(planLabel))}</li>
           <li>Servicio ID: ${escapeHtml(String(servicioLabel))}</li>
           <li>Consumo declarado: ${escapeHtml(String(consumoValor))}</li>
           <li>Consumo IA declarado: ${escapeHtml(String(consumoIaValor))}</li>
-          <li>Fecha de simulación: ${escapeHtml(result.fecha || '—')}</li>
-          <li>Usuario ID: ${usuarioDetalle}</li>
         </ul>
       </div>
     </div>
@@ -3132,18 +3573,7 @@ async function fetchSimulatorTarifa({ tarifaId, scope, planId, servicioId, fecha
       return resolved;
     }
 
-    const params = { vigencia: 'vigentes' };
-    if (fecha) params.fecha = fecha;
-    if (planId) params.plan_id = planId;
-    if (servicioId) params.servicio_id = servicioId;
-
-    const response = await apiGet('/tarifas', params);
-    const body = await response.json();
-    const items = Array.isArray(body?.items)
-      ? body.items
-      : Array.isArray(body)
-      ? body
-      : [];
+    const items = await fetchSimulatorTarifasList({ scope, planId, servicioId, fecha });
     const selected = selectBestScopedRule(items, { planId, servicioId, fecha });
     state.quick.tarifasCache.set(cacheKey, selected ? cloneEntity(selected) : null);
     return selected;
@@ -3187,27 +3617,12 @@ async function ensureQuickComisionData({ rol, planId, servicioId, fecha }) {
     return state.quick.comisionesCache.get(key);
   }
 
-  const params = {
-    rol_aplica: normalizedRol,
-    vigencia: 'vigentes',
-  };
-  if (fecha) params.fecha = fecha;
-  if (planId) params.plan_id = planId;
-  if (servicioId) params.servicio_id = servicioId;
-
-  let items = [];
-  try {
-    const response = await apiGet('/comisiones', params);
-    const body = await response.json();
-    items = Array.isArray(body?.items)
-      ? body.items
-      : Array.isArray(body)
-      ? body
-      : [];
-  } catch (error) {
-    console.error('Error obteniendo comisión aplicable', error);
-    items = [];
-  }
+  const items = await fetchSimulatorComisionesList({
+    rol: normalizedRol,
+    planId,
+    servicioId,
+    fecha,
+  });
 
   const selected = selectBestScopedRule(items, { planId, servicioId, fecha });
   state.quick.comisionesCache.set(key, selected || null);
@@ -3228,6 +3643,80 @@ function selectActiveImpuesto(items, fecha) {
     return String(dateB).localeCompare(String(dateA));
   });
   return candidates[0] || null;
+}
+
+async function fetchSimulatorTarifasList({ scope, planId, servicioId, fecha }) {
+  const normalizedScope = scope || 'servicio';
+  if (!(state.quick.tarifasCache instanceof Map)) {
+    state.quick.tarifasCache = new Map();
+  }
+  const cacheKey = `list:${normalizedScope}|plan:${planId || 0}|servicio:${servicioId || 0}|fecha:${
+    fecha || ''
+  }`;
+  if (state.quick.tarifasCache.has(cacheKey)) {
+    const cached = state.quick.tarifasCache.get(cacheKey);
+    return Array.isArray(cached) ? cached.map((item) => cloneEntity(item)) : [];
+  }
+
+  const params = { vigencia: 'vigentes' };
+  if (fecha) params.fecha = fecha;
+  if (planId) params.plan_id = planId;
+  if (servicioId) params.servicio_id = servicioId;
+  if (normalizedScope && normalizedScope !== 'general' && normalizedScope !== 'servicio') {
+    params.ambito = normalizedScope;
+  }
+
+  try {
+    const response = await apiGet('/tarifas', params);
+    const body = await response.json();
+    const items = Array.isArray(body?.items)
+      ? body.items
+      : Array.isArray(body)
+      ? body
+      : [];
+    state.quick.tarifasCache.set(cacheKey, items.map((item) => cloneEntity(item)));
+    return items.map((item) => cloneEntity(item));
+  } catch (error) {
+    console.error('Error obteniendo listado de tarifas para el simulador', error);
+    state.quick.tarifasCache.set(cacheKey, []);
+    return [];
+  }
+}
+
+async function fetchSimulatorComisionesList({ rol, planId, servicioId, fecha }) {
+  const normalizedRol = rol || 'cliente';
+  if (!(state.quick.comisionesCache instanceof Map)) {
+    state.quick.comisionesCache = new Map();
+  }
+  const cacheKey = `list:${normalizedRol}|${planId || 0}|${servicioId || 0}|${fecha || ''}`;
+  if (state.quick.comisionesCache.has(cacheKey)) {
+    const cached = state.quick.comisionesCache.get(cacheKey);
+    return Array.isArray(cached) ? cached.map((item) => cloneEntity(item)) : [];
+  }
+
+  const params = {
+    rol_aplica: normalizedRol,
+    vigencia: 'vigentes',
+  };
+  if (fecha) params.fecha = fecha;
+  if (planId) params.plan_id = planId;
+  if (servicioId) params.servicio_id = servicioId;
+
+  try {
+    const response = await apiGet('/comisiones', params);
+    const body = await response.json();
+    const items = Array.isArray(body?.items)
+      ? body.items
+      : Array.isArray(body)
+      ? body
+      : [];
+    state.quick.comisionesCache.set(cacheKey, items.map((item) => cloneEntity(item)));
+    return items.map((item) => cloneEntity(item));
+  } catch (error) {
+    console.error('Error obteniendo listado de comisiones para el simulador', error);
+    state.quick.comisionesCache.set(cacheKey, []);
+    return [];
+  }
 }
 
 function selectBestScopedRule(items, { planId, servicioId, fecha }) {
@@ -3391,6 +3880,46 @@ function resolveSimulationDiscount(parametros, subtotalRaw) {
   return Math.max(0, discount);
 }
 
+function extractNonTaxableLines(parametros) {
+  if (!parametros || typeof parametros !== 'object') return [];
+  const candidates = [
+    parametros.lineas_no_gravables,
+    parametros.lineasNoGravables,
+    parametros.lineas_exentas,
+    parametros.lineasExentas,
+  ].find((value) => Array.isArray(value));
+
+  const fallbackAmount = Number(parametros.no_gravado ?? parametros.noGravado);
+  const fallbackLines = Number.isFinite(fallbackAmount) && fallbackAmount > 0
+    ? [{ descripcion: 'Concepto no gravable', monto: fallbackAmount, incluyeImpuesto: false }]
+    : [];
+
+  const source = Array.isArray(candidates) ? candidates : fallbackLines;
+
+  return source
+    .map((item) => {
+      if (item == null) return null;
+      if (typeof item === 'number') {
+        return {
+          descripcion: 'Concepto no gravable',
+          monto: item,
+          incluyeImpuesto: false,
+        };
+      }
+      if (typeof item === 'object') {
+        const monto = Number(item.monto ?? item.valor ?? item.importe);
+        if (!Number.isFinite(monto)) return null;
+        return {
+          descripcion: item.descripcion || item.nombre || 'Concepto no gravable',
+          monto,
+          incluyeImpuesto: item.incluye_impuesto === true || item.incluyeImpuesto === true,
+        };
+      }
+      return null;
+    })
+    .filter((linea) => linea && Number.isFinite(linea.monto) && linea.monto > 0);
+}
+
 // QA: Validar manualmente con una tarifa fija de 100 PEN, impuesto IGV activo al 18 %
 // y comisión al cliente del 15 %. El simulador debe calcular subtotal S/ 100.00,
 // impuestos S/ 18.00, comisión plataforma S/ 17.70, total cliente S/ 135.70 y neto abogado S/ 100.00.
@@ -3406,7 +3935,7 @@ function buildSimulationBreakdown({
   planId,
   servicioId,
   fecha,
-  usuarioId,
+  monedaSeleccionada,
 }) {
   const regla = econ?.regla_redondeo || econ?.reglaRedondeo || 'dos_decimales';
   const decimales = Number.isInteger(econ?.decimales) ? econ.decimales : 2;
@@ -3436,30 +3965,57 @@ function buildSimulationBreakdown({
   const iaUnitPrice = resolveIaUnitPrice(tarifa?.parametros);
   const tarifaIaGross = Math.max(0, safeConsumoIa * iaUnitPrice);
 
-  const toNet = (gross) => (incluyeImpuesto && impuestoRate > 0 ? gross / (1 + impuestoRate) : gross);
+  const toNet = (gross, subjectIncludesTax = incluyeImpuesto) =>
+    subjectIncludesTax && impuestoRate > 0 ? gross / (1 + impuestoRate) : gross;
 
   const baseNetRaw = toNet(baseGross);
+  const consumoVariableNetRaw = tipoCalculo === 'consumo_ia' ? toNet(consumoGross) : 0;
   const tarifaIaRaw = toNet(tarifaIaGross);
 
-  const subtotalRaw = baseNetRaw + tarifaIaRaw;
-  const descuentoRaw = resolveSimulationDiscount(tarifa?.parametros, subtotalRaw);
-  const descuentoAplicadoRaw = Math.min(Math.max(descuentoRaw, 0), subtotalRaw);
+  const lineasNoGravablesRaw = extractNonTaxableLines(tarifa?.parametros).map((linea) => {
+    const monto = Number(linea.monto) || 0;
+    const incluye = linea.incluyeImpuesto === true;
+    const neto = toNet(monto, incluye);
+    return {
+      descripcion: linea.descripcion || 'Línea no gravable',
+      montoBruto: monto,
+      incluyeImpuesto: incluye,
+      monto: round(neto),
+    };
+  });
+  const totalNoGravadoRaw = lineasNoGravablesRaw.reduce((acc, linea) => acc + (linea.monto || 0), 0);
 
-  const taxableBase = subtotalRaw - descuentoAplicadoRaw;
-  const impuestosRaw = Math.max(0, taxableBase * impuestoRate);
-  const comisionClienteRaw = Math.max(0, (taxableBase + impuestosRaw) * comisionClienteRate);
-  const retencionRaw = Math.max(0, taxableBase * comisionAbogadoRate);
+  const subtotalGravadoRaw = baseNetRaw + tarifaIaRaw;
+  const subtotalAntesDescuentoRaw = subtotalGravadoRaw;
+  const descuentoRaw = resolveSimulationDiscount(tarifa?.parametros, subtotalAntesDescuentoRaw);
+  const descuentoAplicadoRaw = Math.min(Math.max(descuentoRaw, 0), subtotalAntesDescuentoRaw);
 
-  const totalClienteRaw = taxableBase + impuestosRaw + comisionClienteRaw;
-  const netoAbogadoRaw = taxableBase - retencionRaw;
+  const basePostDescuentoRaw = Math.max(0, subtotalAntesDescuentoRaw - descuentoAplicadoRaw);
+  const impuestosRaw = Math.max(0, basePostDescuentoRaw * impuestoRate);
+  const comisionClienteRaw = Math.max(0, (basePostDescuentoRaw + impuestosRaw) * comisionClienteRate);
+  const retencionRaw = Math.max(0, basePostDescuentoRaw * comisionAbogadoRate);
 
-  const moneda = econ?.moneda_defecto || econ?.monedaDefecto || state.monedaFallback;
+  const subtotalTotalRaw = subtotalAntesDescuentoRaw + totalNoGravadoRaw;
+  const totalClienteRaw = basePostDescuentoRaw + impuestosRaw + comisionClienteRaw + totalNoGravadoRaw;
+  const netoAbogadoRaw = basePostDescuentoRaw - retencionRaw + totalNoGravadoRaw;
+
+  const moneda =
+    monedaSeleccionada
+    || econ?.moneda_defecto
+    || econ?.monedaDefecto
+    || state.simulator.inputs.moneda
+    || state.monedaFallback;
 
   return {
-    subtotal: round(subtotalRaw),
+    subtotal: round(subtotalTotalRaw),
+    subtotalGravado: round(subtotalAntesDescuentoRaw),
+    base: round(baseNetRaw),
+    tarifaIa: round(tarifaIaRaw),
+    consumoVariable: round(consumoVariableNetRaw),
+    totalNoGravado: round(totalNoGravadoRaw),
+    lineasNoGravables: lineasNoGravablesRaw,
     descuento: round(descuentoAplicadoRaw),
     impuestos: round(impuestosRaw),
-    tarifaIa: round(tarifaIaRaw),
     comisionPlataforma: round(comisionClienteRaw),
     retencion: round(retencionRaw),
     totalCliente: round(totalClienteRaw),
@@ -3470,6 +4026,7 @@ function buildSimulationBreakdown({
           id: tarifa.id ?? null,
           tipo_calculo: tarifa.tipo_calculo || tarifa.tipoCalculo || null,
           incluye_impuesto: incluyeImpuesto,
+          descripcion: tarifa.descripcion || null,
         }
       : null,
     comisionClienteRegla: comisionCliente
@@ -3477,6 +4034,7 @@ function buildSimulationBreakdown({
           id: comisionCliente.id ?? null,
           porcentaje: Number(comisionCliente.porcentaje ?? 0),
           rol_aplica: comisionCliente.rol_aplica || comisionCliente.rolAplica || null,
+          descripcion: comisionCliente.descripcion || null,
         }
       : null,
     comisionAbogadoRegla: comisionAbogado
@@ -3484,6 +4042,7 @@ function buildSimulationBreakdown({
           id: comisionAbogado.id ?? null,
           porcentaje: Number(comisionAbogado.porcentaje ?? 0),
           rol_aplica: comisionAbogado.rol_aplica || comisionAbogado.rolAplica || null,
+          descripcion: comisionAbogado.descripcion || null,
         }
       : null,
     impuesto: impuesto
@@ -3505,7 +4064,7 @@ function buildSimulationBreakdown({
     consumo: safeConsumo,
     consumoIa: safeConsumoIa,
     fecha,
-    usuarioId,
+    monedaSeleccionada: moneda,
   };
 }
 
