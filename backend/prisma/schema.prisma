@@ -1,23 +1,11 @@
-/**
- * generator erd {
- * provider = "prisma-erd-generator"
- * }
- */
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // pooled (PgBouncer)
+  url      = env("DATABASE_URL")
 }
-
-/**
- * ================================
- * AUDITORÍA Y BITÁCORAS
- * ================================
- */
 
 model auditoria {
   id            Int      @id @default(autoincrement())
@@ -51,31 +39,16 @@ model bitacorabusquedavh {
   @@index([usuario_id, buscada_el])
 }
 
-/**
- * ================================
- * CITAS / CONSULTAS / DISPONIBILIDAD
- * ================================
- */
-
-enum est_cita {
-  pendiente
-  confirmada
-  cancelada
-  completada
-  no_show
-}
-
 model cita {
-  id             Int      @id @default(autoincrement())
-  cliente_id     Int
-  abogado_id     Int
-  consulta_id    Int
-  pago_id        Int?
-  inicia_el      DateTime @db.Timestamptz(6)
-  termina_el     DateTime @db.Timestamptz(6)
-  estado         est_cita @default(pendiente)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
+  id                               Int      @id @default(autoincrement())
+  cliente_id                       Int
+  abogado_id                       Int
+  consulta_id                      Int
+  pago_id                          Int?
+  inicia_el                        DateTime @db.Timestamptz(6)
+  termina_el                       DateTime @db.Timestamptz(6)
+  estado                           est_cita @default(pendiente)
+  actualizado_el                   DateTime @updatedAt @db.Timestamptz(6)
   usuario_cita_abogado_idTousuario usuario  @relation("cita_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuario_cita_cliente_idTousuario usuario  @relation("cita_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   consulta                         consulta @relation(fields: [consulta_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -94,13 +67,12 @@ model cita {
 
 model resena {
   id             Int      @id @default(autoincrement())
-  cita_id        Int      @unique // 1 reseña por cita
+  cita_id        Int      @unique
   rating         Int
   comentario     String?
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-  cita cita @relation(fields: [cita_id], references: [id], onDelete: Cascade)
+  cita           cita     @relation(fields: [cita_id], references: [id], onDelete: Cascade)
 
   @@index([creado_el])
 }
@@ -118,43 +90,26 @@ model clienteabogado {
   @@index([creado_el])
 }
 
-enum est_consulta {
-  pendiente
-  respondida
-  cerrada
-}
-
-enum resp_consulta {
-  abogado
-  IA
-}
-
-enum tipo_consulta {
-  texto
-  audio
-}
-
 model consulta {
-  id               Int            @id @default(autoincrement())
-  cliente_id       Int
-  abogado_id       Int
-  pregunta         String
-  especialidad_id  Int?
-  tipo             tipo_consulta  @default(texto)
-  audio_url        String?
-  opcion_respuesta resp_consulta?
-  documento_id     Int?
-  pago_id          Int?
-  estado           est_consulta   @default(pendiente)
-  creada_el        DateTime       @default(now()) @db.Timestamptz(6)
-  actualizado_el   DateTime       @updatedAt @db.Timestamptz(6)
-
+  id                                   Int            @id @default(autoincrement())
+  cliente_id                           Int
+  abogado_id                           Int
+  pregunta                             String
+  especialidad_id                      Int?
+  tipo                                 tipo_consulta  @default(texto)
+  audio_url                            String?
+  opcion_respuesta                     resp_consulta?
+  documento_id                         Int?
+  pago_id                              Int?
+  estado                               est_consulta   @default(pendiente)
+  creada_el                            DateTime       @default(now()) @db.Timestamptz(6)
+  actualizado_el                       DateTime       @updatedAt @db.Timestamptz(6)
   cita                                 cita[]
-  documento                            documento?    @relation(fields: [documento_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  pago                                 pago?         @relation(fields: [pago_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  especialidad                         especialidad? @relation(fields: [especialidad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuario_consulta_abogado_idTousuario usuario       @relation("consulta_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuario_consulta_cliente_idTousuario usuario       @relation("consulta_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_consulta_abogado_idTousuario usuario        @relation("consulta_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario_consulta_cliente_idTousuario usuario        @relation("consulta_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  documento                            documento?     @relation(fields: [documento_id], references: [id], onUpdate: NoAction)
+  especialidad                         especialidad?  @relation(fields: [especialidad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pago                                 pago?          @relation(fields: [pago_id], references: [id], onUpdate: NoAction)
 
   @@index([cliente_id])
   @@index([abogado_id])
@@ -165,43 +120,29 @@ model consulta {
   @@index([tipo])
 }
 
-/**
- * ================================
- * DOCUMENTOS / ARCHIVOS
- * ================================
- */
-
-enum est_doc_tramite {
-  pendiente
-  enviado
-  recibido
-  observado
-}
-
 model documento {
-  id             Int             @id @default(autoincrement())
-  propietario_id Int
-  tipo_documento String?
-  ruta_archivo   String
-  generado_ai    Boolean         @default(false)
-  firmado        Boolean         @default(false)
-  firma_url      String?
-  abogado_firma  Int?
-  formato_id     Int?
-  institucion    String?
-  enviado        Boolean         @default(false)
-  estado_tramite est_doc_tramite @default(pendiente)
-  enviado_el     DateTime?       @db.Timestamptz(6)
-  pago_id        Int?
-  tamano         Int?
-  creado_el      DateTime        @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime        @updatedAt @db.Timestamptz(6)
-
-  formato                                   formato?   @relation(fields: [formato_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  pago                                      pago?      @relation(fields: [pago_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  usuario_documento_abogado_firmaTousuario  usuario?   @relation("documento_abogado_firmaTousuario", fields: [abogado_firma], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuario_documento_propietario_idTousuario usuario    @relation("documento_propietario_idTousuario", fields: [propietario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                                        Int             @id @default(autoincrement())
+  propietario_id                            Int
+  tipo_documento                            String?
+  ruta_archivo                              String
+  generado_ai                               Boolean         @default(false)
+  firmado                                   Boolean         @default(false)
+  firma_url                                 String?
+  abogado_firma                             Int?
+  formato_id                                Int?
+  institucion                               String?
+  enviado                                   Boolean         @default(false)
+  estado_tramite                            est_doc_tramite @default(pendiente)
+  enviado_el                                DateTime?       @db.Timestamptz(6)
+  pago_id                                   Int?
+  tamano                                    Int?
+  creado_el                                 DateTime        @default(now()) @db.Timestamptz(6)
+  actualizado_el                            DateTime        @updatedAt @db.Timestamptz(6)
   consulta                                  consulta[]
+  usuario_documento_abogado_firmaTousuario  usuario?        @relation("documento_abogado_firmaTousuario", fields: [abogado_firma], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  formato                                   formato?        @relation(fields: [formato_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pago                                      pago?           @relation(fields: [pago_id], references: [id], onUpdate: NoAction)
+  usuario_documento_propietario_idTousuario usuario         @relation("documento_propietario_idTousuario", fields: [propietario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([propietario_id])
   @@index([pago_id])
@@ -211,28 +152,21 @@ model documento {
 }
 
 model archivo {
-  id         Int      @id @default(autoincrement())
-  usuario_id Int
-  ruta       String
-  tamano     Int
-  tipo       String?
-  creado_el  DateTime @default(now()) @db.Timestamptz(6)
-
+  id                  Int                   @id @default(autoincrement())
+  usuario_id          Int
+  ruta                String
+  tamano              Int
+  tipo                String?
+  creado_el           DateTime              @default(now()) @db.Timestamptz(6)
   usuario             usuario               @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  verificacionabogado verificacionabogado[]
   colegiaturaabogado  colegiaturaabogado[]
   pago_voucher        pago?                 @relation("PagoVoucher")
   perfilabogado       perfilabogado[]
+  verificacionabogado verificacionabogado[]
 
   @@index([usuario_id])
   @@index([creado_el])
 }
-
-/**
- * ================================
- * PAGOS / ECONOMÍA / TARIFAS
- * ================================
- */
 
 model estadopago {
   id     Int    @id @default(autoincrement()) @db.SmallInt
@@ -242,32 +176,29 @@ model estadopago {
 }
 
 model pago {
-  id                 Int     @id @default(autoincrement())
+  id                 Int           @id @default(autoincrement())
   usuario_id         Int
-  monto              Decimal @db.Decimal
-  moneda             String  @db.Char(3)
+  monto              Decimal       @db.Decimal
+  moneda             String        @db.Char(3)
   concepto           String?
   proveedor_txn      String?
-  referencia         String? @unique
-  voucher_archivo_id Int?    @unique
-  estado_id          Int     @db.SmallInt
+  referencia         String?       @unique
+  voucher_archivo_id Int?          @unique
+  estado_id          Int           @db.SmallInt
   metodo_pago        String?
   servicio_id        Int?
   plan_id            Int?
-
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-  cita        cita[]
-  documentos  documento[]
-  consultas   consulta[]
-  pagodetalle pagodetalle[]
-  estadopago  estadopago    @relation(fields: [estado_id], references: [id])
-  usuario     usuario       @relation(fields: [usuario_id], references: [id])
-  voucher     archivo?      @relation("PagoVoucher", fields: [voucher_archivo_id], references: [id])
-
-  servicio servicio? @relation(fields: [servicio_id], references: [id])
-  plan     plan?     @relation(fields: [plan_id], references: [id])
+  creado_el          DateTime      @default(now()) @db.Timestamptz(6)
+  actualizado_el     DateTime      @updatedAt @db.Timestamptz(6)
+  cita               cita[]
+  consultas          consulta[]
+  documentos         documento[]
+  estadopago         estadopago    @relation(fields: [estado_id], references: [id])
+  plan               plan?         @relation(fields: [plan_id], references: [id])
+  servicio           servicio?     @relation(fields: [servicio_id], references: [id])
+  usuario            usuario       @relation(fields: [usuario_id], references: [id])
+  voucher            archivo?      @relation("PagoVoucher", fields: [voucher_archivo_id], references: [id])
+  pagodetalle        pagodetalle[]
 
   @@index([estado_id])
   @@index([usuario_id])
@@ -284,57 +215,26 @@ model pagodetalle {
   monto   Decimal           @db.Decimal
   pago    pago              @relation(fields: [pago_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([pago_id, tipo]) // asegura 1 línea por tipo en cada pago
+  @@unique([pago_id, tipo])
   @@index([pago_id])
 }
 
-enum tipo_detalle_pago {
-  subtotal
-  descuento
-  impuestos
-  comision_plataforma
-  tarifa_ia
-  retencion
-  total_cliente
-  neto_abogado
-}
-
-enum tipo_calculo_tc {
-  fijo
-  consumo_ia
-}
-
-enum rol_aplica_tc {
-  cliente
-  abogado
-}
-
-enum tipo_regla_tc {
-  precio
-  comision
-}
-
 model tarifa {
-  id Int @id @default(autoincrement())
-
-  descripcion      String? //front  - form 
-  valor            Decimal          @db.Decimal //front  - form
-  incluye_impuesto Boolean          @default(false) //front  - form 
-  tipo_calculo     tipo_calculo_tc? //front  - form 
-  parametros       Json? //front  - form->solo si tipo de consumo es ia 
-  activo           Boolean          @default(true) //front  - form 
-  vigencia_desde   DateTime?        @db.Timestamptz(6) //front  - form 
-  vigencia_hasta   DateTime?        @db.Timestamptz(6) //front  - form 
-
-  servicio_id Int?
-  plan_id     Int?
-
-  servicio servicio? @relation("ServicioTarifa", fields: [servicio_id], references: [id], onDelete: SetNull)
-  plan     plan?     @relation("PlanTarifa", fields: [plan_id], references: [id], onDelete: SetNull)
-
-  // Auditoría para UI (Última actualización)
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
+  id               Int              @id @default(autoincrement())
+  descripcion      String?
+  valor            Decimal          @db.Decimal
+  incluye_impuesto Boolean          @default(false)
+  tipo_calculo     tipo_calculo_tc?
+  parametros       Json?
+  activo           Boolean          @default(true)
+  vigencia_desde   DateTime?        @db.Timestamptz(6)
+  vigencia_hasta   DateTime?        @db.Timestamptz(6)
+  servicio_id      Int?
+  plan_id          Int?
+  creado_el        DateTime         @default(now()) @db.Timestamptz(6)
+  actualizado_el   DateTime         @updatedAt @db.Timestamptz(6)
+  plan             plan?            @relation("PlanTarifa", fields: [plan_id], references: [id])
+  servicio         servicio?        @relation("ServicioTarifa", fields: [servicio_id], references: [id])
 
   @@index([servicio_id])
   @@index([plan_id])
@@ -343,22 +243,18 @@ model tarifa {
 
 model comision {
   id             Int           @id @default(autoincrement())
-  descripcion    String? //front-form
-  rol_aplica     rol_aplica_tc //front-form
-  porcentaje     Decimal       @db.Decimal //front-form
-  activo         Boolean       @default(true) //front-form
-  vigencia_desde DateTime?     @db.Timestamptz(6) //front-form
-  vigencia_hasta DateTime?     @db.Timestamptz(6) //front-form
-
-  servicio_id Int?
-  plan_id     Int?
-
-  servicio servicio? @relation("ServicioComision", fields: [servicio_id], references: [id], onDelete: SetNull)
-  plan     plan?     @relation("PlanComision", fields: [plan_id], references: [id], onDelete: SetNull)
-
-  // Auditoría para UI
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
+  descripcion    String?
+  rol_aplica     rol_aplica_tc
+  porcentaje     Decimal       @db.Decimal
+  activo         Boolean       @default(true)
+  vigencia_desde DateTime?     @db.Timestamptz(6)
+  vigencia_hasta DateTime?     @db.Timestamptz(6)
+  servicio_id    Int?
+  plan_id        Int?
+  creado_el      DateTime      @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime      @updatedAt @db.Timestamptz(6)
+  plan           plan?         @relation("PlanComision", fields: [plan_id], references: [id])
+  servicio       servicio?     @relation("ServicioComision", fields: [servicio_id], references: [id])
 
   @@index([servicio_id])
   @@index([plan_id])
@@ -368,7 +264,7 @@ model comision {
 
 model impuesto {
   id             Int       @id @default(autoincrement())
-  codigo         String    @unique //codigo generado por backend
+  codigo         String    @unique
   nombre         String
   porcentaje     Decimal   @db.Decimal
   activo         Boolean   @default(true)
@@ -380,15 +276,6 @@ model impuesto {
   @@index([vigencia_desde, vigencia_hasta])
 }
 
-/// Reglas de redondeo para presentación/precio final
-enum regla_redondeo {
-  dos_decimales
-  a_0_05
-  entero_superior
-}
-
-/// Configuración económica global (1 fila activa)
-
 model econconfig {
   id             Int            @id @default(autoincrement())
   moneda_defecto String         @db.Char(3)
@@ -398,166 +285,132 @@ model econconfig {
   actualizado_el DateTime       @updatedAt @db.Timestamptz(6)
 }
 
-/**
- * ================================
- * ESTUDIO / PERFIL / PERSONA / USUARIO / ROLES
- * ================================
- */
-
-enum EstadoVerificacion {
-  PENDIENTE
-  OBSERVADA
-  APROBADA
-  RECHAZADA
-}
-
 model verificacionabogado {
-  id         Int @id @default(autoincrement())
-  persona_id Int @unique
-
-  /////////////////////////////////////////////////////////
-
+  id                Int                 @id @default(autoincrement())
+  persona_id        Int                 @unique
+  /// //////////////////////////////////////////////////////
   linkedin_url      String?
   titulo_archivo_id Int?
-  estado            EstadoVerificacion @default(PENDIENTE)
+  estado            EstadoVerificacion  @default(PENDIENTE)
   observaciones     String?
   aprobado_el       DateTime?
-
-  /////////////////////////////////////////////////////////
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-  titulo         archivo?            @relation(fields: [titulo_archivo_id], references: [id], onDelete: SetNull)
-  persona        persona             @relation(fields: [persona_id], references: [id], onDelete: Cascade)
-  colegiatura_id Int?
-  colegiatura    colegiaturaabogado? @relation(fields: [colegiatura_id], references: [id], onDelete: SetNull)
+  /// //////////////////////////////////////////////////////
+  creado_el         DateTime            @default(now()) @db.Timestamptz(6)
+  actualizado_el    DateTime            @updatedAt @db.Timestamptz(6)
+  colegiatura_id    Int?
+  colegiatura       colegiaturaabogado? @relation(fields: [colegiatura_id], references: [id])
+  persona           persona             @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+  titulo            archivo?            @relation(fields: [titulo_archivo_id], references: [id])
 
   @@index([colegiatura_id])
   @@index([estado])
 }
 
 model colegioabogado {
-  id             Int      @id @default(autoincrement())
-  region         String? // p.ej. "Tacna", "Lima"
+  id             Int                  @id @default(autoincrement())
+  region         String?
   nombre         String
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-  colegiaturas colegiaturaabogado[]
+  creado_el      DateTime             @default(now()) @db.Timestamptz(6)
+  actualizado_el DateTime             @updatedAt @db.Timestamptz(6)
+  colegiaturas   colegiaturaabogado[]
 
   @@unique([nombre, region])
   @@index([region])
 }
 
 model colegiaturaabogado {
-  id                Int  @id @default(autoincrement())
-  persona_id        Int  @unique
-  colegio_id        Int
-  carnet_archivo_id Int?
-  /////////////////////////////////////////////////////////
+  id                   Int                   @id @default(autoincrement())
+  persona_id           Int                   @unique
+  colegio_id           Int
+  carnet_archivo_id    Int?
+  /// //////////////////////////////////////////////////////
+  numero               String                @db.VarChar(30)
+  fecha_emision        DateTime?             @db.Timestamptz(6)
+  fecha_vigencia_hasta DateTime?             @db.Timestamptz(6)
+  creado_el            DateTime              @default(now()) @db.Timestamptz(6)
+  actualizado_el       DateTime              @updatedAt @db.Timestamptz(6)
+  carnet_archivo       archivo?              @relation(fields: [carnet_archivo_id], references: [id])
+  colegio              colegioabogado        @relation(fields: [colegio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  persona              persona               @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+  verificacionabogado  verificacionabogado[]
 
-  numero               String    @db.VarChar(30)
-  fecha_emision        DateTime? @db.Timestamptz(6)
-  fecha_vigencia_hasta DateTime? @db.Timestamptz(6)
-  creado_el            DateTime  @default(now()) @db.Timestamptz(6)
-  actualizado_el       DateTime  @updatedAt @db.Timestamptz(6)
-
-  /////////////////////////////////////////////////////////
-  carnet_archivo      archivo?              @relation(fields: [carnet_archivo_id], references: [id], onDelete: SetNull)
-  persona             persona               @relation(fields: [persona_id], references: [id], onDelete: Cascade)
-  colegio             colegioabogado        @relation(fields: [colegio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  verificacionabogado verificacionabogado[]
-
-  @@unique([colegio_id, numero]) // el mismo número no se repite dentro del mismo colegio
+  @@unique([colegio_id, numero])
   @@unique([id, persona_id])
   @@index([colegio_id])
 }
 
-// Mantén el enum con el nombre del tipo de Postgres si ya existe
-enum EstadoRecuperacionClave {
-  PENDIENTE
-  VERIFICADO
-  COMPLETADO
-  EXPIRADO
-
-  @@map("EstadoRecuperacionClave")
-}
-
 model recuperacionclave {
-  id         Int @id @default(autoincrement())
-  persona_id Int
-  usuario_id Int
-
-  /////////////////////////////////////////////////////////
+  id             Int                     @id @default(autoincrement())
+  persona_id     Int
+  usuario_id     Int
+  /// //////////////////////////////////////////////////////
   codigo         String
   expiracion     DateTime                @db.Timestamptz(6)
   estado         EstadoRecuperacionClave @default(PENDIENTE)
   intentos       Int                     @default(0)
   creado_el      DateTime                @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime                @updatedAt @db.Timestamptz(6)
+  persona        persona                 @relation(fields: [persona_id], references: [id], onDelete: Cascade)
+  usuario        usuario                 @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
 
-  persona persona @relation(fields: [persona_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  usuario usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
-
-  //////////////////////////////////////////////////////////
-  @@index([persona_id], map: "recuperacionclave_persona_id_idx")
-  @@index([usuario_id], map: "recuperacionclave_usuario_id_idx")
+  @@index([persona_id])
+  @@index([usuario_id])
   @@index([usuario_id, estado, expiracion], map: "recuperacionclave_by_user_status_exp_idx")
   @@map("recuperacionclave")
 }
 
 model persona {
-  id               Int     @id @default(autoincrement())
-  dni              String  @unique @db.Char(8)
-  telefono         String? @unique @db.VarChar(15)
-  primer_nombre    String  @db.VarChar(100)
-  segundo_nombre   String? @db.VarChar(100)
-  apellido_paterno String  @db.VarChar(100)
-  apellido_materno String? @db.VarChar(100)
-  correo           String  @unique
-
+  id                     Int                  @id @default(autoincrement())
+  dni                    String               @unique @db.Char(8)
+  telefono               String?              @unique @db.VarChar(15)
+  primer_nombre          String               @db.VarChar(100)
+  segundo_nombre         String?              @db.VarChar(100)
+  apellido_paterno       String               @db.VarChar(100)
+  apellido_materno       String?              @db.VarChar(100)
+  correo                 String               @unique
   direccion_id           String?              @db.Char(6)
-  direccion              direccion?           @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
-  usuario                usuario[]
   linea_exacta_direccion String?
-  verificacionabogado    verificacionabogado?
   colegiatura            colegiaturaabogado?
+  direccion              direccion?           @relation(fields: [direccion_id], references: [ubigeo_codigo])
   recuperaciones_clave   recuperacionclave[]
+  usuario                usuario[]
+  verificacionabogado    verificacionabogado?
 
   @@index([apellido_paterno])
   @@index([correo])
 }
 
 model direccion {
-  ubigeo_codigo String @id @db.Char(6)
-
-  departamento String
-  provincia    String
-  distrito     String
-  persona      persona[]
-  estudio      estudio[]
+  ubigeo_codigo String    @id @db.Char(6)
+  departamento  String
+  provincia     String
+  distrito      String
+  estudio       estudio[]
+  persona       persona[]
 
   @@index([ubigeo_codigo])
   @@index([departamento, provincia, distrito])
 }
 
-model role { 
-  id Int @id @default(autoincrement()) @db.SmallInt 
-  codigo String @unique 
-  nombre String 
-  usuario usuario[] 
+model role {
+  id      Int       @id @default(autoincrement()) @db.SmallInt
+  codigo  String    @unique
+  nombre  String
+  usuario usuario[]
 }
 
 model usuario {
   id                                                Int                  @id @default(autoincrement())
   persona_id                                        Int
-  role_id                                           Int                  @db.SmallInt
-  clave                                             String // mantener nombre para no romper código actual (almacena hash a nivel app)
+  clave                                             String
   telefono_verificado                               Boolean              @default(false)
   plan_id                                           Int?
   almacenamiento_usado                              Int                  @default(0)
   creado_el                                         DateTime             @default(now()) @db.Timestamptz(6)
   activo                                            Boolean              @default(false)
+  role_id                                           Int                  @db.SmallInt
+  abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
+  archivos                                          archivo[]
   auditoria                                         auditoria[]
   bitacorabusquedavh                                bitacorabusquedavh[]
   cita_cita_abogado_idTousuario                     cita[]               @relation("cita_abogado_idTousuario")
@@ -569,14 +422,11 @@ model usuario {
   documento_documento_abogado_firmaTousuario        documento[]          @relation("documento_abogado_firmaTousuario")
   documento_documento_propietario_idTousuario       documento[]          @relation("documento_propietario_idTousuario")
   pago                                              pago[]
-  archivos                                          archivo[]
   perfilabogado                                     perfilabogado?
-  plan                                              plan?                @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  abogadoestudios                                   abogadoestudio[]     @relation("UsuarioAbogadoEstudio")
   recuperaciones_clave                              recuperacionclave[]
-
-  role role @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  persona                                           persona              @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  plan                                              plan?                @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                              role                 @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([persona_id, role_id])
   @@index([persona_id])
@@ -587,12 +437,11 @@ model usuario {
 }
 
 model disponibilidadabogado {
-  id          Int      @id @default(autoincrement())
-  abogado_id  Int
-  dia_semana  Int      @db.SmallInt
-  hora_inicio DateTime @db.Time(6)
-  hora_fin    DateTime @db.Time(6)
-
+  id            Int           @id @default(autoincrement())
+  abogado_id    Int
+  dia_semana    Int           @db.SmallInt
+  hora_inicio   DateTime      @db.Time(6)
+  hora_fin      DateTime      @db.Time(6)
   perfilabogado perfilabogado @relation(fields: [abogado_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([abogado_id, dia_semana, hora_inicio, hora_fin])
@@ -600,12 +449,11 @@ model disponibilidadabogado {
 }
 
 model perfilabogado_especialidad {
-  id               Int @id @default(autoincrement())
+  id               Int           @id @default(autoincrement())
   perfilabogado_id Int
   especialidad_id  Int
-
-  perfilabogado perfilabogado @relation("PerfilEspecialidades", fields: [perfilabogado_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
-  especialidad  especialidad  @relation("EspecialidadPerfiles", fields: [especialidad_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  especialidad     especialidad  @relation("EspecialidadPerfiles", fields: [especialidad_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  perfilabogado    perfilabogado @relation("PerfilEspecialidades", fields: [perfilabogado_id], references: [usuario_id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([perfilabogado_id, especialidad_id])
   @@index([perfilabogado_id])
@@ -621,53 +469,46 @@ model especialidad {
 }
 
 model estudio {
-  id                    Int     @id @default(autoincrement())
-  /////////////////////////
-  ruc                   String  @unique
-  nombre_comercial      String?
-  nombre_o_razon_social String?
-  /////////////////////////
-  correo_contacto       String?
-  telefono              String?
-
-  direccion_id           String?    @db.Char(6)
-  direccion              direccion? @relation(fields: [direccion_id], references: [ubigeo_codigo], onDelete: SetNull)
-  direccion_exacta       String?
-  linea_exacta_direccion String?
-  estado                 String?
-  condicion              String?
-
-  ///////////////////////// Flags SUNAT
-
-  es_agente_retencion              Boolean? @default(false)
-  es_agente_percepcion             Boolean? @default(false)
-  es_agente_percepcion_combustible Boolean? @default(false)
-  es_buen_contribuyente            Boolean? @default(false)
-
-  /////////////////////////
-  activo         Boolean  @default(false)
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-  abogadoestudios abogadoestudio[] @relation("EstudioAbogadoEstudio")
+  id                               Int              @id @default(autoincrement())
+  /// //////////////////////
+  ruc                              String           @unique
+  nombre_comercial                 String?
+  nombre_o_razon_social            String?
+  /// //////////////////////
+  correo_contacto                  String?
+  telefono                         String?
+  direccion_id                     String?          @db.Char(6)
+  direccion_exacta                 String?
+  linea_exacta_direccion           String?
+  estado                           String?
+  condicion                        String?
+  /// ////////////////////// Flags SUNAT
+  es_agente_retencion              Boolean?         @default(false)
+  es_agente_percepcion             Boolean?         @default(false)
+  es_agente_percepcion_combustible Boolean?         @default(false)
+  es_buen_contribuyente            Boolean?         @default(false)
+  /// //////////////////////
+  activo                           Boolean          @default(false)
+  creado_el                        DateTime         @default(now()) @db.Timestamptz(6)
+  actualizado_el                   DateTime         @updatedAt @db.Timestamptz(6)
+  abogadoestudios                  abogadoestudio[] @relation("EstudioAbogadoEstudio")
+  direccion                        direccion?       @relation(fields: [direccion_id], references: [ubigeo_codigo])
 
   @@index([estado])
   @@index([condicion])
 }
 
 model abogadoestudio {
-  id         Int @id @default(autoincrement())
-  usuario_id Int
-  estudio_id Int
-
+  id             Int      @id @default(autoincrement())
+  usuario_id     Int
+  estudio_id     Int
   principal      Boolean  @default(false)
   rol_en_estudio String?
   activo         Boolean  @default(true)
   creado_el      DateTime @default(now()) @db.Timestamptz(6)
   actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-  usuario usuario @relation("UsuarioAbogadoEstudio", fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  estudio estudio @relation("EstudioAbogadoEstudio", fields: [estudio_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  estudio        estudio  @relation("EstudioAbogadoEstudio", fields: [estudio_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  usuario        usuario  @relation("UsuarioAbogadoEstudio", fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([usuario_id, estudio_id])
   @@index([activo])
@@ -676,66 +517,50 @@ model abogadoestudio {
 }
 
 model perfilabogado {
-  usuario_id Int @id
-
-  /////////////////////////////////////////////////////////
-  avatar_archivo_id  Int?
-  tarifa_base        Decimal? @db.Decimal
-  direccion_atencion String?
-  bio                String?
-
-  /////////////////////////////////////////////////////////
-  rating_promedio Decimal? @db.Decimal
-  rating_cantidad Int      @default(0)
-
-  place_id_api   String?
-  creado_el      DateTime @default(now()) @db.Timestamptz(6)
-  actualizado_el DateTime @updatedAt @db.Timestamptz(6)
-
-  /////////////////////////////////////////////////////////
-
-  avatar                archivo?                @relation(fields: [avatar_archivo_id], references: [id], onDelete: SetNull)
-  usuario               usuario                 @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  usuario_id            Int                          @id
+  /// //////////////////////////////////////////////////////
+  avatar_archivo_id     Int?
+  tarifa_base           Decimal?                     @db.Decimal
+  direccion_atencion    String?
+  bio                   String?
+  /// //////////////////////////////////////////////////////
+  rating_promedio       Decimal?                     @db.Decimal
+  rating_cantidad       Int                          @default(0)
+  place_id_api          String?
+  creado_el             DateTime                     @default(now()) @db.Timestamptz(6)
+  actualizado_el        DateTime                     @updatedAt @db.Timestamptz(6)
   disponibilidadabogado disponibilidadabogado[]
-
-  especialidades perfilabogado_especialidad[] @relation("PerfilEspecialidades")
+  avatar                archivo?                     @relation(fields: [avatar_archivo_id], references: [id])
+  usuario               usuario                      @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  especialidades        perfilabogado_especialidad[] @relation("PerfilEspecialidades")
 }
 
-/**
- * ================================
- * PLANES//SERVICIOS
- * ================================
- */
-
 model plan {
-  id                    Int      @id @default(autoincrement())
+  id                    Int            @id @default(autoincrement())
   nombre                String
   almacenamiento_maximo Int?
-  actualizado_el        DateTime @updatedAt @db.Timestamptz(6)
-
-  usuarios     usuario[]
-  tarifas      tarifa[]       @relation("PlanTarifa")
-  comisiones   comision[]     @relation("PlanComision")
-  pago         pago[]
-  planservicio planservicio[]
+  actualizado_el        DateTime       @updatedAt @db.Timestamptz(6)
+  comisiones            comision[]     @relation("PlanComision")
+  pago                  pago[]
+  planservicio          planservicio[]
+  tarifas               tarifa[]       @relation("PlanTarifa")
+  usuarios              usuario[]
 
   @@index([nombre])
 }
 
 model servicio {
-  id               Int      @id @default(autoincrement())
-  codigo           String   @unique
+  id               Int            @id @default(autoincrement())
+  codigo           String         @unique
   nombre           String
   descripcion      String?
-  activo           Boolean  @default(true)
-  // Unificado a timestamptz y actualizado automático
-  fecha_creada     DateTime @default(now()) @db.Timestamptz(6)
-  fecha_modificada DateTime @updatedAt @db.Timestamptz(6)
-
-  planservicios planservicio[]
-  tarifas       tarifa[]       @relation("ServicioTarifa")
-  comisiones    comision[]     @relation("ServicioComision")
-  pago          pago[]
+  activo           Boolean        @default(true)
+  fecha_creada     DateTime       @default(now()) @db.Timestamptz(6)
+  fecha_modificada DateTime       @updatedAt @db.Timestamptz(6)
+  comisiones       comision[]     @relation("ServicioComision")
+  pago             pago[]
+  planservicios    planservicio[]
+  tarifas          tarifa[]       @relation("ServicioTarifa")
 
   @@index([activo])
   @@index([codigo])
@@ -748,9 +573,8 @@ model planservicio {
   activo         Boolean   @default(true)
   vigencia_desde DateTime? @db.Timestamptz(6)
   vigencia_hasta DateTime? @db.Timestamptz(6)
-
-  servicio servicio @relation(fields: [servicio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  plan     plan     @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  plan           plan      @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  servicio       servicio  @relation(fields: [servicio_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([plan_id, servicio_id])
   @@index([servicio_id])
@@ -790,4 +614,84 @@ model bibliotecaitem {
 
   @@index([tipo])
   @@index([creado_el])
+}
+
+enum est_cita {
+  pendiente
+  confirmada
+  cancelada
+  completada
+  no_show
+}
+
+enum est_consulta {
+  pendiente
+  respondida
+  cerrada
+}
+
+enum resp_consulta {
+  abogado
+  IA
+}
+
+enum tipo_consulta {
+  texto
+  audio
+}
+
+enum est_doc_tramite {
+  pendiente
+  enviado
+  recibido
+  observado
+}
+
+enum tipo_detalle_pago {
+  subtotal
+  descuento
+  impuestos
+  comision_plataforma
+  tarifa_ia
+  retencion
+  total_cliente
+  neto_abogado
+}
+
+enum tipo_calculo_tc {
+  fijo
+  consumo_ia
+}
+
+enum rol_aplica_tc {
+  cliente
+  abogado
+}
+
+enum tipo_regla_tc {
+  precio
+  comision
+}
+
+/// Reglas de redondeo para presentación/precio final
+enum regla_redondeo {
+  dos_decimales
+  a_0_05
+  entero_superior
+}
+
+enum EstadoVerificacion {
+  PENDIENTE
+  OBSERVADA
+  APROBADA
+  RECHAZADA
+}
+
+enum EstadoRecuperacionClave {
+  PENDIENTE
+  VERIFICADO
+  COMPLETADO
+  EXPIRADO
+
+  @@map("EstadoRecuperacionClave")
 }
