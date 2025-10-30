@@ -39,7 +39,7 @@ class ClientHome extends StatefulWidget {
 enum _ClientHomeView { dashboard, settings }
 
 class _ClientHomeState extends State<ClientHome> {
-  static const String _apiBaseUrl = 'http://localhost:3000/api';
+  static const String _apiBaseUrl = 'https://legalbot1-tan.vercel.app/api';
   final TextEditingController _consultationController = TextEditingController();
   bool _isRecording = false;
   bool _isSwitchingAccount = false;

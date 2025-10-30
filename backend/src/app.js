@@ -58,7 +58,7 @@ app.get(['/tarifas', '/Tarifas'], (req, res) => {
 // Ruta para servir servicios.html
 app.get('/servicios', (req, res) => {
   console.log('Accediendo a /servicios');
-  res.sendFile(path.join(__dirname, '../../admin-web/pages/servicios.html'));
+  res.sendFile(path.join(__dirname, '../../admin-web/pages/Servicios.html'));
 });
 
 
