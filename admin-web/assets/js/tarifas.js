@@ -71,7 +71,6 @@ const state = {
     result: null,
     inputs: {
       ambito: 'servicio',
-      consumo: 0,
       planId: null,
       servicioId: null,
       consumoIa: 0,
@@ -80,14 +79,14 @@ const state = {
         clienteId: null,
         abogadoId: null,
       },
+      comisionSeleccion: 'auto',
       moneda: null,
     },
     meta: {
       tipoCalculo: null,
-      showConsumo: true,
-      consumoRequired: false,
       requiresConsumoIa: false,
       showMonedaSelect: false,
+      autoComisiones: { clienteId: null, abogadoId: null },
     },
     options: {
       tarifas: [],
@@ -749,11 +748,7 @@ function setupLayout() {
                   <label for="simulator-moneda" class="form-label">Moneda</label>
                   <select id="simulator-moneda" name="moneda" class="form-select"></select>
                 </div>
-                <div class="col-12 col-md-6">
-                  <label for="simulator-consumo" class="form-label">Consumo</label>
-                  <input type="number" id="simulator-consumo" name="consumo" class="form-control" min="0" step="0.01" />
-                </div>
-                <div class="col-12 col-md-6">
+                <div class="col-12 col-md-6 d-none" data-simulator-consumo-ia-group>
                   <label for="simulator-consumo-ia" class="form-label">Consumo IA</label>
                   <input
                     type="number"
@@ -1028,7 +1023,6 @@ function cacheDom() {
     result: document.getElementById('simulator-result'),
     loading: document.getElementById('simulator-loading'),
     ambito: document.getElementById('simulator-ambito'),
-    consumo: document.getElementById('simulator-consumo'),
     consumoIa: document.getElementById('simulator-consumo-ia'),
     planSelect: document.getElementById('simulator-plan'),
     servicioSelect: document.getElementById('simulator-servicio'),
@@ -1044,9 +1038,6 @@ function cacheDom() {
     tarifaError: document.getElementById('simulator-tarifa-error'),
   };
 
-  if (dom.simulator.consumo) {
-    dom.simulator.consumoGroup = dom.simulator.consumo.closest('.col-12');
-  }
   if (dom.simulator.consumoIa) {
     dom.simulator.consumoIaGroup = dom.simulator.consumoIa.closest('.col-12');
   }
@@ -1057,12 +1048,6 @@ function cacheDom() {
     );
   }
 
-  if (dom.simulator.consumo) {
-    dom.simulator.consumo.value =
-      typeof state.simulator.inputs.consumo === 'number'
-        ? state.simulator.inputs.consumo
-        : '';
-  }
   if (dom.simulator.consumoIa) {
     dom.simulator.consumoIa.value =
       typeof state.simulator.inputs.consumoIa === 'number'
@@ -2073,42 +2058,97 @@ async function refreshSimulatorRuleSelectors(context = {}) {
     servicioId,
     fecha: fechaReferencia,
   });
-  const currentClienteId = state.simulator.inputs.comisiones?.clienteId;
-  const availableClienteIds = new Set(
-    comisionesCliente.map((item) => normalizeId(item.id)).filter((id) => id != null)
-  );
-  const selectedClienteId = availableClienteIds.has(normalizeId(currentClienteId))
-    ? currentClienteId
-    : selectedCliente?.id ?? null;
-  if (!state.simulator.inputs.comisiones) {
-    state.simulator.inputs.comisiones = { clienteId: null, abogadoId: null };
-  }
-  state.simulator.inputs.comisiones.clienteId = selectedClienteId ?? null;
-
   const selectedAbogado = selectBestScopedRule(comisionesAbogado, {
     planId,
     servicioId,
     fecha: fechaReferencia,
   });
-  const currentAbogadoId = state.simulator.inputs.comisiones?.abogadoId;
+
+  const availableClienteIds = new Set(
+    comisionesCliente.map((item) => normalizeId(item.id)).filter((id) => id != null)
+  );
   const availableAbogadoIds = new Set(
     comisionesAbogado.map((item) => normalizeId(item.id)).filter((id) => id != null)
   );
-  const selectedAbogadoId = availableAbogadoIds.has(normalizeId(currentAbogadoId))
-    ? currentAbogadoId
-    : selectedAbogado?.id ?? null;
-  populateSimulatorComisionResumen(
-    simulator.comisionSelect,
-    {
-      cliente: selectedCliente,
-      abogado: selectedAbogado,
+
+  const findComisionById = (lista, id) =>
+    lista.find((item) => normalizeId(item?.id) === normalizeId(id)) || null;
+
+  const autoCliente = selectedCliente || null;
+  const autoAbogado = selectedAbogado || null;
+
+  state.simulator.meta = {
+    ...state.simulator.meta,
+    autoComisiones: {
+      clienteId: autoCliente?.id ?? null,
+      abogadoId: autoAbogado?.id ?? null,
     },
-    { cliente: comisionesCliente, abogado: comisionesAbogado }
-  );
+  };
+
   if (!state.simulator.inputs.comisiones) {
     state.simulator.inputs.comisiones = { clienteId: null, abogadoId: null };
   }
-  state.simulator.inputs.comisiones.abogadoId = selectedAbogadoId ?? null;
+
+  let resolvedSelection = state.simulator.inputs.comisionSeleccion || 'auto';
+  let resolvedCliente = null;
+  let resolvedAbogado = null;
+
+  const ensureCliente = (id) => findComisionById(comisionesCliente, id);
+  const ensureAbogado = (id) => findComisionById(comisionesAbogado, id);
+
+  if (resolvedSelection === 'none') {
+    resolvedCliente = null;
+    resolvedAbogado = null;
+  } else if (resolvedSelection.startsWith('cliente:')) {
+    const manualId = resolvedSelection.split(':')[1];
+    const match = ensureCliente(manualId);
+    if (match) {
+      resolvedCliente = match;
+    } else {
+      resolvedSelection = 'auto';
+    }
+  } else if (resolvedSelection.startsWith('abogado:')) {
+    const manualId = resolvedSelection.split(':')[1];
+    const match = ensureAbogado(manualId);
+    if (match) {
+      resolvedAbogado = match;
+    } else {
+      resolvedSelection = 'auto';
+    }
+  } else {
+    resolvedSelection = 'auto';
+  }
+
+  if (resolvedSelection === 'auto') {
+    resolvedCliente = autoCliente;
+    resolvedAbogado = autoAbogado;
+  }
+
+  if (resolvedSelection !== 'none' && !resolvedCliente && !resolvedAbogado) {
+    resolvedSelection = 'none';
+  }
+
+  const resolvedClienteId = resolvedCliente?.id ?? null;
+  const resolvedAbogadoId = resolvedAbogado?.id ?? null;
+
+  state.simulator.inputs.comisiones = {
+    clienteId:
+      resolvedClienteId != null && availableClienteIds.has(normalizeId(resolvedClienteId))
+        ? resolvedClienteId
+        : null,
+    abogadoId:
+      resolvedAbogadoId != null && availableAbogadoIds.has(normalizeId(resolvedAbogadoId))
+        ? resolvedAbogadoId
+        : null,
+  };
+  state.simulator.inputs.comisionSeleccion = resolvedSelection;
+
+  populateSimulatorComisionOptions({
+    disponibles: {
+      cliente: comisionesCliente,
+      abogado: comisionesAbogado,
+    },
+  });
 
   try {
     await prepareSimulatorMonedaOptions();
@@ -2155,40 +2195,99 @@ function populateSimulatorTarifaOptions(items, selectedId) {
   if (error) error.classList.add('d-none');
 }
 
-function populateSimulatorComisionResumen(select, seleccionadas, disponibles) {
+function populateSimulatorComisionOptions({ disponibles }) {
+  const { simulator } = state.dom;
+  const select = simulator?.comisionSelect;
   if (!select) return;
 
-  const cliente = seleccionadas?.cliente || null;
-  const abogado = seleccionadas?.abogado || null;
+  const listadoCliente = Array.isArray(disponibles?.cliente) ? disponibles.cliente : [];
+  const listadoAbogado = Array.isArray(disponibles?.abogado) ? disponibles.abogado : [];
 
-  const partes = [];
-  if (cliente) {
-    const pct = Number(cliente.porcentaje ?? cliente.porcentaje_aplicada ?? 0);
-    const etiqueta = Number.isFinite(pct) ? formatPercentage(pct) : '—';
-    const descripcion = cliente.descripcion ? ` · ${cliente.descripcion}` : '';
-    partes.push(`Cliente ${etiqueta}${descripcion}`);
-  }
-  if (abogado) {
-    const pct = Number(abogado.porcentaje ?? abogado.porcentaje_aplicada ?? 0);
-    const etiqueta = Number.isFinite(pct) ? formatPercentage(pct) : '—';
-    const descripcion = abogado.descripcion ? ` · ${abogado.descripcion}` : '';
-    partes.push(`Abogado ${etiqueta}${descripcion}`);
-  }
+  const findComisionById = (lista, id) =>
+    lista.find((item) => normalizeId(item?.id) === normalizeId(id)) || null;
 
-  if (!partes.length) {
-    const placeholder = disponibles?.cliente?.length || disponibles?.abogado?.length
-      ? 'Sin comisiones vigentes para este ámbito'
-      : 'Selecciona un ámbito para cargar comisiones';
-    select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`;
+  if (!listadoCliente.length && !listadoAbogado.length) {
+    select.innerHTML = '<option value="">Sin comisiones vigentes para este ámbito</option>';
     select.value = '';
     select.setAttribute('disabled', '');
     return;
   }
 
-  const label = partes.join(' · ');
-  select.innerHTML = `<option value="auto">${escapeHtml(label)}</option>`;
-  select.value = 'auto';
-  select.setAttribute('disabled', '');
+  const autoMeta = state.simulator.meta?.autoComisiones || { clienteId: null, abogadoId: null };
+  const autoCliente = findComisionById(listadoCliente, autoMeta.clienteId);
+  const autoAbogado = findComisionById(listadoAbogado, autoMeta.abogadoId);
+
+  const partes = [];
+  if (autoCliente) {
+    const pct = Number(autoCliente.porcentaje ?? autoCliente.porcentaje_aplicada ?? 0);
+    const etiqueta = Number.isFinite(pct) ? formatPercentage(pct) : '—';
+    const descripcion = autoCliente.descripcion ? ` · ${autoCliente.descripcion}` : '';
+    partes.push(`Cliente ${etiqueta}${descripcion}`);
+  }
+  if (autoAbogado) {
+    const pct = Number(autoAbogado.porcentaje ?? autoAbogado.porcentaje_aplicada ?? 0);
+    const etiqueta = Number.isFinite(pct) ? formatPercentage(pct) : '—';
+    const descripcion = autoAbogado.descripcion ? ` · ${autoAbogado.descripcion}` : '';
+    partes.push(`Abogado ${etiqueta}${descripcion}`);
+  }
+
+  const autoLabel = partes.length
+    ? `Automática: ${partes.join(' · ')}`
+    : 'Automática: sin comisiones vigentes';
+
+  const selection = state.simulator.inputs.comisionSeleccion || 'auto';
+  const options = [];
+  const optionValues = [];
+  options.push(
+    `<option value="auto"${selection === 'auto' ? ' selected' : ''}>${escapeHtml(autoLabel)}</option>`
+  );
+  optionValues.push('auto');
+  options.push(
+    `<option value="none"${selection === 'none' ? ' selected' : ''}>Sin comisión</option>`
+  );
+  optionValues.push('none');
+
+  listadoCliente.forEach((item) => {
+    const id = item?.id != null ? String(item.id) : '';
+    if (!id) return;
+    const value = `cliente:${id}`;
+    const selected = selection === value ? ' selected' : '';
+    options.push(
+      `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(formatComisionOptionLabel(item))}</option>`
+    );
+    optionValues.push(value);
+  });
+
+  listadoAbogado.forEach((item) => {
+    const id = item?.id != null ? String(item.id) : '';
+    if (!id) return;
+    const value = `abogado:${id}`;
+    const selected = selection === value ? ' selected' : '';
+    options.push(
+      `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(formatComisionOptionLabel(item))}</option>`
+    );
+    optionValues.push(value);
+  });
+
+  select.innerHTML = options.join('');
+  if (optionValues.includes(selection)) {
+    select.value = selection;
+  } else if (optionValues.includes('auto')) {
+    select.value = 'auto';
+    state.simulator.inputs.comisionSeleccion = 'auto';
+    const autoMeta = state.simulator.meta?.autoComisiones || { clienteId: null, abogadoId: null };
+    state.simulator.inputs.comisiones = {
+      clienteId: autoMeta.clienteId ?? null,
+      abogadoId: autoMeta.abogadoId ?? null,
+    };
+  } else if (optionValues.length) {
+    select.value = optionValues[0];
+    state.simulator.inputs.comisionSeleccion = optionValues[0];
+    handleSimulatorComisionChange();
+  } else {
+    select.value = '';
+  }
+  select.removeAttribute('disabled');
 }
 
 function handleSimulatorTarifaChange() {
@@ -2202,18 +2301,74 @@ function handleSimulatorTarifaChange() {
       ? state.simulator.options.tarifas.find((item) => normalizeId(item.id) === normalizeId(tarifaId)) || null
       : null;
   const tipoCalculo = (tarifa?.tipo_calculo || tarifa?.tipoCalculo || '').toLowerCase();
-  const iaUnitPrice = resolveIaUnitPrice(tarifa?.parametros);
-
   const prevMeta = state.simulator.meta || {};
   state.simulator.meta = {
     ...prevMeta,
     tipoCalculo: tipoCalculo || null,
-    showConsumo: true,
-    consumoRequired: tipoCalculo === 'consumo_ia',
-    requiresConsumoIa: tipoCalculo === 'consumo_ia' && iaUnitPrice > 0,
+    requiresConsumoIa: tipoCalculo === 'consumo_ia',
   };
 
   updateSimulatorDynamicFields();
+}
+
+function handleSimulatorComisionChange() {
+  const { simulator } = state.dom;
+  const select = simulator?.comisionSelect;
+  if (!select) return;
+
+  const rawValue = select.value || '';
+  const options = state.simulator.options?.comisiones || {};
+  const listadoCliente = Array.isArray(options.cliente) ? options.cliente : [];
+  const listadoAbogado = Array.isArray(options.abogado) ? options.abogado : [];
+  const autoMeta = state.simulator.meta?.autoComisiones || { clienteId: null, abogadoId: null };
+
+  const findComisionById = (lista, id) =>
+    lista.find((item) => normalizeId(item?.id) === normalizeId(id)) || null;
+
+  let selection = rawValue || 'auto';
+  let resolvedCliente = null;
+  let resolvedAbogado = null;
+
+  if (selection === 'none') {
+    resolvedCliente = null;
+    resolvedAbogado = null;
+  } else if (selection.startsWith('cliente:')) {
+    const manualId = selection.split(':')[1];
+    resolvedCliente = findComisionById(listadoCliente, manualId);
+    resolvedAbogado = null;
+    if (!resolvedCliente) {
+      selection = 'auto';
+    }
+  } else if (selection.startsWith('abogado:')) {
+    const manualId = selection.split(':')[1];
+    resolvedAbogado = findComisionById(listadoAbogado, manualId);
+    resolvedCliente = null;
+    if (!resolvedAbogado) {
+      selection = 'auto';
+    }
+  } else {
+    selection = 'auto';
+  }
+
+  if (selection === 'auto') {
+    resolvedCliente = findComisionById(listadoCliente, autoMeta.clienteId);
+    resolvedAbogado = findComisionById(listadoAbogado, autoMeta.abogadoId);
+  }
+
+  if (selection !== 'none' && !resolvedCliente && !resolvedAbogado) {
+    selection = 'none';
+  }
+
+  state.simulator.inputs.comisionSeleccion = selection;
+  if (!state.simulator.inputs.comisiones) {
+    state.simulator.inputs.comisiones = { clienteId: null, abogadoId: null };
+  }
+  state.simulator.inputs.comisiones.clienteId = resolvedCliente?.id ?? null;
+  state.simulator.inputs.comisiones.abogadoId = resolvedAbogado?.id ?? null;
+
+  populateSimulatorComisionOptions({
+    disponibles: options,
+  });
 }
 
 async function prepareSimulatorMonedaOptions() {
@@ -2298,6 +2453,8 @@ function formatTarifaOptionLabel(tarifa) {
 function formatComisionOptionLabel(comision) {
   if (!comision || typeof comision !== 'object') return 'Comisión';
   const idPart = comision.id != null ? `Regla ${comision.id}` : 'Regla sin ID';
+  const rolRaw = (comision.rol_aplica || comision.rolAplica || '').trim().toLowerCase();
+  const rolLabel = rolRaw ? capitalize(rolRaw) : 'Comisión';
   const porcentaje = Number(comision.porcentaje);
   const pctLabel = Number.isFinite(porcentaje) ? `${porcentaje.toFixed(2)}%` : '0%';
   const vigenciaDesde = comision.vigencia_desde || comision.vigenciaDesde || '';
@@ -2308,7 +2465,8 @@ function formatComisionOptionLabel(comision) {
     const hasta = vigenciaHasta ? formatShortDate(vigenciaHasta) : '—';
     vigencia = ` · Vigencia ${desde} - ${hasta}`;
   }
-  return `${idPart} · ${pctLabel}${vigencia}`;
+  const descripcion = comision.descripcion ? ` · ${comision.descripcion}` : '';
+  return `${rolLabel} · ${idPart} · ${pctLabel}${vigencia}${descripcion}`;
 }
 
 function getServicesForPlan(planId) {
@@ -2832,6 +2990,10 @@ function bindSimulatorEvents() {
     handleSimulatorTarifaChange();
   });
 
+  simulator.comisionSelect?.addEventListener('change', () => {
+    handleSimulatorComisionChange();
+  });
+
   simulator.monedaSelect?.addEventListener('change', () => {
     const moneda = simulator.monedaSelect.value || null;
     state.simulator.inputs.moneda = moneda;
@@ -2859,10 +3021,14 @@ function bindSimulatorEvents() {
     hideSimulatorScopeError();
     state.simulator.meta = {
       tipoCalculo: null,
-      showConsumo: true,
-      consumoRequired: false,
       requiresConsumoIa: false,
+      showMonedaSelect: false,
+      autoComisiones: { clienteId: null, abogadoId: null },
     };
+    state.simulator.inputs.comisionSeleccion = 'auto';
+    state.simulator.inputs.comisiones = { clienteId: null, abogadoId: null };
+    state.simulator.inputs.consumoIa = 0;
+    state.simulator.inputs.moneda = null;
     updateSimulatorDynamicFields();
     renderSimulator();
   });
@@ -2878,11 +3044,8 @@ async function prepareSimulatorForm() {
     const fallback = inputs.ambito || 'servicio';
     simulator.ambito.value = fallback;
   }
-  if (simulator.consumo) {
-    simulator.consumo.value =
-      typeof inputs.consumo === 'number' && Number.isFinite(inputs.consumo)
-        ? inputs.consumo
-        : '';
+  if (simulator.comisionSelect) {
+    simulator.comisionSelect.value = inputs.comisionSeleccion || 'auto';
   }
   if (simulator.consumoIa) {
     simulator.consumoIa.value =
@@ -3102,29 +3265,7 @@ function updateSimulatorDynamicFields() {
   if (!simulator?.form) return;
 
   const meta = state.simulator.meta || {};
-  const showConsumo = meta.showConsumo !== false;
-  const consumoRequired = !!meta.consumoRequired;
   const requiresConsumoIa = !!meta.requiresConsumoIa;
-
-  const consumoGroup = simulator.consumoGroup;
-  const consumoInput = simulator.consumo;
-  if (consumoGroup) {
-    consumoGroup.classList.toggle('d-none', !showConsumo);
-  }
-  if (consumoInput) {
-    if (showConsumo) {
-      consumoInput.removeAttribute('disabled');
-      consumoInput.setAttribute('min', '0');
-    } else {
-      consumoInput.value = '';
-      consumoInput.setAttribute('disabled', '');
-    }
-    if (consumoRequired && showConsumo) {
-      consumoInput.setAttribute('required', '');
-    } else {
-      consumoInput.removeAttribute('required');
-    }
-  }
 
   const consumoIaGroup = simulator.consumoIaGroup;
   const consumoIaInput = simulator.consumoIa;
@@ -3139,11 +3280,7 @@ function updateSimulatorDynamicFields() {
       consumoIaInput.value = '';
       consumoIaInput.setAttribute('disabled', '');
     }
-    if (requiresConsumoIa) {
-      consumoIaInput.setAttribute('required', '');
-    } else {
-      consumoIaInput.removeAttribute('required');
-    }
+    consumoIaInput.removeAttribute('required');
   }
 
   if (simulator.monedaGroup) {
@@ -3188,8 +3325,6 @@ async function submitSimulator(event) {
   const tarifaId = parseOptionalId(form.tarifa_id?.value);
   const monedaSeleccionada = form.moneda?.value?.trim().toUpperCase() || null;
   const fechaReferencia = new Date().toISOString().slice(0, 10);
-  const consumoValue = Number(form.consumo?.value);
-  const consumo = Number.isFinite(consumoValue) && consumoValue >= 0 ? consumoValue : 0;
   const consumoIaValue = Number(form.consumo_ia?.value);
   const consumoIa = Number.isFinite(consumoIaValue) && consumoIaValue >= 0 ? consumoIaValue : 0;
 
@@ -3219,13 +3354,6 @@ async function submitSimulator(event) {
     hideSimulatorScopeError();
   }
 
-  if (Number(form.consumo?.value) < 0) {
-    form.consumo.classList.add('is-invalid');
-    hasError = true;
-  } else {
-    form.consumo?.classList.remove('is-invalid');
-  }
-
   if (Number(form.consumo_ia?.value) < 0) {
     form.consumo_ia.classList.add('is-invalid');
     hasError = true;
@@ -3247,7 +3375,6 @@ async function submitSimulator(event) {
   const previousInputs = state.simulator.inputs || {};
   state.simulator.inputs = {
     ambito: scopeNormalized,
-    consumo,
     planId,
     servicioId,
     consumoIa,
@@ -3256,6 +3383,7 @@ async function submitSimulator(event) {
       clienteId: previousInputs.comisiones?.clienteId ?? null,
       abogadoId: previousInputs.comisiones?.abogadoId ?? null,
     },
+    comisionSeleccion: previousInputs.comisionSeleccion || 'auto',
     moneda: monedaSeleccionada || previousInputs.moneda || null,
   };
 
@@ -3293,13 +3421,10 @@ async function submitSimulator(event) {
     state.simulator.inputs.tarifaId = tarifa.id ?? null;
 
     const tipoCalculo = (tarifa.tipo_calculo || tarifa.tipoCalculo || '').toLowerCase();
-    const iaUnitPrice = resolveIaUnitPrice(tarifa.parametros);
     state.simulator.meta = {
       ...state.simulator.meta,
       tipoCalculo: tipoCalculo || null,
-      showConsumo: true,
-      consumoRequired: tipoCalculo === 'consumo_ia',
-      requiresConsumoIa: tipoCalculo === 'consumo_ia' && iaUnitPrice > 0,
+      requiresConsumoIa: tipoCalculo === 'consumo_ia',
     };
 
     const econ = await ensureQuickEconconfigData();
@@ -3310,6 +3435,10 @@ async function submitSimulator(event) {
 
     const resolverComision = async (rol) => {
       const key = rol === 'abogado' ? 'abogado' : 'cliente';
+      const seleccion = state.simulator.inputs.comisionSeleccion || 'auto';
+      if (seleccion === 'none') return null;
+      if (seleccion.startsWith('cliente:') && key === 'abogado') return null;
+      if (seleccion.startsWith('abogado:') && key === 'cliente') return null;
       const storedId = state.simulator.inputs.comisiones?.[`${key}Id`];
       const listado = Array.isArray(state.simulator.options.comisiones?.[key])
         ? state.simulator.options.comisiones[key]
@@ -3348,7 +3477,6 @@ async function submitSimulator(event) {
       econ,
       impuesto,
       comisiones: [comisionCliente, comisionAbogado].filter(Boolean),
-      consumo,
       consumoIa,
       scope: scopeNormalized,
       planId,
@@ -3361,9 +3489,9 @@ async function submitSimulator(event) {
     const moneda = state.quick.econconfig?.moneda_defecto || state.monedaFallback;
     state.simulator.meta = {
       tipoCalculo: null,
-      showConsumo: true,
-      consumoRequired: false,
       requiresConsumoIa: false,
+      showMonedaSelect: state.simulator.meta?.showMonedaSelect === true,
+      autoComisiones: state.simulator.meta?.autoComisiones || { clienteId: null, abogadoId: null },
     };
     const monedaResuelta = monedaSeleccionada || state.simulator.inputs.moneda || moneda;
     state.simulator.result = {
@@ -3373,7 +3501,6 @@ async function submitSimulator(event) {
       subtotal: 0,
       subtotalGravado: 0,
       base: 0,
-      consumoVariable: 0,
       descuento: 0,
       impuestos: 0,
       tarifaIa: 0,
@@ -3391,7 +3518,6 @@ async function submitSimulator(event) {
       impuesto: null,
       econconfig: state.quick.econconfig || null,
       scope: { tipo: scopeNormalized, planId, servicioId },
-      consumo,
       consumoIa,
       fecha: fechaReferencia,
       lineasNoGravables: [],
@@ -3417,7 +3543,6 @@ function simulatorResultTemplate(result) {
   const subtotal = formatCurrency(result.subtotal ?? 0, moneda);
   const subtotalGravado = formatCurrency(result.subtotalGravado ?? result.subtotal ?? 0, moneda);
   const base = formatCurrency(result.base ?? 0, moneda);
-  const consumoVariable = formatCurrency(result.consumoVariable ?? 0, moneda);
   const descuentoValue = Number(result.descuento ?? 0);
   const descuento =
     descuentoValue > 0
@@ -3465,7 +3590,6 @@ function simulatorResultTemplate(result) {
   const impuestoPct =
     impuestoInfo?.porcentaje != null ? formatPercentage(impuestoInfo.porcentaje) : '—';
 
-  const consumoValor = Number.isFinite(result.consumo) ? result.consumo : 0;
   const consumoIaValor = Number.isFinite(result.consumoIa) ? result.consumoIa : 0;
   const lineasNoGravables = Array.isArray(result.lineasNoGravables)
     ? result.lineasNoGravables.filter((linea) => linea && Number(linea.monto) > 0)
@@ -3508,11 +3632,6 @@ function simulatorResultTemplate(result) {
         <dl class="row mb-0">
           <dt class="col-sm-6">Base gravable</dt>
           <dd class="col-sm-6 text-end">${base}</dd>
-          ${
-            Number(result.consumoVariable ?? 0) > 0
-              ? `<dt class="col-sm-6">Consumo adicional</dt><dd class="col-sm-6 text-end">${consumoVariable}</dd>`
-              : ''
-          }
           <dt class="col-sm-6">${escapeHtml(tarifaIaLabel)}</dt>
           <dd class="col-sm-6 text-end">${tarifaIa}</dd>
           <dt class="col-sm-6">Subtotal gravado</dt>
@@ -3572,7 +3691,6 @@ function simulatorResultTemplate(result) {
           <li>Ámbito simulado: ${escapeHtml(scopeLabel)}</li>
           <li>Plan ID: ${escapeHtml(String(planLabel))}</li>
           <li>Servicio ID: ${escapeHtml(String(servicioLabel))}</li>
-          <li>Consumo declarado: ${escapeHtml(String(consumoValor))}</li>
           <li>Consumo IA declarado: ${escapeHtml(String(consumoIaValor))}</li>
         </ul>
       </div>
@@ -3844,27 +3962,6 @@ function resolveIaUnitPrice(parametros) {
   return 0;
 }
 
-function resolveConsumptionUnitPrice(parametros, fallback = 0) {
-  if (!parametros || typeof parametros !== 'object') return Math.max(0, fallback || 0);
-  const candidates = [
-    'tarifa_consumo',
-    'tarifaConsumo',
-    'precio_consumo',
-    'precioConsumo',
-    'costo_consumo',
-    'costoConsumo',
-    'valor_consumo',
-    'valorConsumo',
-  ];
-  for (const key of candidates) {
-    if (parametros[key] !== undefined && parametros[key] !== null && parametros[key] !== '') {
-      const value = Number(parametros[key]);
-      if (Number.isFinite(value)) return Math.max(0, value);
-    }
-  }
-  return Math.max(0, Number(fallback) || 0);
-}
-
 function resolveFixedBaseAmount(parametros, fallback = 0) {
   if (!parametros || typeof parametros !== 'object') return Math.max(0, Number(fallback) || 0);
   const candidates = [
@@ -4117,7 +4214,6 @@ function buildSimulationBreakdown({
   econ,
   impuesto,
   comisiones,
-  consumo,
   consumoIa,
   scope,
   planId,
@@ -4133,20 +4229,10 @@ function buildSimulationBreakdown({
   const impuestoRate = impuesto?.porcentaje != null ? Number(impuesto.porcentaje) / 100 : 0;
   const incluyeImpuesto = tarifa?.incluye_impuesto === true || tarifa?.incluyeImpuesto === true;
 
-  const safeConsumo = Number.isFinite(consumo) && consumo >= 0 ? consumo : 0;
   const safeConsumoIa = Number.isFinite(consumoIa) && consumoIa >= 0 ? consumoIa : 0;
 
   const baseFallback = Number(tarifa?.valor) || 0;
-  const baseFijaGross = resolveFixedBaseAmount(
-    tarifa?.parametros,
-    tipoCalculo === 'fijo' ? baseFallback : 0
-  );
-  const consumoUnitPrice =
-    tipoCalculo === 'consumo_ia'
-      ? resolveConsumptionUnitPrice(tarifa?.parametros, baseFallback)
-      : 0;
-  const consumoGross = tipoCalculo === 'consumo_ia' ? Math.max(0, safeConsumo * consumoUnitPrice) : 0;
-  const baseGross = tipoCalculo === 'consumo_ia' ? baseFijaGross + consumoGross : baseFijaGross;
+  const baseFijaGross = resolveFixedBaseAmount(tarifa?.parametros, baseFallback);
 
   const iaUnitPrice = resolveIaUnitPrice(tarifa?.parametros);
   const extraIaGross = resolveExtraIaAmount(tarifa?.parametros);
@@ -4163,8 +4249,7 @@ function buildSimulationBreakdown({
   const extraIaNetRaw = toNet(extraIaGross, iaIncluyeImpuesto);
   const tarifaIaNetRaw = consumoIaNetRaw + extraIaNetRaw;
 
-  const baseNetRaw = toNet(baseGross);
-  const consumoVariableNetRaw = tipoCalculo === 'consumo_ia' ? toNet(consumoGross) : 0;
+  const baseFijoNetRaw = toNet(baseFijaGross);
 
   const lineasNoGravablesRaw = extractNonTaxableLines(tarifa?.parametros).map((linea) => {
     const monto = Number(linea.monto) || 0;
@@ -4196,9 +4281,13 @@ function buildSimulationBreakdown({
 
   const totalNoGravadoRaw = lineasNoGravablesRaw.reduce((acc, linea) => acc + (linea.montoNeto || 0), 0);
 
-  let subtotalGravadoRaw = baseNetRaw;
-  if (!iaNoGravado) {
-    subtotalGravadoRaw += tarifaIaNetRaw;
+  let subtotalGravadoRaw = baseFijoNetRaw;
+  let baseDisplayRaw = baseFijoNetRaw;
+  if (tipoCalculo === 'consumo_ia') {
+    baseDisplayRaw += tarifaIaNetRaw;
+    if (!iaNoGravado) {
+      subtotalGravadoRaw += tarifaIaNetRaw;
+    }
   }
 
   const subtotalAntesDescuentoRaw = subtotalGravadoRaw;
@@ -4213,7 +4302,7 @@ function buildSimulationBreakdown({
   const comisionAbogadoRate = parsePercentageValue(comisionAbogado?.porcentaje);
   const retencionMontoFijoRaw = extractRetencionMonto(comisionAbogado);
 
-  const comisionClienteRaw = Math.max(0, (basePostDescuentoRaw + impuestosRaw) * comisionClienteRate);
+  const comisionClienteRaw = Math.max(0, basePostDescuentoRaw * comisionClienteRate);
   const retencionPorcentajeRaw = Math.max(0, basePostDescuentoRaw * comisionAbogadoRate);
   const retencionRaw = Math.max(0, retencionPorcentajeRaw + retencionMontoFijoRaw);
 
@@ -4244,7 +4333,7 @@ function buildSimulationBreakdown({
   const resultado = {
     subtotal: round(subtotalTotalRaw),
     subtotalGravado: round(subtotalAntesDescuentoRaw),
-    base: round(baseNetRaw),
+    base: round(baseDisplayRaw),
     tarifaIa: round(tarifaIaNetRaw),
     tarifaIaDetalle: {
       monto: round(tarifaIaNetRaw),
@@ -4253,7 +4342,6 @@ function buildSimulationBreakdown({
       extraIa: round(extraIaNetRaw),
       gravado: !iaNoGravado,
     },
-    consumoVariable: round(consumoVariableNetRaw),
     totalNoGravado: round(totalNoGravadoRaw),
     lineasNoGravables,
     descuento: round(descuentoAplicadoRaw),
@@ -4308,7 +4396,6 @@ function buildSimulationBreakdown({
         }
       : null,
     scope: { tipo: scope, planId, servicioId },
-    consumo: safeConsumo,
     consumoIa: safeConsumoIa,
     fecha,
     monedaSeleccionada: moneda,
