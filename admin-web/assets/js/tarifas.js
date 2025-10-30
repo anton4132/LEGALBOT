@@ -3435,31 +3435,41 @@ async function submitSimulator(event) {
 
     const resolverComision = async (rol) => {
       const key = rol === 'abogado' ? 'abogado' : 'cliente';
-      const seleccion = state.simulator.inputs.comisionSeleccion || 'auto';
-      if (seleccion === 'none') return null;
-      if (seleccion.startsWith('cliente:') && key === 'abogado') return null;
-      if (seleccion.startsWith('abogado:') && key === 'cliente') return null;
+      const seleccionModo = state.simulator.inputs.comisionSeleccion || 'auto';
+      if (seleccionModo === 'none') return null;
+      if (seleccionModo.startsWith('cliente:') && key === 'abogado') return null;
+      if (seleccionModo.startsWith('abogado:') && key === 'cliente') return null;
       const storedId = state.simulator.inputs.comisiones?.[`${key}Id`];
       const listado = Array.isArray(state.simulator.options.comisiones?.[key])
         ? state.simulator.options.comisiones[key]
         : [];
 
-      let seleccion = null;
+      let comisionSeleccionada = null;
       if (storedId != null) {
-        seleccion = listado.find((item) => normalizeId(item.id) === normalizeId(storedId)) || null;
+        comisionSeleccionada =
+          listado.find((item) => normalizeId(item.id) === normalizeId(storedId)) || null;
       }
-      if (!seleccion) {
-        seleccion = selectBestScopedRule(listado, { planId, servicioId, fecha: fechaReferencia });
+      if (!comisionSeleccionada) {
+        comisionSeleccionada = selectBestScopedRule(listado, {
+          planId,
+          servicioId,
+          fecha: fechaReferencia,
+        });
       }
-      if (!seleccion) {
-        seleccion = await ensureQuickComisionData({ rol: key, planId, servicioId, fecha: fechaReferencia });
+      if (!comisionSeleccionada) {
+        comisionSeleccionada = await ensureQuickComisionData({
+          rol: key,
+          planId,
+          servicioId,
+          fecha: fechaReferencia,
+        });
       }
-      if (seleccion?.id != null) {
-        state.simulator.inputs.comisiones[`${key}Id`] = seleccion.id;
+      if (comisionSeleccionada?.id != null) {
+        state.simulator.inputs.comisiones[`${key}Id`] = comisionSeleccionada.id;
       }
-      return seleccion || null;
+      return comisionSeleccionada || null;
     };
-
+    
     const comisionCliente = await resolverComision('cliente');
     const comisionAbogado = await resolverComision('abogado');
 
