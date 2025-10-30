@@ -79,12 +79,19 @@ const state = {
       servicioId: null,
       consumoIa: 0,
     },
+    meta: {
+      tipoCalculo: null,
+      showConsumo: true,
+      consumoRequired: false,
+      requiresConsumoIa: false,
+    },
   },
   quick: {
     impuestos: [],
     econconfig: null,
     impuestoCache: new Map(),
     comisionesCache: new Map(),
+    tarifasCache: new Map(),
   },
   econconfigForm: {
     mode: 'update',
@@ -1020,6 +1027,13 @@ function cacheDom() {
     scopeError: document.getElementById('simulator-scope-error'),
   };
 
+  if (dom.simulator.consumo) {
+    dom.simulator.consumoGroup = dom.simulator.consumo.closest('.col-12');
+  }
+  if (dom.simulator.consumoIa) {
+    dom.simulator.consumoIaGroup = dom.simulator.consumoIa.closest('.col-12');
+  }
+
   if (dom.simulator.modal && window.bootstrap?.Modal) {
     dom.simulator.modalInstance = window.bootstrap.Modal.getOrCreateInstance(
       dom.simulator.modal
@@ -1554,6 +1568,9 @@ async function persistTarifa(payload, formState) {
       throw new Error('La respuesta del servidor no contiene la tarifa guardada.');
     }
     upsertTarifa(saved);
+    if (state.quick.tarifasCache instanceof Map) {
+      state.quick.tarifasCache.clear();
+    }
     state.dom.tarifas.form.reset();
     await prepareScopeOptions('tarifas', getDefaultTarifa());
     getBootstrapModal(state.dom.tarifas.formModal).hide();
@@ -2512,6 +2529,13 @@ function bindSimulatorEvents() {
     simulator.planSelect?.classList.remove('is-invalid');
     simulator.servicioSelect?.classList.remove('is-invalid');
     hideSimulatorScopeError();
+    state.simulator.meta = {
+      tipoCalculo: null,
+      showConsumo: true,
+      consumoRequired: false,
+      requiresConsumoIa: false,
+    };
+    updateSimulatorDynamicFields();
     renderSimulator();
   });
 
@@ -2553,6 +2577,8 @@ async function prepareSimulatorForm() {
     servicioId: inputs.servicioId,
     preserveSelections: true,
   });
+
+  updateSimulatorDynamicFields();
 
   if (simulator.planSelect && inputs.planId) {
     simulator.planSelect.value = String(inputs.planId);
@@ -2737,6 +2763,56 @@ async function populateSimulatorServiceOptions({
   }
 }
 
+function updateSimulatorDynamicFields() {
+  const { simulator } = state.dom;
+  if (!simulator?.form) return;
+
+  const meta = state.simulator.meta || {};
+  const showConsumo = meta.showConsumo !== false;
+  const consumoRequired = !!meta.consumoRequired;
+  const requiresConsumoIa = !!meta.requiresConsumoIa;
+
+  const consumoGroup = simulator.consumoGroup;
+  const consumoInput = simulator.consumo;
+  if (consumoGroup) {
+    consumoGroup.classList.toggle('d-none', !showConsumo);
+  }
+  if (consumoInput) {
+    if (showConsumo) {
+      consumoInput.removeAttribute('disabled');
+      consumoInput.setAttribute('min', '0');
+    } else {
+      consumoInput.value = '';
+      consumoInput.setAttribute('disabled', '');
+    }
+    if (consumoRequired && showConsumo) {
+      consumoInput.setAttribute('required', '');
+    } else {
+      consumoInput.removeAttribute('required');
+    }
+  }
+
+  const consumoIaGroup = simulator.consumoIaGroup;
+  const consumoIaInput = simulator.consumoIa;
+  if (consumoIaGroup) {
+    consumoIaGroup.classList.toggle('d-none', !requiresConsumoIa);
+  }
+  if (consumoIaInput) {
+    if (requiresConsumoIa) {
+      consumoIaInput.removeAttribute('disabled');
+      consumoIaInput.setAttribute('min', '0');
+    } else {
+      consumoIaInput.value = '';
+      consumoIaInput.setAttribute('disabled', '');
+    }
+    if (requiresConsumoIa) {
+      consumoIaInput.setAttribute('required', '');
+    } else {
+      consumoIaInput.removeAttribute('required');
+    }
+  }
+}
+
 function renderSimulator() {
   const { simulator } = state.dom;
   if (!simulator) return;
@@ -2844,6 +2920,15 @@ async function submitSimulator(event) {
       throw new Error('No se encontró una tarifa vigente para los datos ingresados.');
     }
 
+    const tipoCalculo = (tarifa.tipo_calculo || tarifa.tipoCalculo || '').toLowerCase();
+    const iaUnitPrice = resolveIaUnitPrice(tarifa.parametros);
+    state.simulator.meta = {
+      tipoCalculo: tipoCalculo || null,
+      showConsumo: true,
+      consumoRequired: tipoCalculo === 'consumo_ia',
+      requiresConsumoIa: tipoCalculo === 'consumo_ia' && iaUnitPrice > 0,
+    };
+
     const econ = await ensureQuickEconconfigData();
     const impuesto = await ensureQuickImpuestoData(fecha);
     const comisionCliente = await ensureQuickComisionData({
@@ -2876,6 +2961,12 @@ async function submitSimulator(event) {
   } catch (error) {
     console.error('Error simulando', error);
     const moneda = state.quick.econconfig?.moneda_defecto || state.monedaFallback;
+    state.simulator.meta = {
+      tipoCalculo: null,
+      showConsumo: true,
+      consumoRequired: false,
+      requiresConsumoIa: false,
+    };
     state.simulator.result = {
       error: error.message || 'No se pudo generar la simulación.',
       subtotal: 0,
@@ -2900,6 +2991,7 @@ async function submitSimulator(event) {
     };
   } finally {
     state.simulator.loading = false;
+    updateSimulatorDynamicFields();
     renderSimulator();
   }
 }
@@ -3018,11 +3110,26 @@ function simulatorResultTemplate(result) {
 
 async function fetchSimulatorTarifa({ tarifaId, scope, planId, servicioId, fecha }) {
   try {
+    if (!(state.quick.tarifasCache instanceof Map)) {
+      state.quick.tarifasCache = new Map();
+    }
+    const cacheKey = tarifaId
+      ? `id:${tarifaId}`
+      : `scope:${scope || 'servicio'}|plan:${planId || 0}|servicio:${servicioId || 0}|fecha:${
+          fecha || ''
+        }`;
+    if (state.quick.tarifasCache.has(cacheKey)) {
+      const cached = state.quick.tarifasCache.get(cacheKey);
+      return cached ? cloneEntity(cached) : null;
+    }
+
     if (tarifaId) {
       const response = await apiGet(`/tarifas/${tarifaId}`);
       const body = await response.json();
       const tarifa = body?.tarifa || body;
-      return tarifa?.id ? tarifa : null;
+      const resolved = tarifa?.id ? tarifa : null;
+      state.quick.tarifasCache.set(cacheKey, resolved ? cloneEntity(resolved) : null);
+      return resolved;
     }
 
     const params = { vigencia: 'vigentes' };
@@ -3037,7 +3144,9 @@ async function fetchSimulatorTarifa({ tarifaId, scope, planId, servicioId, fecha
       : Array.isArray(body)
       ? body
       : [];
-    return selectBestScopedRule(items, { planId, servicioId, fecha });
+    const selected = selectBestScopedRule(items, { planId, servicioId, fecha });
+    state.quick.tarifasCache.set(cacheKey, selected ? cloneEntity(selected) : null);
+    return selected;
   } catch (error) {
     console.error('Error obteniendo tarifa para el simulador', error);
     throw error;
@@ -3177,9 +3286,35 @@ function isDateWithinRange(date, desde, hasta) {
   return start <= target && target <= end;
 }
 
+function cloneEntity(entity) {
+  if (!entity || typeof entity !== 'object') return entity;
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(entity);
+    } catch (error) {
+      // Ignorar y usar el fallback
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(entity));
+  } catch (error) {
+    return entity;
+  }
+}
+
 function resolveIaUnitPrice(parametros) {
   if (!parametros || typeof parametros !== 'object') return 0;
-  const candidates = ['tarifa_ia', 'tarifaIA', 'precio_unitario', 'precioUnitario', 'costo_unitario'];
+  const candidates = [
+    'tarifa_ia',
+    'tarifaIA',
+    'precio_unitario_ia',
+    'precioUnitarioIa',
+    'costo_unitario_ia',
+    'costoUnitarioIa',
+    'precio_unitario',
+    'precioUnitario',
+    'costo_unitario',
+  ];
   for (const key of candidates) {
     if (parametros[key] !== undefined && parametros[key] !== null && parametros[key] !== '') {
       const value = Number(parametros[key]);
@@ -3187,6 +3322,47 @@ function resolveIaUnitPrice(parametros) {
     }
   }
   return 0;
+}
+
+function resolveConsumptionUnitPrice(parametros, fallback = 0) {
+  if (!parametros || typeof parametros !== 'object') return Math.max(0, fallback || 0);
+  const candidates = [
+    'tarifa_consumo',
+    'tarifaConsumo',
+    'precio_consumo',
+    'precioConsumo',
+    'costo_consumo',
+    'costoConsumo',
+    'valor_consumo',
+    'valorConsumo',
+  ];
+  for (const key of candidates) {
+    if (parametros[key] !== undefined && parametros[key] !== null && parametros[key] !== '') {
+      const value = Number(parametros[key]);
+      if (Number.isFinite(value)) return Math.max(0, value);
+    }
+  }
+  return Math.max(0, Number(fallback) || 0);
+}
+
+function resolveFixedBaseAmount(parametros, fallback = 0) {
+  if (!parametros || typeof parametros !== 'object') return Math.max(0, Number(fallback) || 0);
+  const candidates = [
+    'tarifa_base',
+    'tarifaBase',
+    'cargo_fijo',
+    'cargoFijo',
+    'monto_base',
+    'montoBase',
+    'base',
+  ];
+  for (const key of candidates) {
+    if (parametros[key] !== undefined && parametros[key] !== null && parametros[key] !== '') {
+      const value = Number(parametros[key]);
+      if (Number.isFinite(value)) return Math.max(0, value);
+    }
+  }
+  return Math.max(0, Number(fallback) || 0);
 }
 
 function resolveSimulationDiscount(parametros, subtotalRaw) {
@@ -3236,31 +3412,46 @@ function buildSimulationBreakdown({
   const decimales = Number.isInteger(econ?.decimales) ? econ.decimales : 2;
   const round = (value) => applyRoundingRule(value, regla, decimales);
 
-  const rawValor = Number(tarifa?.valor) || 0;
+  const tipoCalculo = (tarifa?.tipo_calculo || tarifa?.tipoCalculo || 'fijo').toLowerCase();
   const impuestoRate = impuesto?.porcentaje != null ? Number(impuesto.porcentaje) / 100 : 0;
   const comisionClienteRate = comisionCliente?.porcentaje != null ? Number(comisionCliente.porcentaje) / 100 : 0;
   const comisionAbogadoRate = comisionAbogado?.porcentaje != null ? Number(comisionAbogado.porcentaje) / 100 : 0;
 
   const incluyeImpuesto = tarifa?.incluye_impuesto === true || tarifa?.incluyeImpuesto === true;
-  const baseNetRaw = incluyeImpuesto && impuestoRate > 0 ? rawValor / (1 + impuestoRate) : rawValor;
 
   const safeConsumo = Number.isFinite(consumo) && consumo >= 0 ? consumo : 0;
   const safeConsumoIa = Number.isFinite(consumoIa) && consumoIa >= 0 ? consumoIa : 0;
-  const tarifaIaRaw = resolveIaUnitPrice(tarifa?.parametros) * safeConsumoIa;
+  const baseFallback = Number(tarifa?.valor) || 0;
+  const baseFijaGross = resolveFixedBaseAmount(
+    tarifa?.parametros,
+    tipoCalculo === 'fijo' ? baseFallback : 0
+  );
+  const consumoUnitPrice =
+    tipoCalculo === 'consumo_ia'
+      ? resolveConsumptionUnitPrice(tarifa?.parametros, baseFallback)
+      : 0;
+  const consumoGross = tipoCalculo === 'consumo_ia' ? Math.max(0, safeConsumo * consumoUnitPrice) : 0;
+  const baseGross = tipoCalculo === 'consumo_ia' ? baseFijaGross + consumoGross : baseFijaGross;
+
+  const iaUnitPrice = resolveIaUnitPrice(tarifa?.parametros);
+  const tarifaIaGross = Math.max(0, safeConsumoIa * iaUnitPrice);
+
+  const toNet = (gross) => (incluyeImpuesto && impuestoRate > 0 ? gross / (1 + impuestoRate) : gross);
+
+  const baseNetRaw = toNet(baseGross);
+  const tarifaIaRaw = toNet(tarifaIaGross);
 
   const subtotalRaw = baseNetRaw + tarifaIaRaw;
   const descuentoRaw = resolveSimulationDiscount(tarifa?.parametros, subtotalRaw);
   const descuentoAplicadoRaw = Math.min(Math.max(descuentoRaw, 0), subtotalRaw);
 
-  const impuestosRaw = Math.max(0, (subtotalRaw - descuentoAplicadoRaw) * impuestoRate);
-  const comisionClienteRaw = Math.max(
-    0,
-    (subtotalRaw - descuentoAplicadoRaw + impuestosRaw) * comisionClienteRate
-  );
-  const retencionRaw = Math.max(0, (subtotalRaw - descuentoAplicadoRaw) * comisionAbogadoRate);
+  const taxableBase = subtotalRaw - descuentoAplicadoRaw;
+  const impuestosRaw = Math.max(0, taxableBase * impuestoRate);
+  const comisionClienteRaw = Math.max(0, (taxableBase + impuestosRaw) * comisionClienteRate);
+  const retencionRaw = Math.max(0, taxableBase * comisionAbogadoRate);
 
-  const totalClienteRaw = subtotalRaw - descuentoAplicadoRaw + impuestosRaw + comisionClienteRaw;
-  const netoAbogadoRaw = subtotalRaw - descuentoAplicadoRaw - retencionRaw;
+  const totalClienteRaw = taxableBase + impuestosRaw + comisionClienteRaw;
+  const netoAbogadoRaw = taxableBase - retencionRaw;
 
   const moneda = econ?.moneda_defecto || econ?.monedaDefecto || state.monedaFallback;
 
@@ -4095,9 +4286,15 @@ async function loadTarifas() {
     const response = await apiGet('/tarifas');
     const { items } = await response.json();
     state.tarifas.items = items || [];
+    if (state.quick.tarifasCache instanceof Map) {
+      state.quick.tarifasCache.clear();
+    }
   } catch (error) {
     console.error('Error cargando tarifas', error);
     state.tarifas.items = [];
+    if (state.quick.tarifasCache instanceof Map) {
+      state.quick.tarifasCache.clear();
+    }
   }
 }
 
