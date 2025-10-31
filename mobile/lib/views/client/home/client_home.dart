@@ -17,6 +17,7 @@ import '../../../widgets/section_header.dart';
 import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
 import '../../lawyer/home/lawyer_home.dart';
+import '../../wallet/wallet_screen.dart';
 import '../lawyers/client_lawyer_search_screen.dart';
 import 'become_lawyer_screen.dart';
 import 'client_settings_screen.dart';
@@ -1112,7 +1113,35 @@ Widget _buildCatalogWarningCard(String message) {
         final UserAccount? lawyerAccount = _lawyerAccountForSession(session);
         final bool settingsActive = _activeView == _ClientHomeView.settings;
         return Scaffold(
-          appBar: const CustomAppBar(title: 'LegalBot - Cliente'),
+          appBar: CustomAppBar(
+            title: 'LegalBot - Cliente',
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.notifications),
+                onPressed: () {
+                  // TODO: Implementar notificaciones
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      settings:
+                          const RouteSettings(name: WalletScreen.routeName),
+                      builder: (_) => const WalletScreen(),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.person),
+                onPressed: () {
+                  // TODO: Implementar perfil
+                },
+              ),
+            ],
+          ),
           drawer: ClientNavigationDrawer(
             activeDestination: settingsActive
                 ? ClientDrawerDestination.settings
