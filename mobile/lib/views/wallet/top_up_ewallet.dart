@@ -1,164 +1,181 @@
-  import 'package:legalserviceapp/views/wallet/top_upwallet_successfully.dart';
-  import 'package:flutter/material.dart';
-  import '../../../../Constants/colors.dart';
-  import '../../../../Widgets/detailstext1.dart';
-  import '../../../../Widgets/detailstext2.dart';
-  import '../../../Widgets/customapp_bar.dart';
-  import '../../../Widgets/custombtn.dart';
+import 'package:flutter/material.dart';
 
-  class TopUpEWallet extends StatefulWidget {
-    const TopUpEWallet({super.key});
+import '../../../constants/colors.dart';
+import '../../../widgets/customapp_bar.dart';
+import '../../../widgets/custombtn.dart';
+import '../../../widgets/detailstext1.dart';
+import '../../../widgets/detailstext2.dart';
+import 'models/wallet_top_up.dart';
+import 'top_upwallet_successfully.dart';
 
-    @override
-    TopUpEWalletState createState() => TopUpEWalletState();
+class TopUpEWallet extends StatefulWidget {
+  const TopUpEWallet({
+    super.key,
+    required this.details,
+    required this.onConfirmed,
+  });
+
+  final WalletTopUpDetails details;
+  final WalletTopUpCompletion onConfirmed;
+
+  @override
+  State<TopUpEWallet> createState() => _TopUpEWalletState();
+}
+
+class _TopUpEWalletState extends State<TopUpEWallet> {
+  bool _acceptedTerms = false;
+  bool _processing = false;
+
+  String get _formattedAmount => widget.details.formattedAmount;
+
+  Future<void> _confirmTopUp() async {
+    if (!_acceptedTerms || _processing) return;
+    setState(() => _processing = true);
+
+    await Future.delayed(const Duration(milliseconds: 800));
+    final reference = _buildReference();
+
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TopUpWalletSuccessfully(
+          details: widget.details,
+          reference: reference,
+          onFinish: widget.onConfirmed,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() => _processing = false);
+    }
   }
 
-  class TopUpEWalletState extends State<TopUpEWallet> {
-    int _selectedPaymentIndex = -1; // Initialize with no selection
+  String _buildReference() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return 'LB-${widget.details.currency}-$timestamp';
+  }
 
-    void _selectPayment(int index) {
-      setState(() {
-        _selectedPaymentIndex = index;
-      });
-    }
-
-    Widget _buildPaymentOption({
-      required int index,
-      required String imagePath,
-      required String title,
-      double imageWidth = 30,
-    }) {
-      return GestureDetector(
-        onTap: () {
-          _selectPayment(index);
-        },
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.text3Color),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Image.asset(
-                  imagePath,
-                  width: imageWidth,
-                ),
-              ),
-              const SizedBox(
-                width: 10,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Text2(text2: title),
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: CircleAvatar(
-                  radius: 11,
-                  backgroundColor: _selectedPaymentIndex == index
-                      ? AppColors.buttonColor // Selected color
-                      : Colors.transparent, // Transparent if not selected
-                  child: CircleAvatar(
-                    radius: 9,
-                    backgroundColor: Colors.white,
-                    child: CircleAvatar(
-                      radius: 6,
-                      backgroundColor: _selectedPaymentIndex == index
-                          ? AppColors.buttonColor // Selected color
-                          : Colors.transparent, // Transparent if not selected
-                    ),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 14),
+          children: [
+            const CustomAppBar(text: 'Confirmar recarga', text1: ''),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text1(
+                    text1: 'Resumen de la recarga',
+                    size: 18,
+                  ),
+                  const SizedBox(height: 12),
+                  _SummaryRow(
+                    label: 'Monto',
+                    value: _formattedAmount,
+                  ),
+                  _SummaryRow(
+                    label: 'Método',
+                    value: widget.details.paymentMethod.label,
+                  ),
+                  _SummaryRow(
+                    label: 'Moneda',
+                    value: widget.details.currency,
+                  ),
+                  _SummaryRow(
+                    label: 'Voucher',
+                    value:
+                        widget.details.voucherCode?.toUpperCase() ?? 'No aplicado',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.button2Color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text2(
+                text2:
+                    'Recuerda que las próximas versiones podrían incluir comisiones '
+                    'adicionales según el método seleccionado. Revisa siempre los '
+                    'términos antes de confirmar.',
+              ),
+            ),
+            const SizedBox(height: 20),
+            CheckboxListTile(
+              value: _acceptedTerms,
+              onChanged: (value) {
+                setState(() => _acceptedTerms = value ?? false);
+              },
+              title: const Text(
+                'He leído y acepto los términos y condiciones de recarga.',
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              activeColor: AppColors.buttonColor,
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 12),
+            CustomButton(
+              text: _processing ? 'Confirmando...' : 'Confirmar',
+              onTap: _acceptedTerms && !_processing ? _confirmTopUp : null,
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
+}
 
-    @override
-    Widget build(BuildContext context) {
-      return Scaffold(
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const CustomAppBar(text: 'TopUpEWallet', text1: ''),
-                const SizedBox(
-                  height: 30,
-                ),
-                const Text1(
-                  text1: 'Credit & Debit Cards',
-                  size: 21,
-                ),
-                const SizedBox(
-                  height: 10,
-                ),
-                _buildPaymentOption(
-                  index: 0,
-                  imagePath: 'images/card.png',
-                  title: 'Add New Card',
-                ),
-                const SizedBox(
-                  height: 6,
-                ),
-                const Text1(
-                  text1: 'More payment Options',
-                  size: 20,
-                ),
-                const SizedBox(
-                  height: 4,
-                ),
-                _buildPaymentOption(
-                  index: 1,
-                  imagePath: 'images/card.png',
-                  title: 'Master Card',
-                ),
-                _buildPaymentOption(
-                  index: 2,
-                  imagePath: 'images/icons8-apple-logo-50.png',
-                  title: 'Apple Pay',
-                  imageWidth: 24,
-                ),
-                _buildPaymentOption(
-                  index: 3,
-                  imagePath: 'images/icons8-google-48.png',
-                  title: 'Google Pay',
-                  imageWidth: 24,
-                ),
-                _buildPaymentOption(
-                  index: 4,
-                  imagePath: 'images/icons8-paypal-48.png',
-                  title: 'PayPal',
-                  imageWidth: 30,
-                ),
-                const SizedBox(
-                  height: 10,
-                ),
-                const Spacer(),
-                CustomButton(
-                  text: 'Next',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const TopUpWalletSuccessfully(),
-                      ),
-                    );
-                  },
-                ),
-              ],
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text2(
+              text2: label,
             ),
           ),
-        ),
-      );
-    }
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text1(
+              text1: value,
+              size: 15,
+            ),
+          ),
+        ],
+      ),
+    );
   }
+}
