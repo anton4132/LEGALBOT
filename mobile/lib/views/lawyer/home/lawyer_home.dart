@@ -14,6 +14,7 @@ import '../../../widgets/shadow_card.dart';
 import '../../authentication/login_screen.dart';
 import '../../client/home/client_home.dart';
 import '../profile/lawyer_profile_screen.dart';
+import '../../wallet/wallet_screen.dart';
 
 class LawyerHome extends StatefulWidget {
   const LawyerHome({super.key});
@@ -462,7 +463,35 @@ class _LawyerHomeState extends State<LawyerHome> {
         }
 
         return Scaffold(
-          appBar: const CustomAppBar(title: 'LegalBot - Abogado'),
+          appBar: CustomAppBar(
+            title: 'LegalBot - Abogado',
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.notifications),
+                onPressed: () {
+                  // TODO: Implementar notificaciones
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      settings:
+                          const RouteSettings(name: WalletScreen.routeName),
+                      builder: (_) => const WalletScreen(),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.person),
+                onPressed: () {
+                  _navigateToProfileSection(LawyerProfileSubsection.profile);
+                },
+              ),
+            ],
+          ),
           drawer: CustomDrawer(
             userType: 'Abogado',
             userIcon: Icons.gavel,
