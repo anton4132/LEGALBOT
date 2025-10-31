@@ -86,8 +86,33 @@ model clienteabogado {
   usuario_clienteabogado_abogado_idTousuario usuario  @relation("clienteabogado_abogado_idTousuario", fields: [abogado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuario_clienteabogado_cliente_idTousuario usuario  @relation("clienteabogado_cliente_idTousuario", fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([abogado_id, cliente_id])
+  @@unique([abogado_id, cliente_id])
   @@index([creado_el])
+}
+
+
+enum est_cita {
+  pendiente
+  confirmada
+  cancelada
+  completada
+  no_show
+}
+
+enum est_consulta {
+  pendiente
+  respondida
+  cerrada
+}
+
+enum resp_consulta {
+  abogado
+  IA
+}
+
+enum tipo_consulta {
+  texto
+  audio
 }
 
 model consulta {
@@ -118,6 +143,16 @@ model consulta {
   @@index([estado])
   @@index([creada_el])
   @@index([tipo])
+  
+}
+
+
+
+enum est_doc_tramite {
+  pendiente
+  enviado
+  recibido
+  observado
 }
 
 model documento {
@@ -168,44 +203,55 @@ model archivo {
   @@index([creado_el])
 }
 
-model estadopago {
-  id     Int    @id @default(autoincrement()) @db.SmallInt
-  codigo String @unique
-  nombre String
-  pago   pago[]
+enum estado_pago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  FALLIDO
+  REEMBOLSADO
 }
 
 model pago {
   id                 Int           @id @default(autoincrement())
-  usuario_id         Int
-  monto              Decimal       @db.Decimal
-  moneda             String        @db.Char(3)
-  concepto           String?
-  proveedor_txn      String?
-  referencia         String?       @unique
-  voucher_archivo_id Int?          @unique
-  estado_id          Int           @db.SmallInt
-  metodo_pago        String?
+  usuario_id         Int            //backend
+  monto              Decimal       @db.Decimal // ya esta 
+  moneda             String        @db.Char(3)  // ya esta
+  voucher_archivo_id Int?          @unique  // ya esta
+  estado             estado_pago  @default(PENDIENTE)    //backend  
+  metodo_pago        String?        //ya esta 
+
+
+  //////////////////////////////////////////////////////////////////////////
   servicio_id        Int?
   plan_id            Int?
+
+  //////////////////////////////////////////////////////////////////////////
   creado_el          DateTime      @default(now()) @db.Timestamptz(6)
   actualizado_el     DateTime      @updatedAt @db.Timestamptz(6)
+
+
+concepto           String?        //backend
+  proveedor_txn      String?        //backend
+  referencia         String?       @unique //backend
+
+  ///////////////////////////////////////////////////////////////////////////////
   cita               cita[]
   consultas          consulta[]
   documentos         documento[]
-  estadopago         estadopago    @relation(fields: [estado_id], references: [id])
   plan               plan?         @relation(fields: [plan_id], references: [id])
   servicio           servicio?     @relation(fields: [servicio_id], references: [id])
   usuario            usuario       @relation(fields: [usuario_id], references: [id])
   voucher            archivo?      @relation("PagoVoucher", fields: [voucher_archivo_id], references: [id])
   pagodetalle        pagodetalle[]
 
-  @@index([estado_id])
+
   @@index([usuario_id])
   @@index([creado_el])
   @@index([metodo_pago])
   @@index([plan_id])
   @@index([servicio_id])
+  @@index([estado])                          
+  @@index([usuario_id, estado, concepto]) 
 }
 
 model pagodetalle {
@@ -218,6 +264,36 @@ model pagodetalle {
   @@unique([pago_id, tipo])
   @@index([pago_id])
 }
+
+enum tipo_detalle_pago {
+  subtotal
+  descuento
+  impuestos
+  comision_plataforma
+  tarifa_ia
+  retencion
+  total_cliente
+  neto_abogado
+}
+
+enum tipo_calculo_tc {
+  fijo
+  consumo_ia
+}
+
+enum rol_aplica_tc {
+  cliente
+  abogado
+}
+
+enum tipo_regla_tc {
+  precio
+  comision
+}
+
+
+
+
 
 model tarifa {
   id               Int              @id @default(autoincrement())
@@ -276,6 +352,14 @@ model impuesto {
   @@index([vigencia_desde, vigencia_hasta])
 }
 
+
+/// Reglas de redondeo para presentación/precio final
+enum regla_redondeo {
+  dos_decimales
+  a_0_05
+  entero_superior
+}
+
 model econconfig {
   id             Int            @id @default(autoincrement())
   moneda_defecto String         @db.Char(3)
@@ -283,6 +367,13 @@ model econconfig {
   decimales      Int            @default(2)
   activo         Boolean        @default(true)
   actualizado_el DateTime       @updatedAt @db.Timestamptz(6)
+}
+
+enum EstadoVerificacion {
+  PENDIENTE
+  OBSERVADA
+  APROBADA
+  RECHAZADA
 }
 
 model verificacionabogado {
@@ -335,10 +426,18 @@ model colegiaturaabogado {
   verificacionabogado  verificacionabogado[]
 
   @@unique([colegio_id, numero])
-  @@unique([id, persona_id])
   @@index([colegio_id])
 }
 
+
+enum EstadoRecuperacionClave {
+  PENDIENTE
+  VERIFICADO
+  COMPLETADO
+  EXPIRADO
+
+  @@map("EstadoRecuperacionClave")
+}
 model recuperacionclave {
   id             Int                     @id @default(autoincrement())
   persona_id     Int
@@ -388,7 +487,6 @@ model direccion {
   estudio       estudio[]
   persona       persona[]
 
-  @@index([ubigeo_codigo])
   @@index([departamento, provincia, distrito])
 }
 
@@ -614,84 +712,4 @@ model bibliotecaitem {
 
   @@index([tipo])
   @@index([creado_el])
-}
-
-enum est_cita {
-  pendiente
-  confirmada
-  cancelada
-  completada
-  no_show
-}
-
-enum est_consulta {
-  pendiente
-  respondida
-  cerrada
-}
-
-enum resp_consulta {
-  abogado
-  IA
-}
-
-enum tipo_consulta {
-  texto
-  audio
-}
-
-enum est_doc_tramite {
-  pendiente
-  enviado
-  recibido
-  observado
-}
-
-enum tipo_detalle_pago {
-  subtotal
-  descuento
-  impuestos
-  comision_plataforma
-  tarifa_ia
-  retencion
-  total_cliente
-  neto_abogado
-}
-
-enum tipo_calculo_tc {
-  fijo
-  consumo_ia
-}
-
-enum rol_aplica_tc {
-  cliente
-  abogado
-}
-
-enum tipo_regla_tc {
-  precio
-  comision
-}
-
-/// Reglas de redondeo para presentación/precio final
-enum regla_redondeo {
-  dos_decimales
-  a_0_05
-  entero_superior
-}
-
-enum EstadoVerificacion {
-  PENDIENTE
-  OBSERVADA
-  APROBADA
-  RECHAZADA
-}
-
-enum EstadoRecuperacionClave {
-  PENDIENTE
-  VERIFICADO
-  COMPLETADO
-  EXPIRADO
-
-  @@map("EstadoRecuperacionClave")
 }
