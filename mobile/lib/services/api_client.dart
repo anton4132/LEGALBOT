@@ -31,7 +31,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const String _baseUrl = 'http://localhost:3000/api'; //https://legalbot1-tan.vercel.app/pages/usuarios.html
+  static const String _baseUrl = 'https://legalbot1-tan.vercel.app/api'; //https://legalbot1-tan.vercel.app/pages/usuarios.html
   static Object? _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {
