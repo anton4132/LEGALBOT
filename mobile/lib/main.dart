@@ -1,12 +1,13 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'constants/colors.dart';
 import 'views/splash/splashscreen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('es_PE', null);
   runApp(const MyApp());
 }
 

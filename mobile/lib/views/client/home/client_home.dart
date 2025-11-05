@@ -51,7 +51,6 @@ class _ClientHomeState extends State<ClientHome> {
   String? _catalogTariffWarning;
   List<_ServicePlanCatalogItem> _catalogItems = const [];
 
-  final DateFormat _dateFormatter = DateFormat('dd/MM/yyyy');
   @override
   void initState() {
     super.initState();
