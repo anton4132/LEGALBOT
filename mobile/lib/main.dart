@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'constants/colors.dart';
-import 'services/session_service.dart';
 import 'views/splash/splashscreen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SessionService.instance.initialize();
   await initializeDateFormatting('es_PE', null);
   runApp(const MyApp());
 }
