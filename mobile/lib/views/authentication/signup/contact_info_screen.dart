@@ -43,6 +43,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
   String? _dniError;
   String? _lastConsultedDni;
   DniLookupResult? _dniLookup;
+  bool _isCheckingPhone = false;
+  bool _phoneAvailable = false;
+  String? _phoneError;
+  String? _lastCheckedPhone;
+  int _phoneCheckRequestId = 0;
   bool _isCheckingEmailExistence = false;
   bool _isSendingEmailCode = false;
   bool _isVerifyingEmailCode = false;
@@ -252,8 +257,127 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
 
   String _normalizeEmail(String value) => value.trim().toLowerCase();
 
+  bool _isValidPhoneFormat(String digits) =>
+      digits.length >= 9 && digits.length <= 10;
+
   bool _isValidEmailFormat(String value) =>
       value.isNotEmpty && _emailPattern.hasMatch(value);
+
+  void _handlePhoneChanged(String value) {
+    final digits = _digitsOnly(value);
+    final hasValidFormat = _isValidPhoneFormat(digits);
+
+    if (!hasValidFormat) {
+      if (_phoneAvailable || _phoneError != null || _lastCheckedPhone != null) {
+        setState(() {
+          _phoneAvailable = false;
+          _phoneError = null;
+          _lastCheckedPhone = null;
+        });
+      }
+      return;
+    }
+
+    if (_phoneAvailable && _lastCheckedPhone == digits) {
+      return;
+    }
+
+    _checkPhoneAvailability(digits, showErrors: false);
+  }
+
+  Future<bool> _ensurePhoneAvailability({bool showErrors = true}) async {
+    final digits = _digitsOnly(_phoneController.text);
+    if (!_isValidPhoneFormat(digits)) {
+      if (showErrors) {
+        final bool isEmpty = digits.isEmpty;
+        setState(() {
+          _phoneError = isEmpty
+              ? 'Ingresa tu número de teléfono'
+              : 'Ingresa un número de teléfono válido';
+        });
+        _showSnack(
+          isEmpty
+              ? 'Ingresa tu número de teléfono'
+              : 'Ingresa un número de teléfono válido',
+        );
+      }
+      return false;
+    }
+
+    if (_phoneAvailable && _lastCheckedPhone == digits) {
+      return true;
+    }
+
+    return _checkPhoneAvailability(digits, showErrors: showErrors);
+  }
+
+  Future<bool> _checkPhoneAvailability(
+    String digits, {
+    bool showErrors = true,
+  }) async {
+    setState(() {
+      _isCheckingPhone = true;
+      _phoneError = null;
+    });
+    final int requestId = ++_phoneCheckRequestId;
+
+    try {
+      final conflicts = await ApiClient.checkPersonaConflicts(
+        telefono: digits,
+      );
+      if (!mounted || requestId != _phoneCheckRequestId) {
+        return false;
+      }
+      final available = !conflicts.contains('telefono');
+      setState(() {
+        _phoneAvailable = available;
+        _lastCheckedPhone = digits;
+        _phoneError = available ? null : 'Teléfono ya registrado';
+      });
+      if (!available && showErrors) {
+        _showSnack('Teléfono ya registrado');
+      }
+      return available;
+    } on ApiException catch (error) {
+      if (!mounted || requestId != _phoneCheckRequestId) {
+        return false;
+      }
+      final message =
+          error.message.isNotEmpty
+              ? error.message
+              : 'No se pudo verificar el teléfono proporcionado.';
+      setState(() {
+        _phoneAvailable = false;
+        _lastCheckedPhone = null;
+        _phoneError = message;
+      });
+      if (showErrors) {
+        _showSnack(message);
+      }
+    } catch (error) {
+      if (!mounted || requestId != _phoneCheckRequestId) {
+        return false;
+      }
+      final message = error.toString().replaceFirst('Exception: ', '');
+      final fallback = message.isNotEmpty
+          ? message
+          : 'Ocurrió un error al verificar el teléfono.';
+      setState(() {
+        _phoneAvailable = false;
+        _lastCheckedPhone = null;
+        _phoneError = fallback;
+      });
+      if (showErrors) {
+        _showSnack(fallback);
+      }
+    } finally {
+      if (mounted && requestId == _phoneCheckRequestId) {
+        setState(() => _isCheckingPhone = false);
+      }
+    }
+
+    return false;
+  }
 
   void _handleEmailChanged(String value) {
     final normalized = _normalizeEmail(value);
@@ -592,6 +716,11 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     final normalizedTelefono = _digitsOnly(_phoneController.text);
     final normalizedCorreo = _normalizeEmail(_emailController.text);
 
+    final bool phoneAvailable = await _ensurePhoneAvailability(showErrors: true);
+    if (!phoneAvailable) {
+      return;
+    }
+
     setState(() {
       _verificandoIdentidad = true;
       _dniError = null;
@@ -603,9 +732,12 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         return;
       }
 
+      final bool skipPhoneConflictCheck =
+          _phoneAvailable && _lastCheckedPhone == normalizedTelefono;
+
       final conflicts = await ApiClient.checkPersonaConflicts(
         dni: normalizedDni,
-        telefono: normalizedTelefono,
+        telefono: skipPhoneConflictCheck ? null : normalizedTelefono,
         correo: normalizedCorreo,
       );
 
@@ -613,9 +745,25 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         _showSnack('DNI ya registrado');
         return;
       }
-      if (conflicts.contains('telefono')) {
-        _showSnack('Teléfono ya registrado');
-        return;
+      if (!skipPhoneConflictCheck) {
+        if (conflicts.contains('telefono')) {
+          if (mounted) {
+            setState(() {
+              _phoneAvailable = false;
+              _phoneError = 'Teléfono ya registrado';
+              _lastCheckedPhone = null;
+            });
+          }
+          _showSnack('Teléfono ya registrado');
+          return;
+        }
+        if (mounted) {
+          setState(() {
+            _phoneAvailable = true;
+            _phoneError = null;
+            _lastCheckedPhone = normalizedTelefono;
+          });
+        }
       }
       if (conflicts.contains('correo')) {
         _showSnack('Correo ya registrado');
@@ -717,6 +865,15 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       return false;
     }
 
+    final normalizedPhoneDigits = _digitsOnly(_phoneController.text);
+    if (!_isValidPhoneFormat(normalizedPhoneDigits)) {
+      setState(() {
+        _phoneError = 'Ingresa un número de teléfono válido';
+      });
+      _showSnack('Ingresa un número de teléfono válido');
+      return false;
+    }
+
     final normalizedEmail = _normalizeEmail(_emailController.text);
     if (!_isValidEmailFormat(normalizedEmail)) {
       setState(() {
@@ -753,6 +910,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
         _isLoadingUbigeo ||
         _verificandoIdentidad ||
         _buscandoDni ||
+        _isCheckingPhone ||
         _isCheckingEmailExistence ||
         _isSendingEmailCode ||
         _isVerifyingEmailCode;
@@ -763,6 +921,8 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       primaryButtonText = 'Verificando datos...';
     } else if (_buscandoDni) {
       primaryButtonText = 'Consultando DNI...';
+    } else if (_isCheckingPhone) {
+      primaryButtonText = 'Verificando teléfono...';
     } else if (_isVerifyingEmailCode) {
       primaryButtonText = 'Verificando correo...';
     } else if (_isCheckingEmailExistence || _isSendingEmailCode) {
@@ -803,6 +963,28 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
       );
     } else if (dniLookup != null && _dniError == null) {
       dniSuffixIcon = const Icon(Icons.verified, color: Colors.green);
+    }
+
+    Widget? phoneSuffixIcon;
+    if (_isCheckingPhone) {
+      phoneSuffixIcon = const Padding(
+        padding: EdgeInsets.all(12.0),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.buttonColor),
+          ),
+        ),
+      );
+    } else if (_phoneAvailable && _phoneError == null) {
+      phoneSuffixIcon = const Icon(Icons.verified, color: Colors.green);
+    } else if (_phoneError != null) {
+      phoneSuffixIcon = const Icon(
+        Icons.error_outline,
+        color: Colors.redAccent,
+      );
     }
 
     final trimmedEmail = _emailController.text.trim();
@@ -1040,6 +1222,9 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                           LengthLimitingTextInputFormatter(10),
                         ],
                         maxLength: 10,
+                        onChanged: _handlePhoneChanged,
+                        suffixIcon: phoneSuffixIcon,
+                        errorText: _phoneError,
                       ),
 
                       // Email
@@ -1052,6 +1237,31 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                         errorText: _emailError,
                         suffixIcon: emailSuffixIcon,
                       ),
+                      if (showEmailCodeField) ...[
+                        const SizedBox(height: 12),
+                        _buildCustomTextField(
+                          controller: _emailCodeController,
+                          label: 'Código de verificación',
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          enabled: !_emailVerified,
+                          onChanged: (value) {
+                            if (_emailCodeError != null) {
+                              setState(() {
+                                _emailCodeError = null;
+                              });
+                            }
+                          },
+                          helperText: _emailVerified
+                              ? 'Correo verificado correctamente.'
+                              : 'Ingresa el código recibido en tu correo.',
+                          errorText: _emailCodeError,
+                          suffixIcon: emailCodeSuffixIcon,
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -1084,8 +1294,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                                                 strokeWidth: 2,
                                                 valueColor:
                                                     const AlwaysStoppedAnimation<
-                                                      Color
-                                                    >(Colors.white),
+                                                        Color>(Colors.white),
                                               ),
                                             ),
                                             const SizedBox(width: 12),
@@ -1121,100 +1330,66 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
                                           : _verifyEmailCode,
                                   style: OutlinedButton.styleFrom(
                                     side: BorderSide(
-                                      color:
-                                          _emailVerified
-                                              ? Colors.green
-                                              : AppColors.buttonColor,
+                                      color: _emailVerified
+                                          ? Colors.green
+                                          : AppColors.buttonColor,
                                     ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  child:
-                                      _isVerifyingEmailCode
-                                          ? Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              SizedBox(
-                                                width: 18,
-                                                height: 18,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  valueColor:
-                                                      const AlwaysStoppedAnimation<
-                                                        Color
-                                                      >(AppColors.buttonColor),
-                                                ),
+                                  child: _isVerifyingEmailCode
+                                      ? Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    const AlwaysStoppedAnimation<
+                                                        Color>(AppColors.buttonColor),
                                               ),
-                                              const SizedBox(width: 12),
-                                              const Text('Verificando...'),
-                                            ],
-                                          )
-                                          : Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Icon(
-                                                _emailVerified
-                                                    ? Icons.verified
-                                                    : Icons.verified_outlined,
-                                                color:
-                                                    _emailVerified
-                                                        ? Colors.green.shade700
-                                                        : AppColors.buttonColor,
-                                                size: 18,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            const Text('Verificando...'),
+                                          ],
+                                        )
+                                      : Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              _emailVerified
+                                                  ? Icons.verified
+                                                  : Icons.verified_outlined,
+                                              color: _emailVerified
+                                                  ? Colors.green.shade700
+                                                  : AppColors.buttonColor,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              _emailVerified
+                                                  ? 'Correo verificado'
+                                                  : 'Validar código',
+                                              style: TextStyle(
+                                                color: _emailVerified
+                                                    ? Colors.green.shade700
+                                                    : AppColors.buttonColor,
+                                                fontWeight: FontWeight.bold,
                                               ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                _emailVerified
-                                                    ? 'Correo verificado'
-                                                    : 'Validar código',
-                                                style: TextStyle(
-                                                  color:
-                                                      _emailVerified
-                                                          ? Colors
-                                                              .green
-                                                              .shade700
-                                                          : AppColors
-                                                              .buttonColor,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
+                                        ),
                                 ),
                               ),
                             ),
                           ],
                         ],
                       ),
-                      if (showEmailCodeField) ...[
-                        const SizedBox(height: 16),
-                        _buildCustomTextField(
-                          controller: _emailCodeController,
-                          label: 'Código de verificación',
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
-                          ],
-                          enabled: !_emailVerified,
-                          onChanged: (value) {
-                            if (_emailCodeError != null) {
-                              setState(() {
-                                _emailCodeError = null;
-                              });
-                            }
-                          },
-                          helperText:
-                              _emailVerified
-                                  ? 'Correo verificado correctamente.'
-                                  : 'Ingresa el código recibido en tu correo.',
-                          errorText: _emailCodeError,
-                          suffixIcon: emailCodeSuffixIcon,
-                        ),
-                      ],
 
                       // Departamento
                       _buildUbigeoDropdown(
