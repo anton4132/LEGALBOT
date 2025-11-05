@@ -38,6 +38,14 @@ class UserAccount {
   bool get isLawyer => (rolCodigo ?? '').toLowerCase() == 'abogado';
 
   bool get isClient => (rolCodigo ?? '').toLowerCase() == 'cliente';
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'usuarioId': usuarioId,
+        'rolId': rolId,
+        if (rolCodigo != null) 'rolCodigo': rolCodigo,
+        if (rolNombre != null) 'rolNombre': rolNombre,
+        'activo': activo,
+      };
 }
 
 class UserSession {
@@ -103,6 +111,37 @@ class UserSession {
     );
   }
 
+  factory UserSession.fromJson(Map<String, dynamic> json) {
+    final accountsJson = (json['accounts'] as List?) ?? const [];
+    final token = json['token'] as String?;
+    if (token == null || token.isEmpty) {
+      throw const FormatException('Sesión almacenada inválida: token ausente');
+    }
+
+    final accounts = accountsJson
+        .whereType<Map<String, dynamic>>()
+        .map(UserAccount.fromJson)
+        .toList(growable: false);
+
+    return UserSession(
+      personaId: _parseInt(json['personaId']),
+      usuarioId: _parseInt(json['usuarioId']),
+      rolId: _parseInt(json['rolId']),
+      rolCodigo: json['rolCodigo'] as String?,
+      rolNombre: json['rolNombre'] as String?,
+      activo: json['activo'] as bool? ?? false,
+      token: token,
+      telefono: json['telefono'] as String?,
+      dni: json['dni'] as String?,
+      correo: json['correo'] as String?,
+      nombreCompleto: json['nombreCompleto'] as String?,
+      accounts: accounts,
+      application: LawyerApplicationStatus.fromJson(
+        json['application'] as Map<String, dynamic>?,
+      ),
+    );
+  }
+
   bool get hasLawyerAccount => accounts.any((account) => account.isLawyer);
 
   bool get hasClientAccount => accounts.any((account) => account.isClient);
@@ -152,6 +191,22 @@ class UserSession {
       activo: result.activo,
     );
   }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'personaId': personaId,
+        'usuarioId': usuarioId,
+        'rolId': rolId,
+        if (rolCodigo != null) 'rolCodigo': rolCodigo,
+        if (rolNombre != null) 'rolNombre': rolNombre,
+        'activo': activo,
+        'token': token,
+        if (telefono != null) 'telefono': telefono,
+        if (dni != null) 'dni': dni,
+        if (correo != null) 'correo': correo,
+        if (nombreCompleto != null) 'nombreCompleto': nombreCompleto,
+        'accounts': accounts.map((account) => account.toJson()).toList(),
+        'application': application.toJson(),
+      };
 }
 
 class MobileAccountsResult {
