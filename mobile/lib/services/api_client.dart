@@ -149,17 +149,6 @@ class ApiClient {
     throw ApiException(message, statusCode: response.statusCode);
   }
 
-  static Future<bool> isPhoneRegistered(String telefono) async {
-    final normalizedTelefono = _digitsOnly(telefono);
-    if (normalizedTelefono.isEmpty) {
-      return false;
-    }
-    final conflicts = await checkPersonaConflicts(
-      telefono: normalizedTelefono,
-    );
-    return conflicts.contains('telefono');
-  }
-
   static Future<ClientContactSettings> fetchClientContactSettings({
     required String token,
     required int userId,
