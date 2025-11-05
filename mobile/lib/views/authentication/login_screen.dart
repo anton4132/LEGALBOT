@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../constants/colors.dart';
+import '../../models/user_session.dart';
 import '../../services/api_client.dart';
 import '../../services/session_service.dart';
 import '../../widgets/custombtn.dart';
@@ -30,11 +34,97 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    _restoreRememberedSession();
+  }
+
+  @override
   void dispose() {
     _phoneController.dispose();
     _dniController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreRememberedSession() async {
+    await SessionService.instance.initialize();
+    final remember = SessionService.instance.rememberMeEnabled;
+    final storedPhone = SessionService.instance.rememberedPhone;
+    final storedDni = SessionService.instance.rememberedDni;
+
+    if (!mounted) return;
+
+    setState(() {
+      _rememberMe = remember;
+      if (storedPhone != null && storedPhone.isNotEmpty) {
+        _phoneController.text = storedPhone;
+      }
+      if (storedDni != null && storedDni.isNotEmpty) {
+        _dniController.text = storedDni;
+      }
+    });
+
+    final rememberedSession = SessionService.instance.session;
+    if (remember && rememberedSession != null) {
+      await _attemptAutoLogin(rememberedSession);
+    }
+  }
+
+  Future<void> _attemptAutoLogin(UserSession session) async {
+    setState(() => _isLoading = true);
+    try {
+      final accounts = await ApiClient.fetchMobileAccounts(token: session.token);
+      final updatedSession = session.copyWith(
+        personaId: accounts.personaId ?? session.personaId,
+        nombreCompleto: accounts.nombreCompleto ?? session.nombreCompleto,
+        telefono: accounts.telefono ?? session.telefono,
+        dni: accounts.dni ?? session.dni,
+        correo: accounts.correo ?? session.correo,
+        accounts:
+            accounts.accounts.isNotEmpty ? accounts.accounts : session.accounts,
+      );
+
+      SessionService.instance.setSession(updatedSession);
+      await SessionService.instance.persistSession(
+        updatedSession,
+        rememberMe: true,
+        phone: SessionService.instance.rememberedPhone ??
+            _phoneController.text.trim(),
+        dni: SessionService.instance.rememberedDni ??
+            _dniController.text.trim(),
+      );
+
+      if (!mounted) return;
+      final Widget destination = updatedSession.isCurrentLawyer &&
+              !updatedSession.hasClientAccount
+          ? const LawyerHome()
+          : const ClientHome();
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => destination),
+      );
+    } on UnauthorizedException catch (error) {
+      await SessionService.instance.clearPersistence();
+      SessionService.instance.setSession(null);
+      if (!mounted) return;
+      setState(() {
+        _rememberMe = false;
+      });
+      final message = error.message.isNotEmpty
+          ? error.message
+          : 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.orange),
+      );
+    } catch (_) {
+      // Mantener al usuario en la pantalla de login si no se pudo restaurar.
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   String? _validatePhone(String? value) {
@@ -84,6 +174,17 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
       SessionService.instance.setSession(session);
+
+      if (_rememberMe) {
+        await SessionService.instance.persistSession(
+          session,
+          rememberMe: true,
+          phone: _phoneController.text.trim(),
+          dni: _dniController.text.trim(),
+        );
+      } else {
+        await SessionService.instance.clearPersistence();
+      }
 
       if (!mounted) return;
       final Widget destination =
@@ -235,9 +336,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               value: _rememberMe,
                               activeColor: AppColors.buttonColor,
                               onChanged: (value) {
+                                final checked = value ?? false;
                                 setState(() {
-                                  _rememberMe = value ?? false;
+                                  _rememberMe = checked;
                                 });
+                                if (!checked) {
+                                  unawaited(
+                                    SessionService.instance.clearPersistence(),
+                                  );
+                                }
                               },
                             ),
                             const Text('Recordarme'),

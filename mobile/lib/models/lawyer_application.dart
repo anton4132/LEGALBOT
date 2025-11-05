@@ -219,4 +219,45 @@ colegiaturaCarnetArchivo:
       approvedAt: approvedAt ?? this.approvedAt,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    String? formatDate(DateTime? value) => value?.toIso8601String();
+
+    String stateToJson() {
+      switch (state) {
+        case LawyerApplicationState.pendiente:
+          return 'PENDIENTE';
+        case LawyerApplicationState.observada:
+          return 'OBSERVADA';
+        case LawyerApplicationState.aprobada:
+          return 'APROBADA';
+        case LawyerApplicationState.rechazada:
+          return 'RECHAZADA';
+        case LawyerApplicationState.none:
+        default:
+          return 'NONE';
+      }
+    }
+
+    return <String, dynamic>{
+      if (id != null) 'id': id,
+      'estado': stateToJson(),
+      if (observation != null) 'observaciones': observation,
+      if (linkedinUrl != null) 'linkedin_url': linkedinUrl,
+      if (tituloArchivo != null) 'tituloArchivo': tituloArchivo?.toJson(),
+      if (colegiaturaNumero != null) 'colegiaturaNumero': colegiaturaNumero,
+      if (colegiaturaCarnetArchivo != null)
+        'colegiaturaCarnetArchivo': colegiaturaCarnetArchivo?.toJson(),
+      if (colegiaturaFechaEmision != null)
+        'colegiaturaFechaEmision': formatDate(colegiaturaFechaEmision),
+      if (colegiaturaFechaVigenciaHasta != null)
+        'colegiaturaFechaVigenciaHasta':
+            formatDate(colegiaturaFechaVigenciaHasta),
+      if (colegioNombre != null) 'colegioNombre': colegioNombre,
+      if (colegioRegion != null) 'colegioRegion': colegioRegion,
+      if (createdAt != null) 'creadoEl': formatDate(createdAt),
+      if (updatedAt != null) 'actualizadoEl': formatDate(updatedAt),
+      if (approvedAt != null) 'aprobadoEl': formatDate(approvedAt),
+    };
+  }
 }
