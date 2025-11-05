@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../constants/colors.dart';
 import '../../services/api_client.dart';
+import '../../services/remember_me_storage.dart';
 import '../../services/session_service.dart';
 import '../../widgets/custombtn.dart';
 import '../../widgets/detailstext1.dart';
@@ -30,11 +33,67 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    _preloadRememberedCredentials();
+    _phoneController.addListener(_syncRememberedInputs);
+    _dniController.addListener(_syncRememberedInputs);
+  }
+
+  @override
   void dispose() {
+    _phoneController.removeListener(_syncRememberedInputs);
+    _dniController.removeListener(_syncRememberedInputs);
     _phoneController.dispose();
     _dniController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _preloadRememberedCredentials() async {
+    final remember = await RememberMeStorage.getRememberPreference();
+    final storedPhone = await RememberMeStorage.getRememberedPhone();
+    final storedDni = await RememberMeStorage.getRememberedDni();
+
+    if (!mounted) return;
+
+    setState(() {
+      _rememberMe = remember;
+    });
+
+    if (remember) {
+      if (storedPhone != null) {
+        _phoneController.text = storedPhone;
+      }
+      if (storedDni != null) {
+        _dniController.text = storedDni;
+      }
+    }
+  }
+
+  void _syncRememberedInputs() {
+    if (!_rememberMe) return;
+    unawaited(
+      RememberMeStorage.saveRememberedAccount(
+        remember: true,
+        phone: _phoneController.text.trim(),
+        dni: _dniController.text.trim(),
+      ),
+    );
+  }
+
+  void _handleRememberToggle(bool? value) {
+    final remember = value ?? false;
+    setState(() {
+      _rememberMe = remember;
+    });
+    unawaited(
+      RememberMeStorage.saveRememberedAccount(
+        remember: remember,
+        phone: remember ? _phoneController.text.trim() : null,
+        dni: remember ? _dniController.text.trim() : null,
+      ),
+    );
   }
 
   String? _validatePhone(String? value) {
@@ -84,6 +143,13 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
       SessionService.instance.setSession(session);
+
+      await RememberMeStorage.saveRememberedAccount(
+        remember: _rememberMe,
+        phone: _rememberMe ? _phoneController.text.trim() : null,
+        dni: _rememberMe ? _dniController.text.trim() : null,
+        session: _rememberMe ? session : null,
+      );
 
       if (!mounted) return;
       final Widget destination =
@@ -234,11 +300,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             Checkbox(
                               value: _rememberMe,
                               activeColor: AppColors.buttonColor,
-                              onChanged: (value) {
-                                setState(() {
-                                  _rememberMe = value ?? false;
-                                });
-                              },
+                              onChanged: _handleRememberToggle,
                             ),
                             const Text('Recordarme'),
                             const Spacer(),

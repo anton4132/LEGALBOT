@@ -59,6 +59,7 @@ dependencies:
   flutter_vector_icons: ^2.0.0
   syncfusion_flutter_sliders: any
   flutter_markdown: ^0.7.6+2
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:

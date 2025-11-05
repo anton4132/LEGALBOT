@@ -78,6 +78,28 @@ class LawyerApplicationStatus {
 
   bool get isPending => state == LawyerApplicationState.pendiente;
 
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (id != null) 'id': id,
+        'estado': state.name.toUpperCase(),
+        if (observation != null) 'observaciones': observation,
+        if (linkedinUrl != null) 'linkedinUrl': linkedinUrl,
+        if (tituloArchivo != null) 'tituloArchivo': tituloArchivo!.toJson(),
+        if (colegiaturaNumero != null) 'colegiaturaNumero': colegiaturaNumero,
+        if (colegiaturaCarnetArchivo != null)
+          'colegiaturaCarnetArchivo': colegiaturaCarnetArchivo!.toJson(),
+        if (colegiaturaFechaEmision != null)
+          'colegiaturaFechaEmision':
+              colegiaturaFechaEmision!.toIso8601String(),
+        if (colegiaturaFechaVigenciaHasta != null)
+          'colegiaturaFechaVigenciaHasta':
+              colegiaturaFechaVigenciaHasta!.toIso8601String(),
+        if (colegioNombre != null) 'colegioNombre': colegioNombre,
+        if (colegioRegion != null) 'colegioRegion': colegioRegion,
+        if (createdAt != null) 'creadoEl': createdAt!.toIso8601String(),
+        if (updatedAt != null) 'actualizadoEl': updatedAt!.toIso8601String(),
+        if (approvedAt != null) 'aprobadoEl': approvedAt!.toIso8601String(),
+      };
+
   //construye el objeto de datos leyendo la respuesta del servidor. Lo hace a prueba de balas:
 
   factory LawyerApplicationStatus.fromJson(Map<String, dynamic>? json) {
