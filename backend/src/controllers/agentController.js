@@ -1,30 +1,14 @@
-const { legalbotApp } = require("../agent/legalbotgraph");
+const { legalbotApp, legalbotChat } = require("../agent/legalbotGraph");
 
+// Exponemos legalbotApp por si se requiere en pruebas unitarias u otros servicios.
 const sendMessage = async (req, res) => {
-  try {
-    const { threadId, message } = req.body;
-
-    const inputState = {
-      messages: [{ role: "user", content: message }],
-      // otros campos que definas en State (si aplica)
-    };
-
-    const config = {
-      configurable: {
-        thread_id: threadId || "anon", // o lo que ya estás usando
-      },
-    };
-
-    const result = await legalbotApp.invoke(inputState, config);
-
-    res.json({
-      ok: true,
-      data: result,
-    });
-  } catch (err) {
-    console.error("Error en sendMessage:", err);
-    res.status(500).json({ ok: false, error: err.message });
+  if (req && res) {
+    return legalbotChat(req, res);
   }
+
+  throw new Error(
+    "sendMessage debe ser utilizado como handler de Express y recibe (req, res)."
+  );
 };
 
-module.exports = { sendMessage };
+module.exports = { sendMessage, legalbotApp };
