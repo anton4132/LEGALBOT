@@ -493,11 +493,12 @@ Formato de respuesta EXACTO (JSON):
 // =======================
 
 async function retrieveKnowledgeNode(state) {
+  const currentErrors = Array.isArray(state.errors) ? state.errors : [];
   const lastUser = getLastUserMessage(state);
   if (!lastUser) {
     return {
       contextDocs: [],
-      errors: state.errors.concat("No se encontró mensaje de usuario."),
+      errors: currentErrors.concat("No se encontró mensaje de usuario."),
     };
   }
 
@@ -510,7 +511,7 @@ async function retrieveKnowledgeNode(state) {
     if (!docs.length) {
       return {
         contextDocs: [],
-        errors: state.errors.concat(
+        errors: currentErrors.concat(
           "Qdrant no devolvió resultados relevantes para esta consulta."
         ),
       };
@@ -523,7 +524,7 @@ async function retrieveKnowledgeNode(state) {
     console.error("[LegalBot][retrieveKnowledge] Error:", err.message);
     return {
       contextDocs: [],
-      errors: state.errors.concat(
+      errors: currentErrors.concat(
         `Error en recuperación de Qdrant/embeddings: ${
           err.message || String(err)
         }`
@@ -686,5 +687,6 @@ async function legalbotChat(req, res) {
 }
 
 module.exports = {
+  legalbotApp,
   legalbotChat,
 };
