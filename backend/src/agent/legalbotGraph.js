@@ -1,5 +1,4 @@
 // backend/src/controllers/legalbotAgent.controller.js 
-
 const axios = require("axios");
 const { z } = require("zod");
 const {
@@ -9,7 +8,7 @@ const {
   MemorySaver,
   MessagesZodMeta,
 } = require("@langchain/langgraph");
-const { registry } = require("@langchain/langgraph/zod");
+const { withLangGraph } = require("@langchain/langgraph/zod");
 const { HumanMessage, AIMessage } = require("@langchain/core/messages");
 
 // =======================
@@ -18,9 +17,8 @@ const { HumanMessage, AIMessage } = require("@langchain/core/messages");
 
 const LegalBotState = z.object({
   // Historial de mensajes (usuario + IA)
-  messages: z
-    .array(z.custom()) // BaseMessage en runtime
-    .register(registry, MessagesZodMeta),
+  messages: withLangGraph(z.array(z.custom()), MessagesZodMeta),
+
 
   // Chunks recuperados de Qdrant
   contextDocs: z
@@ -254,13 +252,44 @@ function extractJsonFromText(text) {
   }
 
   return text.trim();
+}function joinUrl(base, path) {
+  if (!base) return base;
+  const normalizedBase = base.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
+function resolveChatUrl() {
+  if (process.env.LLAMA_API_URL) {
+    return process.env.LLAMA_API_URL;
+  }
+
+  if (process.env.OLLAMA_BASE_URL) {
+    return joinUrl(process.env.OLLAMA_BASE_URL, "/api/chat");
+  }
+
+  return null;
+}
+
+function resolveEmbeddingsUrl() {
+  if (process.env.EMBEDDINGS_API_URL) {
+    return process.env.EMBEDDINGS_API_URL;
+  }
+
+  if (process.env.OLLAMA_BASE_URL) {
+    return joinUrl(process.env.OLLAMA_BASE_URL, "/api/embeddings");
+  }
+
+  return null;
 }
 
 // Helper general para llamar a LLaMA (reutilizado en clasificación y respuesta)
 async function callLlama(messages, options = {}) {
-  const llamaUrl = process.env.LLAMA_API_URL;
+  const llamaUrl = resolveChatUrl();
   if (!llamaUrl) {
-    throw new Error("LLAMA_API_URL no está definido en .env");
+    throw new Error(
+      "Debe definir LLAMA_API_URL o, alternativamente, OLLAMA_BASE_URL en .env"
+    );
   }
 
   const body = {
@@ -269,8 +298,10 @@ async function callLlama(messages, options = {}) {
     max_tokens: options.max_tokens ?? 1024,
   };
 
-  if (process.env.LLAMA_MODEL) {
-    body.model = process.env.LLAMA_MODEL;
+  const chatModel =
+    process.env.LLAMA_MODEL || process.env.AGENT_MODEL || undefined;
+  if (chatModel) {
+    body.model = chatModel;
   }
 
   const headers = {
@@ -311,14 +342,22 @@ async function callLlama(messages, options = {}) {
 // =======================
 
 async function embedQuery(questionText) {
-  const url = process.env.EMBEDDINGS_API_URL;
+  const url = resolveEmbeddingsUrl();
   if (!url) {
-    throw new Error("EMBEDDINGS_API_URL no está definido en .env");
+    throw new Error(
+      "Debe definir EMBEDDINGS_API_URL o, alternativamente, OLLAMA_BASE_URL en .env"
+    );
   }
 
   const body = {
     input: questionText,
   };
+
+  const embedModel =
+    process.env.EMBEDDINGS_MODEL || process.env.OLLAMA_EMBED_MODEL || undefined;
+  if (embedModel) {
+    body.model = embedModel;
+  }
 
   const headers = {
     "Content-Type": "application/json",
