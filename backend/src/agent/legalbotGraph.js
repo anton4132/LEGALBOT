@@ -1,6 +1,7 @@
 // backend/src/controllers/legalbotAgent.controller.js 
 const axios = require("axios");
 const { z } = require("zod");
+const { randomUUID } = require("crypto");
 const {
   StateGraph,
   START,
@@ -35,8 +36,24 @@ const LegalBotState = z.object({
   // Métrica simple
   llmCalls: z.number().optional(),
 
+  // Identificador de request para trazabilidad
+  requestId: z.string().optional(),
+
   // Log de errores a nivel de conversación
-  errors: z.array(z.string()).default([]),
+  errors: z
+    .array(
+      z.object({
+        step: z.string(),
+        message: z.string(),
+        requestId: z.string().optional(),
+        attempt: z.number().optional(),
+        latencyMs: z.number().optional(),
+        endpoint: z.string().optional(),
+        payloadSize: z.number().optional(),
+        detail: z.any().optional(),
+      })
+    )
+    .default([]),
 
   // 🔹 Resultado de clasificación de especialidad
   classifiedSpecialty: z
@@ -210,6 +227,22 @@ function getLastUserMessage(state) {
   return null;
 }
 
+function addError(state, error) {
+  const payloadSize =
+    error.payloadSize ??
+    (error.payload
+      ? Buffer.byteLength(JSON.stringify(error.payload))
+      : undefined);
+
+  const normalizedError = {
+    requestId: state.requestId,
+    ...error,
+    payloadSize,
+  };
+
+  return (state.errors || []).concat(normalizedError);
+}
+
 function normalizeMessageContent(content) {
   if (typeof content === "string") return content;
 
@@ -252,7 +285,42 @@ function extractJsonFromText(text) {
   }
 
   return text.trim();
-}function joinUrl(base, path) {
+}
+
+function parseJsonL(content) {
+  const lines = (content || "").split(/\r?\n/);
+  for (const line of lines) {
+    try {
+      if (!line.trim()) continue;
+      return JSON.parse(line);
+    } catch (e) {
+      continue;
+    }
+  }
+  return null;
+}
+
+function safeParseJson(content) {
+  if (!content) return { ok: false, error: new Error("Empty content") };
+  try {
+    return { ok: true, value: JSON.parse(content) };
+  } catch (firstErr) {
+    const repaired = parseJsonL(content);
+    if (repaired) return { ok: true, value: repaired };
+    const wrapped = content.replace(/^[^{\[]*/, "").replace(/[^}\]]*$/, "");
+    try {
+      return { ok: true, value: JSON.parse(wrapped) };
+    } catch (secondErr) {
+      return {
+        ok: false,
+        error: secondErr,
+        detail: { firstErr: firstErr.message, secondErr: secondErr.message },
+      };
+    }
+  }
+}
+
+function joinUrl(base, path) {
   if (!base) return base;
   const normalizedBase = base.replace(/\/+$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -296,6 +364,7 @@ async function callLlama(messages, options = {}) {
     messages,
     temperature: options.temperature ?? 0.1,
     max_tokens: options.max_tokens ?? 1024,
+    stream: options.stream ?? false,
   };
 
   const chatModel =
@@ -311,11 +380,32 @@ async function callLlama(messages, options = {}) {
     headers["Authorization"] = `Bearer ${process.env.LLAMA_API_KEY}`;
   }
 
-  const resp = await axios.post(llamaUrl, body, { headers });
+  const requestConfig = {
+    headers,
+    responseType: body.stream ? "stream" : "json",
+    timeout:
+      options.timeout ?? (Number(process.env.LLAMA_TIMEOUT_MS) || 120000),
+  };
+
+  const startedAt = Date.now();
+  const resp = await axios.post(llamaUrl, body, requestConfig);
+  const latencyMs = Date.now() - startedAt;
 
   let answerText = "";
 
-  if (resp.data?.output) {
+  if (body.stream && resp.data?.on) {
+    await new Promise((resolve) => {
+      resp.data.on("data", (chunk) => {
+        try {
+          const textChunk = chunk.toString();
+          answerText += textChunk;
+        } catch (e) {
+          answerText += String(chunk);
+        }
+      });
+      resp.data.on("end", resolve);
+    });
+  } else if (resp.data?.output) {
     answerText = resp.data.output;
   } else if (Array.isArray(resp.data?.choices)) {
     const choice = resp.data.choices[0] || {};
@@ -326,22 +416,22 @@ async function callLlama(messages, options = {}) {
       "";
   } else if (typeof resp.data === "string") {
     answerText = resp.data;
-  } else if (resp.data?.message?.content) {
-    answerText = resp.data.message.content;
+  } else if (resp.data?.message?.content || resp.data?.message?.text) {
+    answerText = resp.data.message.content ?? resp.data.message.text;
   }
 
   if (typeof answerText !== "string") {
     answerText = JSON.stringify(answerText);
   }
 
-  return answerText;
+  return { text: answerText, latencyMs };
 }
 
 // =======================
 // 3) Embeddings + QDRANT
 // =======================
 
-async function embedQuery(questionText) {
+async function embedQuery(questionText, state, attempt = 1) {
   const url = resolveEmbeddingsUrl();
   if (!url) {
     throw new Error(
@@ -367,25 +457,51 @@ async function embedQuery(questionText) {
     headers["Authorization"] = `Bearer ${process.env.EMBEDDINGS_API_KEY}`;
   }
 
-  const resp = await axios.post(url, body, { headers });
+  const startedAt = Date.now();
+  try {
+    const resp = await axios.post(url, body, {
+      headers,
+      timeout:
+        Number(process.env.EMBEDDINGS_TIMEOUT_MS) || Number(process.env.QDRANT_TIMEOUT_MS) || 20000,
+    });
 
-  // Ajusta según tu servicio de embeddings (Ollama /api/embeddings, etc.)
-  if (
-    resp.data &&
-    Array.isArray(resp.data.data) &&
-    resp.data.data[0]?.embedding
-  ) {
-    return resp.data.data[0].embedding;
+    // Ajusta según tu servicio de embeddings (Ollama /api/embeddings, etc.)
+    if (
+      resp.data &&
+      Array.isArray(resp.data.data) &&
+      resp.data.data[0]?.embedding
+    ) {
+      return { embedding: resp.data.data[0].embedding, latencyMs: Date.now() - startedAt };
+    }
+
+    if (resp.data && Array.isArray(resp.data.embedding)) {
+      return { embedding: resp.data.embedding, latencyMs: Date.now() - startedAt };
+    }
+
+    throw new Error("Respuesta de embeddings sin campo 'embedding'");
+  } catch (err) {
+    const isRetryable =
+      err.code === "ECONNABORTED" ||
+      err.response?.status === 429 ||
+      err.response?.status >= 500;
+    const maxAttempts = Number(process.env.EMBEDDINGS_MAX_ATTEMPTS) || 3;
+    if (isRetryable && attempt < maxAttempts) {
+      const backoff = (Number(process.env.EMBEDDINGS_BACKOFF_MS) || 300) * attempt;
+      const jitter = Math.floor(Math.random() * 100);
+      await new Promise((res) => setTimeout(res, backoff + jitter));
+      return embedQuery(questionText, state, attempt + 1);
+    }
+
+    throw err;
   }
-
-  if (resp.data && Array.isArray(resp.data.embedding)) {
-    return resp.data.embedding;
-  }
-
-  throw new Error("Respuesta de embeddings sin campo 'embedding'");
 }
 
-async function searchInQdrant(vector) {
+function normalizeVector(vector) {
+  if (!Array.isArray(vector)) return vector;
+  return vector.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0));
+}
+
+async function searchInQdrant(vector, state, attempt = 1) {
   const baseUrl = process.env.QDRANT_URL;
   const collection = process.env.QDRANT_COLLECTION;
 
@@ -395,35 +511,62 @@ async function searchInQdrant(vector) {
     );
   }
 
-  const resp = await axios.post(
-    `${baseUrl}/collections/${collection}/points/search`,
-    {
-      vector,
-      limit: 8,
-      with_payload: true,
-      with_vector: false,
-    },
-    {
-      headers: {
-        "Content-Type": "application/json",
-        ...(process.env.QDRANT_API_KEY
-          ? { "api-key": process.env.QDRANT_API_KEY }
-          : {}),
-      },
-    }
-  );
+  const payload = {
+    vector: normalizeVector(vector),
+    limit: 8,
+    with_payload: true,
+    with_vector: false,
+  };
 
-  const result = resp.data?.result || [];
-  return result.map((p) => ({
-    id: p.id != null ? String(p.id) : "",
-    text: p.payload?.text ?? p.payload?.content ?? "",
-    source:
-      p.payload?.source ??
-      p.payload?.norma ??
-      p.payload?.file_name ??
-      "",
-    score: p.score,
-  }));
+  const headers = {
+    "Content-Type": "application/json",
+    ...(process.env.QDRANT_API_KEY ? { "api-key": process.env.QDRANT_API_KEY } : {}),
+  };
+
+  const startedAt = Date.now();
+  try {
+    const resp = await axios.post(
+      `${baseUrl}/collections/${collection}/points/search`,
+      payload,
+      {
+        headers,
+        timeout: Number(process.env.QDRANT_TIMEOUT_MS) || 20000,
+      }
+    );
+
+    const latencyMs = Date.now() - startedAt;
+    const result = resp.data?.result || [];
+    return {
+      docs: result.map((p) => ({
+        id: p.id != null ? String(p.id) : "",
+        text: p.payload?.text ?? p.payload?.content ?? "",
+        source:
+          p.payload?.source ?? p.payload?.norma ?? p.payload?.file_name ?? "",
+        score: p.score,
+      })),
+      latencyMs,
+    };
+  } catch (err) {
+    const status = err.response?.status;
+    const isPayloadError = status === 400;
+    const isRetryable =
+      err.code === "ECONNABORTED" || status === 429 || status >= 500 || err.response?.statusText === "Timeout";
+    const maxAttempts = Number(process.env.QDRANT_MAX_ATTEMPTS) || 3;
+
+    if (isPayloadError && attempt === 1) {
+      const correctedPayload = { ...payload, vector: normalizeVector(vector) };
+      return searchInQdrant(correctedPayload.vector, state, attempt + 1);
+    }
+
+    if (isRetryable && attempt < maxAttempts) {
+      const backoff = (Number(process.env.QDRANT_BACKOFF_MS) || 500) * attempt;
+      const jitter = Math.floor(Math.random() * 150);
+      await new Promise((res) => setTimeout(res, backoff + jitter));
+      return searchInQdrant(vector, state, attempt + 1);
+    }
+
+    throw err;
+  }
 }
 
 // =======================
@@ -467,63 +610,102 @@ Formato de respuesta EXACTO (JSON):
 }
 `.trim();
 
+  const maxAttempts = Number(process.env.CLASSIFY_MAX_ATTEMPTS) || 3;
+  const errors = state.errors || [];
   let classification;
+  let lastError;
 
-  try {
-    const rawText = await callLlama(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      { temperature: 0 } // clasificación determinista
-    );
-
-    const jsonText = extractJsonFromText(rawText);
-    const parsed = JSON.parse(jsonText);
-    classification = SpecialtyClassificationSchema.parse(parsed);
-
-    // Validar que el id exista en la lista; si no, corregir por nombre
-    const exists = SPECIALTIES.find((s) => s.id === classification.id);
-    if (!exists) {
-      const byName = SPECIALTIES.find(
-        (s) =>
-          s.nombre.toLowerCase() === classification.nombre.toLowerCase()
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const { text: rawText, latencyMs } = await callLlama(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        {
+          temperature: 0,
+          timeout: Number(process.env.CLASSIFY_TIMEOUT_MS) || 20000,
+        }
       );
-      if (byName) {
-        classification.id = byName.id;
-        classification.nombre = byName.nombre;
+
+      const jsonText = extractJsonFromText(rawText);
+      const parsed = safeParseJson(jsonText);
+      if (!parsed.ok) {
+        throw parsed.error || new Error("JSON inválido en clasificación");
+      }
+
+      const validation = SpecialtyClassificationSchema.safeParse(parsed.value);
+      if (!validation.success) {
+        throw new Error(validation.error.message);
+      }
+
+      classification = validation.data;
+
+      const exists = SPECIALTIES.find((s) => s.id === classification.id);
+      if (!exists) {
+        const byName = SPECIALTIES.find(
+          (s) =>
+            s.nombre.toLowerCase() === classification.nombre.toLowerCase()
+        );
+        if (byName) {
+          classification.id = byName.id;
+          classification.nombre = byName.nombre;
+        }
+      }
+
+      return {
+        classifiedSpecialty: classification,
+        errors,
+      };
+    } catch (err) {
+      lastError = err;
+      const enhancedErrors = addError(state, {
+        step: "classify",
+        message: err.message || String(err),
+        attempt,
+      });
+      if (attempt < maxAttempts) {
+        // Reparación: pedir al modelo que corrija su salida previa
+        const repairPrompt = `Corrige la siguiente salida para que sea JSON válido con el esquema {id:number, nombre:string, confidence:number, justificacion?:string}. Devuelve solo JSON. Texto original: ${err.output || ""}`;
+        state = { ...state, errors: enhancedErrors };
+        try {
+          const { text: repairText } = await callLlama(
+            [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: repairPrompt },
+            ],
+            { temperature: 0, timeout: Number(process.env.CLASSIFY_TIMEOUT_MS) || 20000 }
+          );
+          const parsed = safeParseJson(repairText);
+          if (parsed.ok) {
+            const validation = SpecialtyClassificationSchema.safeParse(parsed.value);
+            if (validation.success) {
+              return {
+                classifiedSpecialty: validation.data,
+                errors: enhancedErrors,
+              };
+            }
+          }
+        } catch (repairError) {
+          state = { ...state, errors: addError(state, {
+            step: "classify",
+            message: repairError.message || String(repairError),
+            attempt: attempt + 0.5,
+          }) };
+        }
       } else {
-        classification = {
-          id: 4,
-          nombre: "Derecho Laboral",
-          confidence: 0,
-          justificacion:
-            "Fallback por id/nombre no coincidente. Se asigna Derecho Laboral.",
+        return {
+          classifiedSpecialty: classification || null,
+          errors: enhancedErrors,
         };
       }
     }
-  } catch (err) {
-    console.error("[LegalBot][classifyQuestion] Error clasificando:", err);
-    classification = {
-      id: 4,
-      nombre: "Derecho Laboral",
-      confidence: 0,
-      justificacion:
-        "Fallback de clasificación al fallar el modelo o el parseo.",
-    };
-
-    // 🔹 Parche mínimo: también registramos el error en el estado
-    return {
-      classifiedSpecialty: classification,
-      errors: [
-        ...(state.errors || []),
-        `[classifyQuestion] Error al clasificar: ${err.message || String(err)}`,
-      ],
-    };
   }
 
   return {
-    classifiedSpecialty: classification,
+    classifiedSpecialty: classification || null,
+    errors,
+    lastError,
   };
 }
 
@@ -544,15 +726,23 @@ async function retrieveKnowledgeNode(state) {
   const question = normalizeMessageContent(lastUser.content);
 
   try {
-    const embedding = await embedQuery(question);
-    const docs = await searchInQdrant(embedding);
+    const { embedding, latencyMs: embedLatency } = await embedQuery(
+      question,
+      state
+    );
+    const { docs, latencyMs: qdrantLatency } = await searchInQdrant(
+      embedding,
+      state
+    );
 
     if (!docs.length) {
       return {
         contextDocs: [],
-        errors: currentErrors.concat(
-          "Qdrant no devolvió resultados relevantes para esta consulta."
-        ),
+        errors: addError(state, {
+          step: "qdrant",
+          message: "Qdrant no devolvió resultados relevantes para esta consulta.",
+          latencyMs: qdrantLatency,
+        }),
       };
     }
 
@@ -560,14 +750,14 @@ async function retrieveKnowledgeNode(state) {
       contextDocs: docs,
     };
   } catch (err) {
-    console.error("[LegalBot][retrieveKnowledge] Error:", err.message);
+    const errors = addError(state, {
+      step: "qdrant",
+      message: err.message || String(err),
+      detail: err.response?.data || err.stack,
+    });
     return {
       contextDocs: [],
-      errors: currentErrors.concat(
-        `Error en recuperación de Qdrant/embeddings: ${
-          err.message || String(err)
-        }`
-      ),
+      errors,
     };
   }
 }
@@ -639,15 +829,16 @@ Contexto legal relevante:
 ${contextText}
 `.trim();
 
-  const rawAnswer = await callLlama(
+  const { text: rawAnswer } = await callLlama(
     [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    { temperature: 0.2 }
+    { temperature: 0.2, stream: false }
   );
 
-  const aiMsg = new AIMessage(rawAnswer);
+  const messageText = normalizeMessageContent(rawAnswer);
+  const aiMsg = new AIMessage(messageText);
 
   // 🔹 Parche mínimo importante:
   //    devolvemos SOLO el nuevo mensaje. LangGraph lo agrega al historial
@@ -695,14 +886,14 @@ async function legalbotChat(req, res) {
 
     const initialState = {
       messages: [new HumanMessage(message)],
+      requestId: req.headers["x-request-id"] || randomUUID(),
     };
 
     // Si quieres conversaciones persistentes por usuario:
     // const userId = req.user?.id;
     // const config = { configurable: { thread_id: `user-${userId}` } };
-    const config = threadId
-      ? { configurable: { thread_id: threadId } }
-      : undefined;
+    const resolvedThreadId = threadId || initialState.requestId || randomUUID();
+    const config = { configurable: { thread_id: resolvedThreadId } };
 
     const resultState = await legalbotApp.invoke(initialState, config);
 
