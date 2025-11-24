@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
@@ -9,7 +10,6 @@ import '../../../models/lawyer_application.dart';
 import '../../../models/user_session.dart';
 import '../../../services/api_client.dart';
 import '../../../services/session_service.dart';
-import '../../../widgets/consultation_input.dart';
 import '../../../widgets/custom_app_bar.dart';
 import '../../../widgets/custombtn.dart';
 import '../../../widgets/gradient_container.dart';
@@ -41,9 +41,13 @@ enum _ClientHomeView { dashboard, settings }
 
 class _ClientHomeState extends State<ClientHome> {
   static const String _apiBaseUrl = 'http://localhost:3000/api';
-  final TextEditingController _consultationController = TextEditingController();
-  bool _isRecording = false;
   bool _isSwitchingAccount = false;
+  final TextEditingController _chatController = TextEditingController();
+  final ScrollController _chatScrollController = ScrollController();
+  final List<_ChatMessage> _chatMessages = [];
+  bool _isSendingMessage = false;
+  String? _chatThreadId;
+  String? _chatError;
   late _ClientHomeView _activeView;
   late ClientSettingsSubsection _activeSettingsSubsection;
   bool _isLoadingCatalog = false;
@@ -67,7 +71,8 @@ class _ClientHomeState extends State<ClientHome> {
 
   @override
   void dispose() {
-    _consultationController.dispose();
+    _chatController.dispose();
+    _chatScrollController.dispose();
     super.dispose();
   }
 
@@ -293,16 +298,6 @@ throw UnauthorizedException(resolvedMessage);
     return '$baseMessage\nDetalle: $trimmed';
   }
 
-  void _handleSendConsultation() {
-    final text = _consultationController.text.trim();
-    if (text.isNotEmpty) {
-      // TODO: Implementar envío de consulta al backend
-      // ignore: avoid_print
-      print('Consulta enviada: $text');
-      _consultationController.clear();
-    }
-  }
-
   void _showSnackBar(String message,
       {Color color = AppColors.tabColor}) {
     ScaffoldMessenger.of(
@@ -326,9 +321,9 @@ throw UnauthorizedException(resolvedMessage);
     })();
 
     setState(() {
-      _isRecording = false;
       _isSwitchingAccount = false;
-      _consultationController.clear();
+      _isSendingMessage = false;
+      _chatController.clear();
     });
 
     final messenger = ScaffoldMessenger.of(context);
@@ -399,14 +394,6 @@ throw UnauthorizedException(resolvedMessage);
     }
   }
 
-  void _handleMicPressed() {
-    setState(() => _isRecording = !_isRecording);
-    // TODO: Implementar grabación de voz
-    // ignore: avoid_print
-    print(_isRecording ? 'Iniciando grabación...' : 'Deteniendo grabación...');
-  }
-
-
   void _showHomeView() {
     if (_activeView == _ClientHomeView.dashboard) return;
     setState(() {
@@ -418,6 +405,125 @@ throw UnauthorizedException(resolvedMessage);
     setState(() {
       _activeView = _ClientHomeView.settings;
       _activeSettingsSubsection = subsection;
+    });
+  }
+
+  Future<void> _sendChatMessage() async {
+    final text = _chatController.text.trim();
+    if (text.isEmpty || _isSendingMessage) return;
+
+    setState(() {
+      _chatMessages.add(
+        _ChatMessage(role: _ChatRole.user, text: text),
+      );
+      _chatError = null;
+      _isSendingMessage = true;
+    });
+    _chatController.clear();
+    _scrollChatToBottom();
+
+    try {
+      final response = await _postChatMessage(text);
+      final reply = _resolveChatReply(response);
+
+      setState(() {
+        if (reply != null) {
+          _chatMessages.add(
+            _ChatMessage(role: _ChatRole.bot, text: reply),
+          );
+        }
+        if (response is Map<String, dynamic>) {
+          final threadId = response['threadId'];
+          if (threadId is String && threadId.isNotEmpty) {
+            _chatThreadId = threadId;
+          }
+        }
+      });
+      _scrollChatToBottom();
+    } on UnauthorizedException catch (error) {
+      _handleUnauthorized(error.message);
+    } catch (error) {
+      setState(() {
+        _chatError = error.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingMessage = false);
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> _postChatMessage(String message) async {
+    final session = SessionService.instance.session;
+    final uri = Uri.parse('$_apiBaseUrl/agent/chat');
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (session != null) 'Authorization': 'Bearer ${session.token}',
+    };
+
+    final payload = <String, dynamic>{'message': message};
+    if (_chatThreadId != null) {
+      payload['threadId'] = _chatThreadId;
+    }
+
+    final response = await http.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 401) {
+      final resolvedMessage = _extractMessage(response.body) ??
+          'Tu sesión ha expirado. Inicia sesión nuevamente.';
+      throw UnauthorizedException(resolvedMessage);
+    }
+
+    final decoded = (() {
+      if (response.body.isEmpty) return <String, dynamic>{};
+      try {
+        final parsed = jsonDecode(response.body);
+        if (parsed is Map<String, dynamic>) {
+          return parsed;
+        }
+      } catch (_) {
+        // Ignorar parseos inválidos; se resolverán abajo
+      }
+      return <String, dynamic>{};
+    })();
+
+    if (response.statusCode >= 400) {
+      final message = _extractMessage(response.body) ??
+          decoded['error'] as String? ??
+              'No se pudo enviar el mensaje al chatbot (código ${response.statusCode}).';
+      throw ApiException(message, statusCode: response.statusCode);
+    }
+
+    return decoded;
+  }
+
+  String? _resolveChatReply(Map<String, dynamic> response) {
+    final reply = response['reply'];
+    if (reply is String && reply.trim().isNotEmpty) {
+      return reply.trim();
+    }
+    final errors = response['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      final firstError = errors.first;
+      if (firstError is String && firstError.trim().isNotEmpty) {
+        return firstError.trim();
+      }
+    }
+    return 'No pude procesar tu solicitud en este momento.';
+  }
+
+  void _scrollChatToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_chatScrollController.hasClients) return;
+      _chatScrollController.animateTo(
+        _chatScrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
     });
   }
   UserAccount? _lawyerAccountForSession(UserSession? session) {
@@ -464,6 +570,213 @@ throw UnauthorizedException(resolvedMessage);
       default:
         return null;
     }
+  }
+
+  Widget _buildChatbotCard() {
+    return ShadowCard(
+      padding: EdgeInsets.zero,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black87,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.black.withOpacity(0.95),
+                    Colors.grey.shade900,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.smart_toy_outlined,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Legal AI Chatbot',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.buttonColor,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Beta',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_chatError != null)
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.12),
+                  border: const Border(
+                    bottom: BorderSide(color: Colors.redAccent, width: 0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.redAccent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _chatError!,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            SizedBox(
+              height: 320,
+              child: _chatMessages.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Envía tu primera consulta legal para empezar.',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _chatScrollController,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      itemCount: _chatMessages.length,
+                      itemBuilder: (context, index) {
+                        return _buildChatBubble(_chatMessages[index]);
+                      },
+                    ),
+            ),
+            const Divider(height: 1, color: Colors.white24),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+              child: _buildChatInput(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatBubble(_ChatMessage message) {
+    final bool isUser = message.role == _ChatRole.user;
+    final Color bubbleColor = isUser ? AppColors.buttonColor : Colors.grey[800]!;
+
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(12),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.72,
+        ),
+        decoration: BoxDecoration(
+          color: bubbleColor,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(isUser ? 16 : 6),
+            topRight: Radius.circular(isUser ? 6 : 16),
+            bottomLeft: const Radius.circular(16),
+            bottomRight: const Radius.circular(16),
+          ),
+        ),
+        child: Text(
+          message.text,
+          style: GoogleFonts.poppins(
+            fontSize: 15,
+            color: isUser ? Colors.black : Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatInput() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _chatController,
+            style: GoogleFonts.poppins(fontSize: 15, color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Haz tu consulta legal aquí...',
+              hintStyle: GoogleFonts.poppins(color: Colors.white60),
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              filled: true,
+              fillColor: Colors.grey[850],
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: const BorderSide(color: AppColors.buttonColor),
+              ),
+            ),
+            onSubmitted: (_) => _sendChatMessage(),
+          ),
+        ),
+        const SizedBox(width: 10),
+        InkWell(
+          onTap: _isSendingMessage ? null : _sendChatMessage,
+          child: CircleAvatar(
+            backgroundColor:
+                _isSendingMessage ? Colors.grey[700] : AppColors.buttonColor,
+            radius: 24,
+            child: _isSendingMessage
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: Colors.black,
+                    ),
+                  )
+                : const Icon(Icons.send, color: Colors.black),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildServicePlanSection() {
@@ -643,7 +956,8 @@ throw UnauthorizedException(resolvedMessage);
       ),
     );
   }
-Widget _buildCatalogWarningCard(String message) {
+
+  Widget _buildCatalogWarningCard(String message) {
     return ShadowCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -932,48 +1246,7 @@ Widget _buildCatalogWarningCard(String message) {
           ),
         ],
         const SizedBox(height: 20),
-        ShadowCard(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: const [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    color: AppColors.buttonColor,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Consulta Rápida',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.buttonColor,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Escribe tu consulta legal o usa el micrófono para dictar',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.text2Color,
-                ),
-              ),
-              const SizedBox(height: 10),
-              ConsultationInput(
-                controller: _consultationController,
-                hintText: 'Escribe tu consulta legal aquí...',
-                onSendPressed: _handleSendConsultation,
-                onMicPressed: _handleMicPressed,
-                isRecording: _isRecording,
-              ),
-            ],
-          ),
-        ),
+        _buildChatbotCard(),
         const SizedBox(height: 20),
         _buildServicePlanSection(),
         const SizedBox(height: 20),
@@ -2032,6 +2305,15 @@ class _CatalogCardState extends State<_CatalogCard> {
     return chips;
   }
 }
+
+class _ChatMessage {
+  final _ChatRole role;
+  final String text;
+
+  const _ChatMessage({required this.role, required this.text});
+}
+
+enum _ChatRole { user, bot }
 
 
 int? _asInt(Object? value) => _TariffRule._asInt(value);
