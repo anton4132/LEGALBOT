@@ -320,6 +320,44 @@ function safeParseJson(content) {
   }
 }
 
+
+function keywordFallbackClassification(text) {
+  if (!text || typeof text !== "string") return null;
+  const normalized = text.toLowerCase();
+  const rules = [
+    {
+      match: ["laboral", "trabajo", "contrato", "despido", "planilla"],
+      specialty: { id: 4, nombre: "Derecho Laboral" },
+    },
+    {
+      match: ["penal", "delito", "denuncia", "fiscalía"],
+      specialty: { id: 1, nombre: "Derecho Penal" },
+    },
+    {
+      match: ["civil", "contrato", "obligación", "responsabilidad"],
+      specialty: { id: 2, nombre: "Derecho Civil" },
+    },
+    {
+      match: ["familia", "custodia", "divorcio", "alimentos"],
+      specialty: { id: 3, nombre: "Derecho de Familia" },
+    },
+  ];
+
+  for (const rule of rules) {
+    if (rule.match.some((k) => normalized.includes(k))) {
+      return {
+        id: rule.specialty.id,
+        nombre: rule.specialty.nombre,
+        confidence: 0.35,
+        justificacion: "Clasificación heurística por palabras clave",
+      };
+    }
+  }
+
+  return null;
+}
+
+
 function joinUrl(base, path) {
   if (!base) return base;
   const normalizedBase = base.replace(/\/+$/, "");
@@ -342,6 +380,10 @@ function resolveChatUrl() {
 function resolveEmbeddingsUrl() {
   if (process.env.EMBEDDINGS_API_URL) {
     return process.env.EMBEDDINGS_API_URL;
+  }
+
+    if (process.env.OLLAMA_URL) {
+    return joinUrl(process.env.OLLAMA_URL, "/api/embeddings");
   }
 
   if (process.env.OLLAMA_BASE_URL) {
@@ -430,23 +472,15 @@ async function callLlama(messages, options = {}) {
 // =======================
 // 3) Embeddings + QDRANT
 // =======================
-
 async function embedQuery(questionText, state, attempt = 1) {
-  const url = resolveEmbeddingsUrl();
+  const ollamaEmbedUrl = process.env.OLLAMA_URL
+    ? joinUrl(process.env.OLLAMA_URL, "/api/embeddings")
+    : null;
+  const url = ollamaEmbedUrl || resolveEmbeddingsUrl();
   if (!url) {
     throw new Error(
-      "Debe definir EMBEDDINGS_API_URL o, alternativamente, OLLAMA_BASE_URL en .env"
+      "Debe definir EMBEDDINGS_API_URL o, alternativamente, OLLAMA_URL/OLLAMA_BASE_URL en .env"
     );
-  }
-
-  const body = {
-    input: questionText,
-  };
-
-  const embedModel =
-    process.env.EMBEDDINGS_MODEL || process.env.OLLAMA_EMBED_MODEL || undefined;
-  if (embedModel) {
-    body.model = embedModel;
   }
 
   const headers = {
@@ -458,7 +492,47 @@ async function embedQuery(questionText, state, attempt = 1) {
   }
 
   const startedAt = Date.now();
+  const maxAttempts = Number(process.env.EMBEDDINGS_MAX_ATTEMPTS) || 3;
+  const embedModel =
+    process.env.OLLAMA_EMBED_MODEL || process.env.EMBEDDINGS_MODEL || undefined;
+
   try {
+    if (ollamaEmbedUrl) {
+      const res = await fetch(ollamaEmbedUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: embedModel ?? "mxbai-embed-large",
+          prompt: questionText,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = new Error(
+          `Ollama embeddings request failed with status ${res.status}`
+        );
+        err.response = { status: res.status };
+        throw err;
+      }
+
+      const data = await res.json();
+      const embedding = data.embedding;
+
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error("Embedding vacío desde Ollama (dimensión 0)");
+      }
+
+      return { embedding, latencyMs: Date.now() - startedAt };
+    }
+
+    const body = {
+      input: questionText,
+    };
+
+    if (embedModel) {
+      body.model = embedModel;
+    }
+
     const resp = await axios.post(url, body, {
       headers,
       timeout:
@@ -471,27 +545,36 @@ async function embedQuery(questionText, state, attempt = 1) {
       Array.isArray(resp.data.data) &&
       resp.data.data[0]?.embedding
     ) {
-      return { embedding: resp.data.data[0].embedding, latencyMs: Date.now() - startedAt };
+      const embedding = resp.data.data[0].embedding;
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error("Embedding vacío o inválido");
+      }
+      return { embedding, latencyMs: Date.now() - startedAt };
     }
 
     if (resp.data && Array.isArray(resp.data.embedding)) {
-      return { embedding: resp.data.embedding, latencyMs: Date.now() - startedAt };
+      const embedding = resp.data.embedding;
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error("Embedding vacío o inválido");
+      }
+      return { embedding, latencyMs: Date.now() - startedAt };
     }
 
     throw new Error("Respuesta de embeddings sin campo 'embedding'");
   } catch (err) {
+
     const isRetryable =
       err.code === "ECONNABORTED" ||
       err.response?.status === 429 ||
       err.response?.status >= 500;
-    const maxAttempts = Number(process.env.EMBEDDINGS_MAX_ATTEMPTS) || 3;
     if (isRetryable && attempt < maxAttempts) {
       const backoff = (Number(process.env.EMBEDDINGS_BACKOFF_MS) || 300) * attempt;
       const jitter = Math.floor(Math.random() * 100);
       await new Promise((res) => setTimeout(res, backoff + jitter));
       return embedQuery(questionText, state, attempt + 1);
     }
-
+    
+    err.step = err.step || "embed";
     throw err;
   }
 }
@@ -517,6 +600,12 @@ async function searchInQdrant(vector, state, attempt = 1) {
     with_payload: true,
     with_vector: false,
   };
+
+   if (!Array.isArray(payload.vector) || payload.vector.length === 0) {
+    const err = new Error("Embedding no válido para Qdrant (vector vacío)");
+    err.step = "embed";
+    throw err;
+  }
 
   const headers = {
     "Content-Type": "application/json",
@@ -694,9 +783,22 @@ Formato de respuesta EXACTO (JSON):
           }) };
         }
       } else {
+        const heuristic = keywordFallbackClassification(userText);
+        const finalClassification = classification || heuristic;
+        const errorsWithFallback = finalClassification
+          ? addError(
+              { ...state, errors: enhancedErrors },
+              {
+                step: "classify",
+                message: "Se aplicó clasificación heurística por fallos del modelo.",
+                attempt: attempt + 0.9,
+              }
+            )
+          : enhancedErrors;
+
         return {
-          classifiedSpecialty: classification || null,
-          errors: enhancedErrors,
+          classifiedSpecialty: finalClassification || null,
+          errors: errorsWithFallback,
         };
       }
     }
@@ -712,14 +814,15 @@ Formato de respuesta EXACTO (JSON):
 // =======================
 // 5) Nodo: retrieveKnowledge (Qdrant)
 // =======================
-
 async function retrieveKnowledgeNode(state) {
-  const currentErrors = Array.isArray(state.errors) ? state.errors : [];
   const lastUser = getLastUserMessage(state);
   if (!lastUser) {
     return {
       contextDocs: [],
-      errors: currentErrors.concat("No se encontró mensaje de usuario."),
+      errors: addError(state, {
+        step: "retrieveKnowledge",
+        message: "No se encontró mensaje de usuario.",
+      }),
     };
   }
 
@@ -740,7 +843,8 @@ async function retrieveKnowledgeNode(state) {
         contextDocs: [],
         errors: addError(state, {
           step: "qdrant",
-          message: "Qdrant no devolvió resultados relevantes para esta consulta.",
+          message:
+            "Qdrant no devolvió resultados relevantes para esta consulta.",
           latencyMs: qdrantLatency,
         }),
       };
@@ -751,7 +855,7 @@ async function retrieveKnowledgeNode(state) {
     };
   } catch (err) {
     const errors = addError(state, {
-      step: "qdrant",
+      step: err.step || "qdrant",
       message: err.message || String(err),
       detail: err.response?.data || err.stack,
     });
@@ -761,6 +865,7 @@ async function retrieveKnowledgeNode(state) {
     };
   }
 }
+
 
 // =======================
 // 6) Nodo: LLM (respuesta final)
@@ -902,12 +1007,13 @@ async function legalbotChat(req, res) {
     const answer = last ? normalizeMessageContent(last.content) : "";
 
     return res.json({
-      reply: answer,
-      contextDocs: resultState.contextDocs || [],
-      classifiedSpecialty: resultState.classifiedSpecialty || null,
-      errors: resultState.errors || [],
-      threadId: threadId || null,
-    });
+  reply: answer,
+  contextDocs: resultState.contextDocs || [],
+  classifiedSpecialty: resultState.classifiedSpecialty || null,
+  errors: resultState.errors || [],
+  threadId: resolvedThreadId, // <-- este es el que realmente usaste
+});
+
   } catch (err) {
     console.error("[LegalBot][HTTP] Error:", err);
     return res
