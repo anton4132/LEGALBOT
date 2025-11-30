@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,7 +24,6 @@ import 'become_lawyer_screen.dart';
 import 'client_settings_screen.dart';
 import '../widgets/client_navigation_drawer.dart';
 
-
 class ClientHome extends StatefulWidget {
   final bool showSettings;
   final ClientSettingsSubsection initialSettingsSubsection;
@@ -37,6 +37,7 @@ class ClientHome extends StatefulWidget {
   @override
   State<ClientHome> createState() => _ClientHomeState();
 }
+
 enum _ClientHomeView { dashboard, settings }
 
 class _ClientHomeState extends State<ClientHome> {
@@ -48,6 +49,7 @@ class _ClientHomeState extends State<ClientHome> {
   bool _isSendingMessage = false;
   String? _chatThreadId;
   String? _chatError;
+  bool _isChatExpanded = false;
   late _ClientHomeView _activeView;
   late ClientSettingsSubsection _activeSettingsSubsection;
   bool _isLoadingCatalog = false;
@@ -59,14 +61,14 @@ class _ClientHomeState extends State<ClientHome> {
   void initState() {
     super.initState();
     _activeView =
-        widget.showSettings ? _ClientHomeView.settings : _ClientHomeView.dashboard;
+        widget.showSettings
+            ? _ClientHomeView.settings
+            : _ClientHomeView.dashboard;
     _activeSettingsSubsection = widget.initialSettingsSubsection;
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) {
-        _refreshApplicationStatus();
-        _loadServicePlanCatalog();
-      },
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshApplicationStatus();
+      _loadServicePlanCatalog();
+    });
   }
 
   @override
@@ -85,11 +87,11 @@ class _ClientHomeState extends State<ClientHome> {
         token: session.token,
       );
       SessionService.instance.updateApplication(status);
-        try {
+      try {
         final accounts = await ApiClient.fetchMobileAccounts(
           token: session.token,
         );
-        
+
         SessionService.instance.updateAccounts(accounts.accounts);
       } catch (_) {
         // Ignorar fallos al refrescar cuentas; no bloquear UI
@@ -106,10 +108,9 @@ class _ClientHomeState extends State<ClientHome> {
       _isLoadingCatalog = true;
       _catalogError = null;
       _catalogTariffWarning = null;
-
     });
 
-     try {
+    try {
       final services = await _fetchServices();
       final plans = await _fetchPlans();
 
@@ -127,8 +128,10 @@ class _ClientHomeState extends State<ClientHome> {
 
       final items = <_ServicePlanCatalogItem>[];
       for (final service in services) {
-        final item =
-            _ServicePlanCatalogItem.fromService(service, tariffs: tariffs);
+        final item = _ServicePlanCatalogItem.fromService(
+          service,
+          tariffs: tariffs,
+        );
         if (item.isActive) {
           items.add(item);
         }
@@ -152,7 +155,6 @@ class _ClientHomeState extends State<ClientHome> {
       setState(() {
         _catalogItems = items;
         _catalogTariffWarning = tariffWarning;
-
       });
     } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
@@ -161,14 +163,12 @@ class _ClientHomeState extends State<ClientHome> {
       setState(() {
         _catalogError = error.message;
         _catalogTariffWarning = null;
-
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _catalogError = 'No se pudieron cargar los servicios y planes.';
         _catalogTariffWarning = null;
-
       });
     } finally {
       if (mounted) {
@@ -208,7 +208,9 @@ class _ClientHomeState extends State<ClientHome> {
   }
 
   Future<List<_TariffRule>> _fetchTariffRules() async {
-    final json = await _getJson('/tarifas?per_page=200&activo=true&vigencia=vigentes');
+    final json = await _getJson(
+      '/tarifas?per_page=200&activo=true&vigencia=vigentes',
+    );
     final List<_TariffRule> rules = [];
     if (json is Map<String, dynamic>) {
       final items = json['items'];
@@ -246,15 +248,17 @@ class _ClientHomeState extends State<ClientHome> {
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 401) {
       final message = _extractMessage(response.body);
-      final resolvedMessage = (() {
-        final trimmed = message?.trim();
-        if (trimmed != null && trimmed.isNotEmpty) {
-          return trimmed;
-        }
-        return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
-      })();
-throw UnauthorizedException(resolvedMessage);
-    }    if (response.statusCode >= 400) {
+      final resolvedMessage =
+          (() {
+            final trimmed = message?.trim();
+            if (trimmed != null && trimmed.isNotEmpty) {
+              return trimmed;
+            }
+            return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+          })();
+      throw UnauthorizedException(resolvedMessage);
+    }
+    if (response.statusCode >= 400) {
       throw ApiException(
         _extractMessage(response.body) ??
             'Error ${response.statusCode} al consultar $path',
@@ -291,15 +295,15 @@ throw UnauthorizedException(resolvedMessage);
     const baseMessage =
         'Mostramos el catálogo sin información de tarifas por ahora.';
     final trimmed = detail?.trim();
-    if (trimmed == null || trimmed.isEmpty ||
+    if (trimmed == null ||
+        trimmed.isEmpty ||
         trimmed == 'Error obteniendo tarifas') {
       return baseMessage;
     }
     return '$baseMessage\nDetalle: $trimmed';
   }
 
-  void _showSnackBar(String message,
-      {Color color = AppColors.tabColor}) {
+  void _showSnackBar(String message, {Color color = AppColors.tabColor}) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
@@ -312,13 +316,14 @@ throw UnauthorizedException(resolvedMessage);
       return;
     }
 
-    final resolvedMessage = (() {
-      final trimmed = message?.trim();
-      if (trimmed != null && trimmed.isNotEmpty) {
-        return trimmed;
-      }
-      return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
-    })();
+    final resolvedMessage =
+        (() {
+          final trimmed = message?.trim();
+          if (trimmed != null && trimmed.isNotEmpty) {
+            return trimmed;
+          }
+          return 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+        })();
 
     setState(() {
       _isSwitchingAccount = false;
@@ -354,14 +359,13 @@ throw UnauthorizedException(resolvedMessage);
 
     final LawyerApplicationStatus application =
         SessionService.instance.session?.application ??
-            LawyerApplicationStatus.empty;
-    final String? restrictionMessage =
-        _lawyerRestrictionMessage(application, lawyerAccount);
+        LawyerApplicationStatus.empty;
+    final String? restrictionMessage = _lawyerRestrictionMessage(
+      application,
+      lawyerAccount,
+    );
     if (restrictionMessage != null) {
-      _showSnackBar(
-        restrictionMessage,
-        color: AppColors.text3Color,
-      );
+      _showSnackBar(restrictionMessage, color: AppColors.text3Color);
       return;
     }
 
@@ -379,7 +383,7 @@ throw UnauthorizedException(resolvedMessage);
         context,
         MaterialPageRoute(builder: (_) => const LawyerHome()),
       );
-      } on UnauthorizedException catch (error) {
+    } on UnauthorizedException catch (error) {
       _handleUnauthorized(error.message);
     } catch (error) {
       if (!mounted) return;
@@ -413,9 +417,7 @@ throw UnauthorizedException(resolvedMessage);
     if (text.isEmpty || _isSendingMessage) return;
 
     setState(() {
-      _chatMessages.add(
-        _ChatMessage(role: _ChatRole.user, text: text),
-      );
+      _chatMessages.add(_ChatMessage(role: _ChatRole.user, text: text));
       _chatError = null;
       _isSendingMessage = true;
     });
@@ -428,9 +430,7 @@ throw UnauthorizedException(resolvedMessage);
 
       setState(() {
         if (reply != null) {
-          _chatMessages.add(
-            _ChatMessage(role: _ChatRole.bot, text: reply),
-          );
+          _chatMessages.add(_ChatMessage(role: _ChatRole.bot, text: reply));
         }
         if (response is Map<String, dynamic>) {
           final threadId = response['threadId'];
@@ -473,28 +473,31 @@ throw UnauthorizedException(resolvedMessage);
     );
 
     if (response.statusCode == 401) {
-      final resolvedMessage = _extractMessage(response.body) ??
+      final resolvedMessage =
+          _extractMessage(response.body) ??
           'Tu sesión ha expirado. Inicia sesión nuevamente.';
       throw UnauthorizedException(resolvedMessage);
     }
 
-    final decoded = (() {
-      if (response.body.isEmpty) return <String, dynamic>{};
-      try {
-        final parsed = jsonDecode(response.body);
-        if (parsed is Map<String, dynamic>) {
-          return parsed;
-        }
-      } catch (_) {
-        // Ignorar parseos inválidos; se resolverán abajo
-      }
-      return <String, dynamic>{};
-    })();
+    final decoded =
+        (() {
+          if (response.body.isEmpty) return <String, dynamic>{};
+          try {
+            final parsed = jsonDecode(response.body);
+            if (parsed is Map<String, dynamic>) {
+              return parsed;
+            }
+          } catch (_) {
+            // Ignorar parseos inválidos; se resolverán abajo
+          }
+          return <String, dynamic>{};
+        })();
 
     if (response.statusCode >= 400) {
-      final message = _extractMessage(response.body) ??
+      final message =
+          _extractMessage(response.body) ??
           decoded['error'] as String? ??
-              'No se pudo enviar el mensaje al chatbot (código ${response.statusCode}).';
+          'No se pudo enviar el mensaje al chatbot (código ${response.statusCode}).';
       throw ApiException(message, statusCode: response.statusCode);
     }
 
@@ -526,6 +529,7 @@ throw UnauthorizedException(resolvedMessage);
       );
     });
   }
+
   UserAccount? _lawyerAccountForSession(UserSession? session) {
     if (session == null) {
       return null;
@@ -564,7 +568,7 @@ throw UnauthorizedException(resolvedMessage);
         if (detail != null && detail.isNotEmpty) {
           return detail;
         }
-        return 'Tu postulación fue rechazada. Contáctanos para obtener más detalles.';
+        return 'Tu postulación fue rechaza  da. Contáctanos para obtener más detalles.';
       case LawyerApplicationState.aprobada:
       case LawyerApplicationState.none:
       default:
@@ -573,133 +577,262 @@ throw UnauthorizedException(resolvedMessage);
   }
 
   Widget _buildChatbotCard() {
-    return ShadowCard(
-      padding: EdgeInsets.zero,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.black.withOpacity(0.95),
-                    Colors.grey.shade900,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.smart_toy_outlined,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isWide = constraints.maxWidth > 720;
+        final double expandedWidth =
+            isWide
+                ? constraints.maxWidth * 0.7
+                : math.min(constraints.maxWidth, 640.0);
+        final BorderRadius radius = BorderRadius.circular(18);
+
+        if (!_isChatExpanded) {
+          return Align(
+            alignment: Alignment.centerRight,
+            child: Material(
+              elevation: 6,
+              color: Colors.transparent,
+              borderRadius: radius,
+              child: InkWell(
+                borderRadius: radius,
+                onTap: () {
+                  setState(() {
+                    _isChatExpanded = true;
+                  });
+                },
+                child: Container(
+                  width: isWide ? 320 : double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
                     color: Colors.white,
-                    size: 22,
+                    borderRadius: radius,
+                    border: Border.all(color: AppColors.strokeColor),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 14,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Legal AI Chatbot',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: AppColors.button2Color,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.smart_toy_outlined,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Text(
+                              '¿En qué puedo ayudarte?',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.buttonColor,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Chatea con tu asistente legal',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.text2Color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chat_bubble_outline,
+                        color: AppColors.text2Color,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            width: expandedWidth,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: radius,
+              border: Border.all(color: AppColors.strokeColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.07),
+                  blurRadius: 12,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: AppColors.buttonColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(18),
+                      topRight: Radius.circular(18),
                     ),
                   ),
-                  const Spacer(),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.smart_toy_outlined,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Legal AI Chatbot',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () {
+                          setState(() {
+                            _isChatExpanded = false;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                if (_chatError != null)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
-                      color: AppColors.buttonColor,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Beta',
-                      style: GoogleFonts.poppins(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_chatError != null)
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.12),
-                  border: const Border(
-                    bottom: BorderSide(color: Colors.redAccent, width: 0.5),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _chatError!,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 12,
+                      color: AppColors.text3Color.withOpacity(0.08),
+                      border: const Border(
+                        bottom: BorderSide(
+                          color: AppColors.text3Color,
+                          width: 0.5,
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            SizedBox(
-              height: 320,
-              child: _chatMessages.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Envía tu primera consulta legal para empezar.',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white70,
-                          fontSize: 14,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.text3Color,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _chatScrollController,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      itemCount: _chatMessages.length,
-                      itemBuilder: (context, index) {
-                        return _buildChatBubble(_chatMessages[index]);
-                      },
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _chatError!,
+                            style: const TextStyle(
+                              color: AppColors.text3Color,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: 260,
+                    maxHeight: isWide ? 420 : 480,
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.bgColor,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(18),
+                        bottomRight: Radius.circular(18),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child:
+                              _chatMessages.isEmpty
+                                  ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                      ),
+                                      child: Text(
+                                        'Envía tu primera consulta legal para empezar.',
+                                        style: GoogleFonts.poppins(
+                                          color: AppColors.text2Color,
+                                          fontSize: 14,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  )
+                                  : ListView.builder(
+                                    controller: _chatScrollController,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    itemCount: _chatMessages.length,
+                                    itemBuilder: (context, index) {
+                                      return _buildChatBubble(
+                                        _chatMessages[index],
+                                      );
+                                    },
+                                  ),
+                        ),
+                        const Divider(height: 1, color: AppColors.strokeColor),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                          child: _buildChatInput(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const Divider(height: 1, color: Colors.white24),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-              child: _buildChatInput(),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildChatBubble(_ChatMessage message) {
     final bool isUser = message.role == _ChatRole.user;
-    final Color bubbleColor = isUser ? AppColors.buttonColor : Colors.grey[800]!;
+    final Color bubbleColor = isUser ? AppColors.buttonColor : Colors.white;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -717,12 +850,23 @@ throw UnauthorizedException(resolvedMessage);
             bottomLeft: const Radius.circular(16),
             bottomRight: const Radius.circular(16),
           ),
+          border: isUser ? null : Border.all(color: AppColors.strokeColor),
+          boxShadow:
+              isUser
+                  ? [
+                    BoxShadow(
+                      color: AppColors.buttonColor.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                  : null,
         ),
         child: Text(
           message.text,
           style: GoogleFonts.poppins(
             fontSize: 15,
-            color: isUser ? Colors.black : Colors.white,
+            color: isUser ? Colors.white : AppColors.text1Color,
           ),
         ),
       ),
@@ -735,22 +879,27 @@ throw UnauthorizedException(resolvedMessage);
         Expanded(
           child: TextField(
             controller: _chatController,
-            style: GoogleFonts.poppins(fontSize: 15, color: Colors.white),
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              color: AppColors.text1Color,
+            ),
             decoration: InputDecoration(
               hintText: 'Haz tu consulta legal aquí...',
-              hintStyle: GoogleFonts.poppins(color: Colors.white60),
+              hintStyle: GoogleFonts.poppins(color: AppColors.text2Color),
               border: InputBorder.none,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 14,
+                horizontal: 16,
+              ),
               filled: true,
-              fillColor: Colors.grey[850],
+              fillColor: Colors.white,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(30),
-                borderSide: BorderSide.none,
+                borderSide: const BorderSide(color: AppColors.strokeColor),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(30),
-                borderSide: const BorderSide(color: AppColors.buttonColor),
+                borderSide: const BorderSide(color: AppColors.button2Color),
               ),
             ),
             onSubmitted: (_) => _sendChatMessage(),
@@ -761,18 +910,19 @@ throw UnauthorizedException(resolvedMessage);
           onTap: _isSendingMessage ? null : _sendChatMessage,
           child: CircleAvatar(
             backgroundColor:
-                _isSendingMessage ? Colors.grey[700] : AppColors.buttonColor,
+                _isSendingMessage ? Colors.grey[300] : AppColors.buttonColor,
             radius: 24,
-            child: _isSendingMessage
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      color: Colors.black,
-                    ),
-                  )
-                : const Icon(Icons.send, color: Colors.black),
+            child:
+                _isSendingMessage
+                    ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    )
+                    : const Icon(Icons.send, color: Colors.white),
           ),
         ),
       ],
@@ -839,17 +989,19 @@ throw UnauthorizedException(resolvedMessage);
       );
     }
 
-    final services = _catalogItems
-        .where((item) => item.type == _CatalogItemType.service)
-        .toList();
-    final plans = _catalogItems
-        .where((item) => item.type == _CatalogItemType.plan)
-        .toList();
+    final services =
+        _catalogItems
+            .where((item) => item.type == _CatalogItemType.service)
+            .toList();
+    final plans =
+        _catalogItems
+            .where((item) => item.type == _CatalogItemType.plan)
+            .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-         if (_catalogTariffWarning != null) ...[
+        if (_catalogTariffWarning != null) ...[
           _buildCatalogWarningCard(_catalogTariffWarning!),
           const SizedBox(height: 28),
         ],
@@ -917,10 +1069,7 @@ throw UnauthorizedException(resolvedMessage);
         children: [
           Row(
             children: const [
-              Icon(
-                Icons.error_outline,
-                color: AppColors.text3Color,
-              ),
+              Icon(Icons.error_outline, color: AppColors.text3Color),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -965,10 +1114,7 @@ throw UnauthorizedException(resolvedMessage);
         children: [
           Row(
             children: const [
-              Icon(
-                Icons.info_outline,
-                color: AppColors.button2Color,
-              ),
+              Icon(Icons.info_outline, color: AppColors.button2Color),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -1011,10 +1157,7 @@ throw UnauthorizedException(resolvedMessage);
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.info_outline,
-            color: AppColors.button2Color,
-          ),
+          const Icon(Icons.info_outline, color: AppColors.button2Color),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -1091,14 +1234,16 @@ throw UnauthorizedException(resolvedMessage);
   }
 
   void _handleCatalogItemAction(_ServicePlanCatalogItem item) {
-    final message = item.type == _CatalogItemType.plan
-        ? 'Muy pronto podrás contratar el plan "${item.name}" desde la app.'
-        : 'Estamos preparando más detalles para el servicio "${item.name}".';
+    final message =
+        item.type == _CatalogItemType.plan
+            ? 'Muy pronto podrás contratar el plan "${item.name}" desde la app.'
+            : 'Estamos preparando más detalles para el servicio "${item.name}".';
     _showSnackBar(
       message,
-      color: item.type == _CatalogItemType.plan
-          ? AppColors.button2Color
-          : AppColors.tabColor,
+      color:
+          item.type == _CatalogItemType.plan
+              ? AppColors.button2Color
+              : AppColors.tabColor,
     );
   }
 
@@ -1162,10 +1307,11 @@ throw UnauthorizedException(resolvedMessage);
     LawyerApplicationStatus application,
     String displayName,
     UserAccount? lawyerAccount,
-
   ) {
-    final String? restrictionMessage =
-        _lawyerRestrictionMessage(application, lawyerAccount);
+    final String? restrictionMessage = _lawyerRestrictionMessage(
+      application,
+      lawyerAccount,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1195,10 +1341,7 @@ throw UnauthorizedException(resolvedMessage);
               const SizedBox(height: 5),
               const Text(
                 '¿En qué puedo ayudarte hoy?',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.text2Color,
-                ),
+                style: TextStyle(fontSize: 14, color: AppColors.text2Color),
               ),
             ],
           ),
@@ -1276,10 +1419,7 @@ throw UnauthorizedException(resolvedMessage);
               const SizedBox(height: 8),
               const Text(
                 'Nuestro equipo legal está disponible 24/7 para ayudarte con cualquier consulta.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.text2Color,
-                ),
+                style: TextStyle(fontSize: 12, color: AppColors.text2Color),
               ),
               const SizedBox(height: 10),
               SizedBox(
@@ -1299,7 +1439,6 @@ throw UnauthorizedException(resolvedMessage);
       ],
     );
   }
-
 
   void _handleLogout() async {
     final bool? shouldLogout = await showDialog<bool>(
@@ -1399,8 +1538,9 @@ throw UnauthorizedException(resolvedMessage);
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      settings:
-                          const RouteSettings(name: WalletScreen.routeName),
+                      settings: const RouteSettings(
+                        name: WalletScreen.routeName,
+                      ),
                       builder: (_) => const WalletScreen(),
                     ),
                   );
@@ -1415,9 +1555,10 @@ throw UnauthorizedException(resolvedMessage);
             ],
           ),
           drawer: ClientNavigationDrawer(
-            activeDestination: settingsActive
-                ? ClientDrawerDestination.settings
-                : ClientDrawerDestination.dashboard,
+            activeDestination:
+                settingsActive
+                    ? ClientDrawerDestination.settings
+                    : ClientDrawerDestination.dashboard,
             activeSettingsSubsection: _activeSettingsSubsection,
             onSelectDashboard: _showHomeView,
             onSelectSearch: () {
@@ -1428,11 +1569,12 @@ throw UnauthorizedException(resolvedMessage);
               );
             },
             onSelectSettingsSubsection: _openSettingsSubsection,
-            onSelectLawyerPanel: session == null
-                ? null
-                : (_) async {
-                    _navigateToLawyerPanel(session);
-                  },
+            onSelectLawyerPanel:
+                session == null
+                    ? null
+                    : (_) async {
+                      _navigateToLawyerPanel(session);
+                    },
             onLogout: _handleLogout,
             isSwitchingAccount: _isSwitchingAccount,
           ),
@@ -1687,13 +1829,13 @@ class _ServicePlanCatalogItem {
   }) {
     final id = _asInt(json['id']) ?? 0;
     final codigoRaw = json['codigo'];
-    final codigo = codigoRaw is String && codigoRaw.trim().isNotEmpty
-        ? 'Código: ${codigoRaw.trim()}'
-        : null;
-    final filteredTariffs = tariffs
-        .where((rule) => rule.servicioId == id)
-        .toList()
-      ..sort(_TariffRule.compareByPriority);
+    final codigo =
+        codigoRaw is String && codigoRaw.trim().isNotEmpty
+            ? 'Código: ${codigoRaw.trim()}'
+            : null;
+    final filteredTariffs =
+        tariffs.where((rule) => rule.servicioId == id).toList()
+          ..sort(_TariffRule.compareByPriority);
     return _ServicePlanCatalogItem(
       id: id,
       name: (json['nombre'] as String?)?.trim() ?? 'Servicio $id',
@@ -1702,7 +1844,8 @@ class _ServicePlanCatalogItem {
       isActive: json['activo'] != false,
       identifierLabel: codigo,
       tariffs: List.unmodifiable(filteredTariffs),
-      category: _TariffRule._asString(json['categoria']) ??
+      category:
+          _TariffRule._asString(json['categoria']) ??
           _TariffRule._asString(json['tipo']),
     );
   }
@@ -1712,10 +1855,9 @@ class _ServicePlanCatalogItem {
     required List<_TariffRule> tariffs,
   }) {
     final id = _asInt(json['id']) ?? 0;
-    final filteredTariffs = tariffs
-        .where((rule) => rule.planId == id)
-        .toList()
-      ..sort(_TariffRule.compareByPriority);
+    final filteredTariffs =
+        tariffs.where((rule) => rule.planId == id).toList()
+          ..sort(_TariffRule.compareByPriority);
     return _ServicePlanCatalogItem(
       id: id,
       name: (json['nombre'] as String?)?.trim() ?? 'Plan $id',
@@ -1724,10 +1866,12 @@ class _ServicePlanCatalogItem {
       isActive: json['activo'] != false,
       identifierLabel: 'ID $id',
       tariffs: List.unmodifiable(filteredTariffs),
-      category: _TariffRule._asString(json['categoria']) ??
+      category:
+          _TariffRule._asString(json['categoria']) ??
           _TariffRule._asString(json['tipo']),
-      associatedServices:
-          List.unmodifiable(_extractServiceNames(json['servicios'])),
+      associatedServices: List.unmodifiable(
+        _extractServiceNames(json['servicios']),
+      ),
     );
   }
 
@@ -1763,7 +1907,11 @@ class _ServicePlanCatalogItem {
       return names;
     }
     if (value is String && value.trim().isNotEmpty) {
-      return value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      return value
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
     return const [];
   }
@@ -1942,7 +2090,8 @@ class _CatalogCardState extends State<_CatalogCard> {
     if (category != null && category.isNotEmpty) {
       badges.add(_buildBadge(category));
     }
-    if (item.identifierLabel != null && item.identifierLabel!.trim().isNotEmpty) {
+    if (item.identifierLabel != null &&
+        item.identifierLabel!.trim().isNotEmpty) {
       badges.add(_buildBadge(item.identifierLabel!));
     }
 
@@ -2011,11 +2160,7 @@ class _CatalogCardState extends State<_CatalogCard> {
                             ),
                             if (badges.isNotEmpty) ...[
                               const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: badges,
-                              ),
+                              Wrap(spacing: 8, runSpacing: 8, children: badges),
                             ],
                           ],
                         ),
@@ -2047,7 +2192,8 @@ class _CatalogCardState extends State<_CatalogCard> {
                     const SizedBox(height: 10),
                     ...tariffHighlights,
                   ],
-                  if (item.type == _CatalogItemType.plan && associatedServices.isNotEmpty) ...[
+                  if (item.type == _CatalogItemType.plan &&
+                      associatedServices.isNotEmpty) ...[
                     const SizedBox(height: 18),
                     Text(
                       'Servicios incluidos',
@@ -2193,11 +2339,7 @@ class _CatalogCardState extends State<_CatalogCard> {
           ],
           if (chips.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: chips,
-            ),
+            Wrap(spacing: 8, runSpacing: 8, children: chips),
           ],
         ],
       ),
@@ -2253,7 +2395,9 @@ class _CatalogCardState extends State<_CatalogCard> {
 
     final formatter = DateFormat('dd/MM/yyyy');
     if (rule.vigenciaHasta != null) {
-      chips.add(_buildChip('Vigente hasta ${formatter.format(rule.vigenciaHasta!)}'));
+      chips.add(
+        _buildChip('Vigente hasta ${formatter.format(rule.vigenciaHasta!)}'),
+      );
     }
 
     return chips;
@@ -2314,6 +2458,5 @@ class _ChatMessage {
 }
 
 enum _ChatRole { user, bot }
-
 
 int? _asInt(Object? value) => _TariffRule._asInt(value);
